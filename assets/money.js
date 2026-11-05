@@ -219,6 +219,7 @@
   }
   function particulars(d) {
     if (d.type === 'contra') return d.from === 'bank' ? 'Cash withdrawn from bank' : 'Cash deposited in bank';
+    if (d.type === 'ob' && (d.side === 'cash' || d.side === 'bank')) return d.side === 'bank' ? 'Opening bank balance' : 'Opening cash in hand';
     var p = B.partyName(d); return A.enName(d) + (d.no ? ' ' + d.no : '') + (p ? ' · ' + p : d.cat ? ' · ' + d.cat : '');
   }
   A.addSection('books', function () {
@@ -256,7 +257,8 @@
       '<div class="tiles"><div class="tile' + ((A0.cash || 0) < 0 ? ' neg' : '') + '"><span>' + esc(T('cashin')) + '</span><b>' + money(A0.cash || 0) + '</b></div><div class="tile"><span>' + esc(T('bank')) + '</span><b>' + money(A0.bank || 0) + '</b></div>' +
         ((A0['chq-in'] || 0) ? '<div class="tile"><span>' + esc(T('inhand')) + '</span><b>' + money(A0['chq-in']) + '</b></div>' : '') + '</div>' +
       '<div class="card"><h3>' + esc(T('quick')) + '</h3><div class="quick"><button type="button" class="btn" data-form="min">+ ' + esc(T('min')) + '</button><button type="button" class="btn" data-form="mout">+ ' + esc(T('mout')) + '</button>' +
-        '<button type="button" class="btn" data-form="exp">+ ' + esc(T('exp')) + '</button><button type="button" class="btn" data-form="contra">+ ' + esc(T('contra')) + '</button></div></div>' +
+        '<button type="button" class="btn" data-form="exp">+ ' + esc(T('exp')) + '</button><button type="button" class="btn" data-form="contra">+ ' + esc(T('contra')) + '</button>' +
+        '<button type="button" class="btn" data-form="ob" data-side="' + (bk === 'bank' ? 'bank' : 'cash') + '">+ ' + esc(T(bk === 'bank' ? 's_bank' : 's_cash')) + '</button></div></div>' +
       '<p class="soft">' + esc(T(bk === 'day' ? 'dayh' : 'cbh')) + '</p>' + dates() + '<div class="quick">' + outBtns() + '</div>' +
       '<div class="tbl-wrap"><div class="stsheet sh wide" data-sheet>' + head(title, A.ldate(r[0]) + ' to ' + A.ldate(r[1])) + sheet + foot() + '</div></div>';
   }, function (pane) {

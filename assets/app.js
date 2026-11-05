@@ -266,7 +266,7 @@
   }
   function onClick(e) {
     var b = e.target.closest('button'); if (!b) return;
-    if (b.hasAttribute('data-form')) openForm(b.getAttribute('data-form'), { forId: b.getAttribute('data-for'), party: b.getAttribute('data-party'), mode: b.getAttribute('data-mode') });
+    if (b.hasAttribute('data-form')) openForm(b.getAttribute('data-form'), { forId: b.getAttribute('data-for'), party: b.getAttribute('data-party'), mode: b.getAttribute('data-mode'), side: b.getAttribute('data-side') || '' });
     else if (b.hasAttribute('data-photo')) showPhoto(b.getAttribute('data-photo'));
     else if (b.hasAttribute('data-edit')) { var d = C.doc.filter(function (x) { return x.id === b.getAttribute('data-edit'); })[0]; if (d) openForm(formOf(d), { rec: d }); }
     else if (b.hasAttribute('data-del')) delRec(b.getAttribute('data-del'));
@@ -394,8 +394,8 @@
         fld('f-ref', T('ref'), inp('f-ref', cx.ref || '', { ltr: 1 })) + fld('f-note', T('note'), inp('f-note', cx.notes || ''), { wide: 1 }) + '</div>';
     } else if (kind === 'ob') {
       var ob = rec || { date: fyStart(today), side: 'recv' };
-      h = '<p class="soft">' + esc(T('obh')) + '</p><div class="fg">' + fld('f-party', T('party'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList()) +
-        fld('f-side', T('side'), sel('f-side', ob.side, [['recv', T('s_recv')], ['pay', T('s_pay')]])) +
+      h = '<p class="soft">' + esc(T('obh')) + '</p><div class="fg">' + fld('f-side', T('side'), sel('f-side', o.side || ob.side, [['recv', T('s_recv')], ['pay', T('s_pay')], ['cash', T('s_cash')], ['bank', T('s_bank')]])) +
+        fld('f-party', T('party'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList()) +
         fld('f-amt', T('amount'), inp('f-amt', ob.amount || '', { mode: 'decimal', ltr: 1, req: 1 })) +
         fld('f-date', T('date'), inp('f-date', ob.date, { type: 'date', req: 1 })) + '</div>';
     }
@@ -406,6 +406,7 @@
     if (al) al.addEventListener('click', function () { F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form).checked ? 0 : 18 }); drawLines(); });
     if (F.lines) drawLines();
     if (kind === 'min' || kind === 'mout') { drawAlloc(true); chqShow(); }
+    if (kind === 'ob') obShow();
     if (F.lines) drawPhoto();
     dlg.showModal();
     var first = $('input:not([type=date]),select', form); if (first && !first.value) first.focus();
@@ -434,9 +435,14 @@
     box.innerHTML = F.photo ? '<img src="' + F.photo + '" alt="' + esc(T('photo')) + '"><button type="button" class="btn sm" data-photo-rm>' + esc(T('photorm')) + '</button>' : '';
     var rm = $('[data-photo-rm]', box); if (rm) rm.addEventListener('click', function () { F.photo = ''; $('#f-photo', form).value = ''; drawPhoto(); });
   }
+  function obShow() {   /* cash in hand / bank balance: no party */
+    var p = $('#f-party', form), own = /^(cash|bank)$/.test($('#f-side', form).value);
+    p.closest('.f').hidden = own; p.required = !own; if (own) p.value = '';
+  }
   function onFormInput(e) {
     var id = e.target.id || '';
     if (id === 'f-mode' || id === 'f-cst') chqShow();
+    if (id === 'f-side' && $('#f-party', form) && F.kind === 'ob') obShow();
     if (id === 'f-photo') { if (e.type === 'change' && e.target.files[0]) shrinkPhoto(e.target.files[0]).then(function (u) { F.photo = u; drawPhoto(); }).catch(function () { NS.toast(T('photobad'), 'bad'); }); return; }
     if (F.lines && e.target.hasAttribute('data-li')) { var i = +e.target.getAttribute('data-li'), k = e.target.getAttribute('data-lk'); F.lines[i][k] = e.target.value; if (k === 'desc') fillItem(i); drawSum(); return; }
     if (F.lines && /f-(nogst|round|state)/.test(id)) drawSum();
@@ -576,8 +582,9 @@
       return NSStore.put('doc', d).then(done);
     }
     if (k === 'ob') {
-      d = Object.assign(rec || { type: 'ob', app: 1 }, { date: $('#f-date', form).value, seller: sellerCopy(), buyer: { name: party }, side: $('#f-side', form).value, amount: r2(num($('#f-amt', form).value)) });
+      d = Object.assign(rec || { type: 'ob', app: 1 }, { date: $('#f-date', form).value, seller: sellerCopy(), buyer: { name: /^(cash|bank)$/.test($('#f-side', form).value) ? '' : party }, side: $('#f-side', form).value, amount: r2(num($('#f-amt', form).value)) });
       d.total = d.amount; d.no = '';
+      if (!d.buyer.name) return NSStore.put('doc', d).then(done);
       return savePartyRole(party, d.side === 'pay' ? 'supplier' : 'customer').then(function () { return NSStore.put('doc', d); }).then(done);
     }
   }
