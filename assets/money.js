@@ -63,19 +63,19 @@
   /* ---------- purchase register ---------- */
   function purchases() {
     var r = A.range();
-    return A.mine().filter(function (d) { return (d.type === 'pbill' || d.type === 'self') && d.date >= r[0] && d.date <= r[1]; }).filter(A.match).sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); });
+    return A.mine().filter(function (d) { return (d.type === 'pbill' || d.type === 'self' || d.type === 'note' && d.side === 'purchase') && d.date >= r[0] && d.date <= r[1]; }).filter(A.match).sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); });
   }
   A.addSection('preg', function () {
     var r = A.range(), list = purchases(), S = { taxable: 0, cgst: 0, sgst: 0, igst: 0, total: 0 };
     CSV = [['Date', 'Supplier', 'Supplier GSTIN', 'Type', 'Bill no.', 'Taxable value', 'CGST', 'SGST', 'IGST', 'Total']];
     var body = list.map(function (d) {
-      var t = B.itemTotals(d), sg = d.type === 'pbill' && d.kind === 'return' ? -1 : 1, tot = d.type === 'self' ? r2(t.taxable + t.cgst + t.sgst + t.igst) : t.total;
+      var t = B.itemTotals(d), sg = d.type === 'pbill' && d.kind === 'return' || d.type === 'note' && d.kind === 'debit' ? -1 : 1, tot = d.type === 'self' ? r2(t.taxable + t.cgst + t.sgst + t.igst) : t.total;
       ['taxable', 'cgst', 'sgst', 'igst'].forEach(function (k) { S[k] = r2(S[k] + sg * t[k]); }); S.total = r2(S.total + sg * tot);
-      var ty = d.type === 'self' ? 'Self invoice (RCM)' : sg < 0 ? 'Return' : 'Bill', sup = B.partyName(d), g = d.buyer && d.buyer.gstin || '';
+      var ty = d.type === 'self' ? 'Self invoice (RCM)' : d.type === 'note' ? (d.kind === 'debit' ? 'Debit note' : 'Credit note') : sg < 0 ? 'Return' : 'Bill', sup = B.partyName(d), g = d.buyer && d.buyer.gstin || '';
       CSV.push([d.date, sup, g, ty, d.no || '', sg * t.taxable, sg * t.cgst, sg * t.sgst, sg * t.igst, sg * tot]);
-      var acts = (d.type === 'pbill' ? '<button type="button" class="btn sm" data-edit="' + d.id + '">' + esc(T('edit')) + '</button>' : '<a class="btn sm" href="' + A.toolUrl('self-invoice') + '?open=' + encodeURIComponent(d.id) + '">' + esc(T('open')) + '</a>') +
+      var acts = (d.type === 'pbill' ? '<button type="button" class="btn sm" data-edit="' + d.id + '">' + esc(T('edit')) + '</button>' : '<a class="btn sm" href="' + A.toolUrl(d.type === 'note' ? (d.kind === 'debit' ? 'debit-note' : 'credit-note') : 'self-invoice') + '?open=' + encodeURIComponent(d.id) + '">' + esc(T('open')) + '</a>') +
         (d.photo ? '<button type="button" class="btn sm" data-photo="' + d.id + '">' + esc(T('photo')) + '</button>' : '') +
-        (sg < 0 ? '<button type="button" class="btn sm" data-dn="' + d.id + '">' + esc(T('dn')) + '</button>' : '');
+        (sg < 0 && d.type === 'pbill' ? '<button type="button" class="btn sm" data-dn="' + d.id + '">' + esc(T('dn')) + '</button>' : '');
       return '<tr><td>' + A.ldate(d.date) + '</td><td>' + esc(sup) + (g ? '<br><span class="soft mono">' + esc(g) + '</span>' : '') + '</td><td>' + esc(ty) + ' ' + esc(d.no || '') + '<div class="acts no-print">' + acts + '</div></td>' +
         ['taxable', 'cgst', 'sgst', 'igst'].map(function (k) { return '<td class="n">' + m(sg * t[k]) + '</td>'; }).join('') + '<td class="n"><b>' + m(sg * tot) + '</b></td></tr>';
     }).join('');
