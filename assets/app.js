@@ -21,7 +21,7 @@
   function myUrl(h) { return (LOCAL ? 'http://localhost:8862/' : 'https://my.niveshsahayak.in/') + (h || ''); }
   /* the shell: document makers and My data open inside the app (a frame next to the menu), not as another website.
      #do/<site><path?query#hash> shows <site> in the frame; Back returns to the screen it was opened from. */
-  var NEWDOCS = [['billing', 'invoice'], ['quotation', 'quote'], ['proforma', 'proforma'], ['sales-order', 'so'], ['challan', 'challan'], ['purchase-order', 'po'], ['credit-note', 'note'],
+  var NEWDOCS = [['billing', 'invoice'], ['quotation', 'quote'], ['proforma', 'proforma'], ['sales-order', 'so'], ['challan', 'challan'], ['purchase-order', 'po'], ['credit-note', 'note', 'k.credit'], ['debit-note', 'note', 'k.debit'],
     ['cash-memo', 'cashmemo'], ['receipt', 'receipt'], ['voucher', 'voucher'], ['self-invoice', 'self'], ['rent-receipt', 'rent'], ['salary-slip', 'salary'], ['petty-cash', 'petty']];
   function siteOf(u) {
     if (u.origin === location.origin) return '';
@@ -40,7 +40,7 @@
   function frame(a) {
     var site = a.split(/[\/?#]/)[0], rest = a.slice(site.length) || '/';
     var url = (site === 'my' ? myUrl() : toolUrl(site)).replace(/\/$/, '') + rest;
-    var nd = NEWDOCS.filter(function (n) { return n[0] === site; })[0], title = site === 'my' ? NS.t('my.title') : nd ? NS.t('Doc.' + nd[1]) : site;
+    var nd = NEWDOCS.filter(function (n) { return n[0] === site; })[0], title = site === 'my' ? NS.t('my.title') : nd ? NS.t(nd[2] || 'Doc.' + nd[1]) : site;
     var pane = $('[data-pane]'), fr = $('iframe.app-frame', pane);
     document.documentElement.classList.add('app-in', 'app-frame-on');
     if (fr && fr.getAttribute('data-url') === url) return;
@@ -98,6 +98,8 @@
   function route() {
     var h = decodeURIComponent(location.hash.slice(1)), p = h.split('/');
     cur = p[0] === 'do' && !DOOR ? 'do' : SECS.indexOf(p[0]) >= 0 || EXT[p[0]] ? p[0] : 'home'; arg = p.slice(1).join('/');
+    /* one cash screen: where the cash, bank and day book screen (money.js) is on hand, #cash and #cash/bank open it */
+    if (cur === 'cash' && EXT.books && (!DOOR || DOOR.indexOf('books') >= 0)) { cur = 'books'; arg = arg === 'bank' ? 'bank' : 'cash'; }
     if (cur !== 'do') { backTo = h; document.documentElement.classList.remove('app-frame-on'); }
     if (DOOR && DOOR.indexOf(cur) < 0 && cur !== 'st') { cur = DOOR[0]; arg = ''; }
     show(true);
@@ -106,7 +108,7 @@
   var showSeq = 0;
   function show(focus) {
     $$('[data-sec]').forEach(function (b) { var on = b.getAttribute('data-sec') === (cur === 'st' ? 'parties' : cur); b.setAttribute('aria-current', on ? 'page' : 'false'); });
-    if (cur === 'do') { frame(arg); return Promise.resolve(); }
+    if (cur === 'do') { document.documentElement.classList.add('no-sponsor'); frame(arg); return Promise.resolve(); }
     /* a redraw started earlier (window focus when the user clicks, late data) must not paint over a newer screen or the frame */
     var mine_ = ++showSeq, want = cur + '/' + arg;
     return load().then(function () {
@@ -116,9 +118,13 @@
       labels();
       document.documentElement.classList.toggle('app-in', !!BIZ);
       if (!BIZ) { pane.innerHTML = noBiz(); wireSample(pane); return; }
+      /* a remembered party screen whose party was deleted (sample data removed): go to the dashboard */
+      if (cur === 'st' && arg && !C.party.some(function (p) { return key(p.name) === arg; }) && !B.parties(mine(), bizName())[arg]) { location.replace('#home'); return; }
       pane.innerHTML = sampleNote() + bizBar() + (EXT[cur] ? EXT[cur].html(arg) : ({ home: homeHtml, sales: salesHtml, buy: buyHtml, money: moneyHtml, dues: duesHtml, parties: partiesHtml, cash: cashHtml })[cur]());
       wire(pane); wireSample(pane);
       if (EXT[cur] && EXT[cur].wire) EXT[cur].wire(pane, arg);
+      /* no sponsored card where a document is made or printed (statement, ledger, books, reports): the Support page promise */
+      document.documentElement.classList.toggle('no-sponsor', !!$('[data-print], [data-b2print], [data-m-print], [data-lgpdf], [data-sheet], .stsheet', pane));
       if (focus) { var h2 = $('h2', pane); if (h2) { h2.tabIndex = -1; h2.focus({ preventScroll: true }); } }
     });
   }
@@ -146,7 +152,7 @@
     var bz = C.biz.length < 2 ? '' : '<label for="app-biz">' + esc(T('biz')) + '</label><select id="app-biz" data-biz>' + C.biz.map(function (b) {
       return '<option value="' + esc(b.id) + '"' + (BIZ && b.id === BIZ.id ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>';
     var nw = '<select class="newdoc" data-newdoc aria-label="' + esc(T('newdoc')) + '"><option value="">+ ' + esc(T('newdoc')) + '</option>' +
-      NEWDOCS.filter(function (n) { return TOOLS.some(function (x) { return x[0] === n[0]; }); }).map(function (n) { return '<option value="' + n[0] + '">' + esc(NS.t('Doc.' + n[1])) + '</option>'; }).join('') + '</select>';
+      NEWDOCS.filter(function (n) { return TOOLS.some(function (x) { return x[0] === n[0]; }); }).map(function (n) { return '<option value="' + n[0] + '">' + esc(NS.t(n[2] || 'Doc.' + n[1])) + '</option>'; }).join('') + '</select>';
     return '<div class="bizbar">' + bz + '<span class="grow"></span>' + nw + '<a class="btn sm" href="' + myUrl() + '">' + esc(NS.t('my.title')) + '</a></div>';
   }
 
@@ -179,7 +185,7 @@
     if (!list.length) return '<p class="soft">' + esc(T('none')) + '</p>';
     var left = opts.left || {};
     return '<ul class="rows">' + list.map(function (d) {
-      var ty = d.type || 'invoice', site = SITEOF[ty], appMade = d.app || /^(pbill|exp|ob|contra)$/.test(ty), pills = '';
+      var ty = d.type || 'invoice', site = (d.type === 'note' && d.kind === 'debit' ? 'debit-note' : SITEOF[ty]), appMade = d.app || /^(pbill|exp|ob|contra)$/.test(ty), pills = '';
       if (left[d.id] != null) pills = left[d.id] <= 0.004 ? '<span class="pill ok">' + esc(T('paid')) + '</span>' : left[d.id] < amountOf(d) - 0.004 ? '<span class="pill warn">' + esc(T('left', { a: money(left[d.id]) })) + '</span>' : '<span class="pill warn">' + esc(T('unpaid')) + '</span>';
       if (d.nextNo) pills += ' <span class="pill">' + esc(T('made', { x: d.nextNo })) + '</span>';
       if (B.bounced(d)) pills += ' <span class="pill bad">' + esc(T('c_bounce')) + '</span>';
@@ -370,7 +376,7 @@
     var open = B.bills(D, bizName(), k).bills.filter(function (b) { return b.side === 'recv'; });
     var msg = T('wamsg', { p: p.name, a: money(p.bal), b: bizName(), d: ldate(NS.today()),
       bills: open.length ? T('wabills', { l: open.slice(0, 8).map(function (b) { return (b.no || docName(b)) + ' ' + ldate(b.date) + ' ' + money(b.left); }).join(', ') }) : '',
-      upi: BIZ.upi ? T('waupi', { u: BIZ.upi }) : '' });
+      upi: BIZ.upi ? NS.t('uf.waupi', { u: BIZ.upi, a: money(p.bal) }) : '' });
     var ph = phoneOf(k, P);
     if (ph.length === 10) ph = '91' + ph;
     if (!ph) NS.toast(T('nophone', { p: p.name }));
@@ -410,7 +416,8 @@
         fld('f-party', T(out ? 'supp' : 'cust'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList(out ? 'supplier' : 'customer')) +
         fld('f-amt', T('amount'), inp('f-amt', amt, { mode: 'decimal', ltr: 1, req: 1 })) +
         fld('f-mode', T('mode'), sel('f-mode', rec ? rec.mode : o.mode || 'upi', modeOpts())) +
-        (out ? fld('f-tds', T('tdsout'), inp('f-tds', rec ? rec.tdsRate : '', { mode: 'decimal', ltr: 1 }), { hint: T('tdsouth') }) : fld('f-tds', T('tdsin'), inp('f-tds', rec ? rec.tds : '', { mode: 'decimal', ltr: 1 }), { hint: T('tdsinh') })) +
+        (out ? fld('f-tds', T('tdsout'), inp('f-tds', rec ? rec.tdsRate : '', { mode: 'decimal', ltr: 1 }), { hint: T('tdsouth') }) + fld('f-tdsx', NS.t('uf.tdsa'), inp('f-tdsx', '', { mode: 'decimal', ltr: 1 }))
+          : fld('f-tds', T('tdsin'), inp('f-tds', rec ? rec.tds : '', { mode: 'decimal', ltr: 1 }), { hint: T('tdsinh') }) + fld('f-tdsx', NS.t('uf.tdsr'), inp('f-tdsx', '', { mode: 'decimal', ltr: 1 }))) +
         fld('f-ref', T('ref'), inp('f-ref', rec ? rec.ref : '', { ltr: 1 })) +
         chqFields(out, rec && rec.chq) +
         fld('f-note', T('note'), inp('f-note', rec ? (out ? (rec.lines && rec.lines[0] || {}).desc : rec.purpose) : ''), { wide: 1 }) + '</div>' +
@@ -467,7 +474,7 @@
     var al = $('[data-addline]', form);
     if (al) al.addEventListener('click', function () { F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form).checked ? 0 : 18 }); drawLines(); });
     if (F.lines) drawLines();
-    if (kind === 'min' || kind === 'mout') { drawAlloc(true); chqShow(); }
+    if (kind === 'min' || kind === 'mout') { tdsPair('f-tds'); drawAlloc(true); chqShow(); }
     if (kind === 'ob') obShow();
     if (F.lines) drawPhoto();
     dlg.showModal();
@@ -511,8 +518,22 @@
     /* the first two digits of a GSTIN are the supplier's state code */
     if (id === 'f-gstin') { var st = e.target.value.trim().slice(0, 2); if (/^\d\d$/.test(st) && NS.stateName(st)) { $('#f-state', form).value = st; drawSum(); } }
     if (id === 'f-party' && F.lines) { var pm = C.party.filter(function (p) { return key(p.name) === key(e.target.value); })[0]; if (pm) { if (pm.gstin && !$('#f-gstin', form).value) $('#f-gstin', form).value = pm.gstin; if (pm.state) $('#f-state', form).value = pm.state; drawSum(); } }
-    if ((F.kind === 'min' || F.kind === 'mout') && (id === 'f-party' || id === 'f-amt' || id === 'f-tds')) drawAlloc();
+    if ((F.kind === 'min' || F.kind === 'mout') && (id === 'f-tdsx' || id === 'f-tds' || id === 'f-amt')) tdsPair(id);
+    if ((F.kind === 'min' || F.kind === 'mout') && (id === 'f-party' || id === 'f-amt' || id === 'f-tds' || id === 'f-tdsx')) drawAlloc();
     if (e.target.hasAttribute && e.target.hasAttribute('data-al')) advLeft();
+  }
+  /* TDS asked both ways on Money received and Money paid: the box that is saved (received: rupees, paid: rate) and its twin.
+     Received: the customer paid amount = bill - TDS, so rate = TDS / (amount + TDS). Paid: TDS = rate x amount of the bill. */
+  function tdsPair(id) {
+    var a = $('#f-tds', form), x = $('#f-tdsx', form); if (!a || !x) return;
+    var out = F.kind === 'mout', amt = num($('#f-amt', form).value), fix = function (n) { return n ? String(+n.toFixed(2)) : ''; };
+    if (id === 'f-tdsx') {
+      var v = num(x.value);
+      a.value = !x.value.trim() ? '' : out ? (amt ? fix(v / amt * 100) : '') : (v > 0 && v < 100 && amt ? String(r2(amt * v / (100 - v))) : '');
+    } else {
+      var s = num(a.value);
+      x.value = !a.value.trim() ? '' : out ? (amt ? String(r2(amt * s / 100)) : '') : (amt + s ? fix(s / (amt + s) * 100) : '');
+    }
   }
   function fillItem(i) {
     var m = C.item.filter(function (x) { return key(x.desc) === key(F.lines[i].desc); })[0]; if (!m) return;

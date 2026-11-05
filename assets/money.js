@@ -225,7 +225,9 @@
     if (d.type === 'ob' && (d.side === 'cash' || d.side === 'bank')) return d.side === 'bank' ? 'Opening bank balance' : 'Opening cash in hand';
     var p = B.partyName(d); return A.enName(d) + (d.no ? ' ' + d.no : '') + (p ? ' · ' + p : d.cat ? ' · ' + d.cat : '');
   }
-  A.addSection('books', function () {
+  var bkArg = '';
+  A.addSection('books', function (a) {
+    if (a !== bkArg) { bkArg = a; if (a === 'cash' || a === 'bank' || a === 'day') bk = a; }   /* #cash/bank from the dashboard tiles */
     var r = A.range(), D = A.mine(), sheet, title;
     if (bk === 'day') {
       title = 'DAY BOOK';
