@@ -281,3 +281,23 @@ dialog.qk{width:min(640px,calc(100vw - 24px));margin-top:10vh;padding:0;overflow
 .stsheet .fr-st tr.tot th,.stsheet .fr-st tr.tot td{border-top-color:#999}
 .fr-kinds{margin:6px 0 10px}
 .hub-main .fr-st,.hub-main .fr-tb{max-width:860px}
+/* Trial balance styles and the previous year column (finrep.js) */
+.fr-tbs{flex-wrap:wrap;gap:8px 16px;align-items:center}
+.fr-tb th.c{text-align:center}
+.fr-tb tr.memo th,.fr-tb tr.memo td{font-style:italic;font-weight:400}
+.hub-main .fr-tbd{max-width:none}
+.stsheet .fr-tbd{font-size:.78rem}
+.stsheet .fr-tbd th,.stsheet .fr-tbd td{padding:4px 5px}
+.fr-tbd tbody th.l,.fr-tbd tfoot th.l{min-width:10em}
+/* more final accounts (famore.js) and type of business / partners in My data (fahub.js) */
+.fm-links{margin:8px 0;align-items:center}
+.fm-set{margin:10px 0}
+.fm-dir{display:flex;flex-wrap:wrap;gap:6px 16px}
+.fm-dir legend{font-weight:600}
+.fm-dir .hint{flex-basis:100%}
+.fr-cap th,.fr-cap td{white-space:nowrap}
+.fm-prow{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end;margin:6px 0}
+.fm-prow label{display:flex;flex-direction:column;gap:2px;font-size:.85rem;min-width:0}
+.fm-prow input{width:100%;min-width:0}
+.fm-biz h4{margin:12px 0 4px}
+@media (max-width:620px){.fm-prow{grid-template-columns:repeat(2,minmax(0,1fr));padding-bottom:8px;border-bottom:1px solid var(--line)}.fm-prow label:first-child{grid-column:1/-1}}
