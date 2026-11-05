@@ -214,3 +214,5 @@ dialog.qk{width:min(640px,calc(100vw - 24px));margin-top:10vh;padding:0;overflow
   .hub-main .tile b{font-size:clamp(.9rem,12cqi,1.3rem)}
   .sample-note{padding:8px 10px}
 }
+/* device test fix (5 Nov 2026): on phones the Install button would push the header to three rows; installing stays in the browser menu and the search box */
+@media (max-width:480px){.hd nav>.qk-install{display:none}}
