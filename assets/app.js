@@ -13,6 +13,8 @@
 
   var LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   var TOOLS = (window.NS_CFG && NS_CFG.tools) || [];
+  /* shop and trade records (kit.js) open in their own site, which is not in TOOLS */
+  var KITSITE = { pos: 'pos', pharma: 'pharmacy', resto: 'restaurant', lr: 'bilty', job: 'job-card', rabill: 'contractor-bill', fee: 'fee-receipt' };
   var SITEOF = { invoice: 'billing', quote: 'quotation', proforma: 'proforma', so: 'sales-order', challan: 'challan', po: 'purchase-order', self: 'self-invoice', note: 'credit-note', cashmemo: 'cash-memo', receipt: 'receipt', voucher: 'voucher' };
   function toolUrl(site) { var x = TOOLS.filter(function (x) { return x[0] === site; })[0]; if (!x) return '#'; return LOCAL ? 'http://localhost:' + x[4] + '/' : 'https://' + x[1] + '/'; }
   function myUrl(h) { return (LOCAL ? 'http://localhost:8862/' : 'https://my.niveshsahayak.in/') + (h || ''); }
@@ -181,6 +183,7 @@
       if (d.photo) acts.push('<button type="button" class="btn sm" data-photo="' + d.id + '">' + esc(T('photo')) + '</button>');
       if (appMade && ty !== 'cashmemo') acts.push('<button type="button" class="btn sm" data-edit="' + d.id + '">' + esc(T('edit')) + '</button>');
       if (site && (!appMade || /^(receipt|voucher|cashmemo)$/.test(ty))) acts.push('<a class="btn sm" href="' + toolUrl(site) + '?open=' + encodeURIComponent(d.id) + '">' + esc(T('open')) + '</a>');
+      else if (KITSITE[ty]) acts.push('<a class="btn sm" href="https://' + KITSITE[ty] + '.niveshsahayak.in/?open=' + encodeURIComponent(d.id) + '" target="_blank" rel="noopener">' + esc(T('open')) + '</a>');
       if (left[d.id] > 0.004 && (ty === 'invoice' || ty === 'cashmemo')) acts.push('<button type="button" class="btn sm" data-form="min" data-for="' + d.id + '">' + esc(T('recpay')) + '</button>');
       if (left[d.id] > 0.004 && ty === 'pbill') acts.push('<button type="button" class="btn sm" data-form="mout" data-for="' + d.id + '">' + esc(T('recpay')) + '</button>');
       if (CONVERT[ty] && !opts.noconv) acts.push('<select class="sm conv" data-conv="' + d.id + '" aria-label="' + esc(T('convert')) + ' ' + esc(d.no || '') + '"><option value="">' + esc(T('convert')) + '…</option>' +
