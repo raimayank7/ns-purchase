@@ -697,7 +697,8 @@
       if (openUrl(a.href)) e.preventDefault();
     });
     NSStore.ready().then(route).then(function () { NSStore.persist().catch(function () {}); });
-    window.addEventListener('focus', function () { if (cur !== 'do' && (!dlg || !dlg.open)) show(); });   /* bills made in another tab show up when you come back */
+    window.addEventListener('focus', function () { if (cur !== 'do' && (!dlg || !dlg.open)) show(); });
+    document.addEventListener('ns-data', function () { if (cur !== 'do' && (!dlg || !dlg.open)) show(); });   /* the data home came in late */   /* bills made in another tab show up when you come back */
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
