@@ -4,6 +4,7 @@
    party statements (print, PDF, WhatsApp reminder), cash and bank books, opening balances, one-click convert.
    Accounts come from NSBooks (books.js); every record lives in the data home's 'doc' store, so the receipt and
    voucher sites can print what is saved here. Screen words: NS.t('app.<key>') (English in i18n.js, other languages in engine/lang).
+   Party ledger, balance confirmation letter and group reports: ledger.js (sections 'st' and 'grp').
    Door sites (khata., purchase. ...) show only some sections (#app data-secs) and add their own through window.NSApp (money.js). */
 (function () {
   'use strict';
@@ -56,11 +57,12 @@
   /* EXT: sections added by other files (NSApp.addSection); DOOR: the sections a door site shows (#app data-secs), first = start */
   var EXT = {}, DOOR = null, HOME = [];
 
-  var C = { biz: [], party: [], item: [], doc: [] }, CFG = {}, BIZ = null, cur = 'home', arg = '', q = '', filt = 'all';
+  var C = { biz: [], party: [], item: [], doc: [] }, CFG = {}, GRP = {}, BIZ = null, cur = 'home', arg = '', q = '', filt = 'all', grp = '';
 
   function load() {
-    return Promise.all(['biz', 'party', 'item', 'doc'].map(function (s) { return NSStore.list(s); }).concat([NSStore.meta('settings')])).then(function (r) {
-      C = { biz: r[0], party: r[1], item: r[2], doc: r[3] }; CFG = r[4] || {};
+    return Promise.all(['biz', 'party', 'item', 'doc'].map(function (s) { return NSStore.list(s); }).concat([NSStore.meta('settings'), NSStore.meta('groups')])).then(function (r) {
+      C = { biz: r[0], party: r[1], item: r[2], doc: r[3] }; CFG = r[4] || {}; GRP = r[5] || {};
+      if (window.NSStock && NSStock.valuation) NSStock.valuation(CFG.stockValue);   /* FIFO or weighted average, My data › Settings */
       var want; try { want = localStorage.getItem('ns-app-biz'); } catch (e) {}
       BIZ = C.biz.filter(function (b) { return b.id === want; })[0] || C.biz.filter(function (b) { return b.id === CFG.defBiz; })[0] || C.biz[0] || null;
       if (!BIZ) {   /* no business master yet: use the seller name of the newest bill */
@@ -101,16 +103,20 @@
     show(true);
   }
   function go(h) { location.hash = h; }
+  var showSeq = 0;
   function show(focus) {
     $$('[data-sec]').forEach(function (b) { var on = b.getAttribute('data-sec') === (cur === 'st' ? 'parties' : cur); b.setAttribute('aria-current', on ? 'page' : 'false'); });
     if (cur === 'do') { frame(arg); return Promise.resolve(); }
+    /* a redraw started earlier (window focus when the user clicks, late data) must not paint over a newer screen or the frame */
+    var mine_ = ++showSeq, want = cur + '/' + arg;
     return load().then(function () {
+      if (mine_ !== showSeq || cur === 'do' || cur + '/' + arg !== want) return;
       var pane = $('[data-pane]');
       $('[data-mode]').textContent = T(NSStore.mode() === 'vault' ? 'vault' : 'local');
       labels();
       document.documentElement.classList.toggle('app-in', !!BIZ);
       if (!BIZ) { pane.innerHTML = noBiz(); wireSample(pane); return; }
-      pane.innerHTML = sampleNote() + bizBar() + (EXT[cur] ? EXT[cur].html(arg) : ({ home: homeHtml, sales: salesHtml, buy: buyHtml, money: moneyHtml, dues: duesHtml, parties: partiesHtml, cash: cashHtml, st: stHtml })[cur]());
+      pane.innerHTML = sampleNote() + bizBar() + (EXT[cur] ? EXT[cur].html(arg) : ({ home: homeHtml, sales: salesHtml, buy: buyHtml, money: moneyHtml, dues: duesHtml, parties: partiesHtml, cash: cashHtml })[cur]());
       wire(pane); wireSample(pane);
       if (EXT[cur] && EXT[cur].wire) EXT[cur].wire(pane, arg);
       if (focus) { var h2 = $('h2', pane); if (h2) { h2.tabIndex = -1; h2.focus({ preventScroll: true }); } }
@@ -220,6 +226,7 @@
       searchBar() + rowsHtml(list.slice(0, 200));
   }
 
+  var stFrom = '', stTo = '';
   /* ---------- dues with ageing ---------- */
   function duesHtml() {
     var side = arg === 'pay' ? 'pay' : 'recv', D = mine(), today = NS.today(), R = B.bills(D, bizName());
@@ -231,12 +238,12 @@
       var a = B.ageing(list, today, true), tot = r2(a[0] + a[1] + a[2] + a[3]);
       return { k: k, name: by[k].name, a: a, tot: tot, phone: phoneOf(k, P), late: B.overdue(list, today), lim: num(pm.climit), over: num(pm.climit) && side === 'recv' && tot > num(pm.climit) };
     })
-      .filter(function (r) { return !q || r.name.toLowerCase().indexOf(q.toLowerCase()) >= 0; }).sort(function (a, b) { return b.tot - a.tot; });
+      .filter(function (r) { return (!q || r.name.toLowerCase().indexOf(q.toLowerCase()) >= 0) && grpKeep(r.k, P); }).sort(function (a, b) { return b.tot - a.tot; });
     var tot = [0, 0, 0, 0]; rows.forEach(function (r) { r.a.forEach(function (v, i) { tot[i] = r2(tot[i] + v); }); });
     var advs = Object.keys(R.advances).filter(function (k) { return R.advances[k][side] > 0.004; });
     return '<div class="pane-hd"><h2>' + esc(T('dues')) + '</h2><div class="seg" role="group"><a class="btn sm" href="#dues" aria-pressed="' + (side === 'recv') + '">' + esc(T('recv')) + '</a><a class="btn sm" href="#dues/pay" aria-pressed="' + (side === 'pay') + '">' + esc(T('pay')) + '</a></div></div>' +
       '<div class="tiles">' + ['a0', 'a1', 'a2', 'a3'].map(function (x, i) { return '<div class="tile' + (i === 3 && tot[3] ? ' warn' : '') + '"><span>' + esc(T(x)) + '</span><b>' + money(tot[i]) + '</b></div>'; }).join('') + '</div>' +
-      searchBar() +
+      searchBar() + '<div class="tools-row">' + grpSel() + '</div>' +
       (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + esc(T('party')) + '</th>' + ['a0', 'a1', 'a2', 'a3'].map(function (x) { return '<th class="n">' + esc(T(x)) + '</th>'; }).join('') + '<th class="n">' + esc(T('totaldue')) + '</th><th class="n">' + esc(NS.t('b1.late')) + '</th><th></th></tr></thead><tbody>' +
         rows.map(function (r) {
           return '<tr><th scope="row"><a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v) { return '<td class="n">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
@@ -253,38 +260,32 @@
   }
 
   function partiesHtml() {
-    var P = B.parties(mine(), bizName()), list = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return !q || p.name.toLowerCase().indexOf(q.toLowerCase()) >= 0; })
+    var P = B.parties(mine(), bizName()), list = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return (!q || p.name.toLowerCase().indexOf(q.toLowerCase()) >= 0) && grpKeep(p.key, P); })
       .sort(function (a, b) { return Math.abs(b.bal) - Math.abs(a.bal); });
-    return '<div class="pane-hd"><h2>' + esc(T('parties')) + '</h2><a class="btn" href="' + myUrl('#party') + '">' + esc(NS.t('my.t.party')) + ' ›</a></div>' + searchBar() +
+    var gmap = {}; B.groupTree(GRP).forEach(function (g) { gmap[g.id] = g; });
+    return '<div class="pane-hd"><h2>' + esc(T('parties')) + '</h2><div class="quick">' + (DOOR ? '' : '<a class="btn" href="#grp">' + esc(T('grp')) + '</a>') + '<a class="btn" href="' + myUrl('#party') + '">' + esc(NS.t('my.t.party')) + ' ›</a></div></div>' + searchBar() +
+      '<div class="tools-row">' + grpSel() + '</div>' +
       (list.length ? '<ul class="rows">' + list.map(function (p) {
-        return '<li><a href="#st/' + encodeURIComponent(p.key) + '"><b>' + esc(p.name) + '</b><span class="soft">' + esc(p.bal > 0.004 ? T('theyowe', { p: '', a: '' }).trim() : p.bal < -0.004 ? T('weowe', { p: '', a: '' }).replace(/\s+/g, ' ').trim() : T('settled', { p: '' }).trim()) + '</span></a>' +
+        var g = gmap[gidOf(p.key, P)];
+        return '<li><a href="#st/' + encodeURIComponent(p.key) + '"><b>' + esc(p.name) + '</b><span class="soft">' + (g ? esc(gname(g)) + ' · ' : '') + esc(p.bal > 0.004 ? T('theyowe', { p: '', a: '' }).trim() : p.bal < -0.004 ? T('weowe', { p: '', a: '' }).replace(/\s+/g, ' ').trim() : T('settled', { p: '' }).trim()) + '</span></a>' +
           '<b class="amt' + (p.bal < 0 ? ' neg' : '') + '">' + money(Math.abs(p.bal)) + (p.bal > 0.004 ? ' ' + T('dr') : p.bal < -0.004 ? ' ' + T('cr') : '') + '</b></li>'; }).join('') + '</ul>' : '<p class="soft">' + esc(T('none')) + '</p>');
   }
 
-  /* ---------- statement of account ---------- */
-  var stFrom = '', stTo = '';
-  function stHtml() {
-    var k = arg, D = mine(), P = B.parties(D, bizName()), p = P[k] || { name: (C.party.filter(function (x) { return key(x.name) === k; })[0] || {}).name || k, bal: 0 };
-    var today = NS.today(); if (!stTo) stTo = today; if (!stFrom) stFrom = fyStart(today);
-    var S = B.statement(D, bizName(), k, stFrom, stTo), open = B.bills(D, bizName(), k).bills;
-    var bal = function (v) { return money(Math.abs(v), false) + (v > 0.004 ? ' ' + T('dr') : v < -0.004 ? ' ' + T('cr') : ''); };
-    var line = p.bal > 0.004 ? T('theyowe', { p: p.name, a: money(p.bal) }) : p.bal < -0.004 ? T('weowe', { p: p.name, a: money(-p.bal) }) : T('settled', { p: p.name });
-    return '<p><a href="#parties" class="link">' + esc(T('back')) + '</a></p><div class="pane-hd"><h2>' + esc(p.name) + '</h2><div class="quick">' +
-        (p.bal > 0.004 ? '<button type="button" class="btn wa" data-wa="' + esc(k) + '">' + esc(T('remind')) + '</button>' : '') +
-        '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button>' +
-        '<button type="button" class="btn" data-print>' + esc(T('print')) + '</button><button type="button" class="btn" data-pdf>' + esc(T('pdf')) + '</button></div></div>' +
-      '<p class="big">' + esc(line) + '</p>' +
-      '<div class="tools-row"><label>' + esc(T('from')) + ' <input type="date" data-stfrom value="' + stFrom + '"></label><label>' + esc(T('to')) + ' <input type="date" data-stto value="' + stTo + '"></label></div>' +
-      '<div class="tbl-wrap"><div class="stsheet sh" data-sheet>' +
-        '<div class="st-hd"><div><b>' + esc(bizName()) + '</b>' + (BIZ.addr ? '<br>' + esc(BIZ.addr).replace(/\n/g, '<br>') : '') + (BIZ.gstin ? '<br>GSTIN ' + esc(BIZ.gstin) : '') + (BIZ.phone ? '<br>' + esc(BIZ.phone) : '') + '</div>' +
-        '<div class="r"><b>STATEMENT OF ACCOUNT</b><br>' + esc(p.name) + '<br>' + ldate(stFrom) + ' to ' + ldate(stTo) + '</div></div>' +
-        '<table class="tbl st"><thead><tr><th>Date</th><th>Particulars</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th></tr></thead><tbody>' +
-        '<tr><td>' + ldate(stFrom) + '</td><td>Opening balance</td><td class="n"></td><td class="n"></td><td class="n">' + bal(S.open) + '</td></tr>' +
-        S.rows.map(function (r) { return '<tr><td>' + ldate(r.date) + '</td><td>' + esc(enName(r.d)) + ' ' + esc(r.d.no || '') + (r.d.ref ? ' <span class="soft">(' + esc(r.d.ref) + ')</span>' : '') + '</td><td class="n">' + (r.dr ? money(r.dr, false) : '') + '</td><td class="n">' + (r.cr ? money(r.cr, false) : '') + '</td><td class="n">' + bal(r.bal) + '</td></tr>'; }).join('') +
-        '</tbody><tfoot><tr><th colspan="2">Closing balance</th><th class="n">' + money(S.dr, false) + '</th><th class="n">' + money(S.cr, false) + '</th><th class="n">' + bal(S.close) + '</th></tr></tfoot></table>' +
-        (open.length ? '<p class="st-open"><b>Unpaid bills:</b> ' + open.map(function (b) { return esc(b.no || enName(b)) + ' (' + ldate(b.date) + ') ' + money(b.left); }).join(', ') + '</p>' : '') +
-        '<p class="st-ft">Made with the Nivesh Sahayak App on ' + ldate(today) + '. Dr = amount due to ' + esc(bizName()) + '; Cr = amount due from ' + esc(bizName()) + '.</p></div></div>' +
-      '<h3>' + esc(T('recent')) + '</h3>' + rowsHtml(D.filter(function (d) { return key(B.partyName(d)) === k && B.role(d); }).sort(byDate).slice(0, 30), { left: leftMap(D) });
+  /* ---------- party groups (meta 'groups', made in My data; the party ledger and group reports live in ledger.js) ---------- */
+  var groupOf = function (p, m) { return (NS.partyGroup || B.partyGroup)(p, m); };
+  /* group id of a party key: the party master's group, else Customers / Suppliers by its role (or by its balance when it has no master) */
+  function gidOf(k, P) {
+    var rec = C.party.filter(function (x) { return key(x.name) === k; })[0];
+    if (!rec) rec = { name: k, role: P && P[k] && P[k].bal < -0.004 ? 'supplier' : 'customer' };
+    return groupOf(rec, GRP).id;
+  }
+  /* built-in names: My data's words (grp.debtors / grp.creditors from ns-groups) when that pack has them, else the App's own */
+  function gname(g) { if (!(g.builtin || B.BUILTIN[g.id])) return g.name; var k = 'grp.' + g.id, w = NS.t(k); return w !== k ? w : T('lg_g_' + g.id); }
+  function grpKeep(k, P) { return !grp || B.inGroup(gidOf(k, P), grp, GRP); }
+  /* group filter: All, Customers and its groups, Suppliers and its groups (sub-groups indented) */
+  function grpSel() {
+    return '<label class="lg-gsel"><span>' + esc(T('lg_group')) + '</span> <select data-grp><option value="">' + esc(T('all')) + '</option>' + B.groupTree(GRP).map(function (g) {
+      return '<option value="' + esc(g.id) + '"' + (g.id === grp ? ' selected' : '') + '>' + new Array(g.depth + 1).join('\u2003') + esc(gname(g)) + '</option>'; }).join('') + '</select></label>';
   }
   /* the statement is printed in English like every document */
   var ENDOC = { jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice' };
@@ -316,6 +317,7 @@
     var qi = $('[data-q]', pane);
     if (qi) qi.addEventListener('input', function () { q = qi.value; var pos = qi.selectionStart; show().then(function () { var n = $('[data-q]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }); });
     $$('[data-filt]', pane).forEach(function (b) { b.addEventListener('click', function () { filt = b.getAttribute('data-filt'); show(); }); });
+    $$('[data-grp]', pane).forEach(function (g) { g.addEventListener('change', function () { grp = g.value; show(); }); });
     $$('[data-stfrom],[data-stto]', pane).forEach(function (i) { i.addEventListener('change', function () { if (i.hasAttribute('data-stfrom')) stFrom = i.value; else stTo = i.value; show(); }); });
     pane.addEventListener('click', onClick);
     $$('[data-conv]', pane).forEach(function (s) { s.addEventListener('change', function () { if (!s.value) return; var u = toolUrl(SITEOF[s.value]) + '?from=' + encodeURIComponent(s.getAttribute('data-conv')); if (!openUrl(u)) location.href = u; }); });
@@ -328,7 +330,6 @@
     else if (b.hasAttribute('data-del')) delRec(b.getAttribute('data-del'));
     else if (b.hasAttribute('data-wa')) whatsapp(b.getAttribute('data-wa'));
     else if (b.hasAttribute('data-print')) window.print();
-    else if (b.hasAttribute('data-pdf')) { var p = B.parties(mine(), bizName())[arg]; NS.sharePdf($$('[data-sheet]'), 'Statement ' + (p ? p.name : arg) + ' ' + stTo, 'a4', 'Statement of account', ''); }
   }
   function showPhoto(id) {
     var d = C.doc.filter(function (x) { return x.id === id; })[0]; if (!d || !d.photo) return;
@@ -685,12 +686,14 @@
     mine: mine, biz: function () { return BIZ; }, bizName: bizName, data: function () { return C; }, docName: docName, enName: enName, amountOf: amountOf,
     rowsHtml: rowsHtml, leftMap: leftMap, searchBar: searchBar, match: match, byDate: byDate, fyStart: fyStart, toolUrl: toolUrl, myUrl: myUrl, ldate: ldate,
     range: function (f, t) { if (f) stFrom = f; if (t) stTo = t; if (!stTo) stTo = NS.today(); if (!stFrom) stFrom = fyStart(stTo); return [stFrom, stTo]; },
-    markPaid: markPaid, openUrl: openUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; }
+    markPaid: markPaid, openUrl: openUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },
+    whatsapp: whatsapp, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
+    door: function () { return DOOR; }
   };
   function init() {
     if (!$('#app')) return;
     var ds = $('#app').getAttribute('data-secs'); if (ds) DOOR = ds.split(/\s+/);
-    $$('[data-sec]').forEach(function (b) { b.addEventListener('click', function () { q = ''; filt = 'all'; }); });
+    $$('[data-sec]').forEach(function (b) { b.addEventListener('click', function () { q = ''; filt = 'all'; }); });   /* the group filter stays: Parties, Dues and Group reports share it */
     window.addEventListener('hashchange', route);
     document.addEventListener('ns-lang', function () { if (cur !== 'do') show(); });
     /* links to a document maker or My data open inside the app (new-tab and modified clicks are left alone) */

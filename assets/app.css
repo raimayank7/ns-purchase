@@ -6,6 +6,7 @@
 .hub-nav a:hover{background:var(--surface2)}
 .hub-nav a[aria-current=page]{background:var(--accent);color:var(--accent-ink)}
 .hub-nav .n{font-style:normal;font:600 .78rem var(--mono);opacity:.75}
+.hub-nav a.sub{min-height:36px;padding-block:6px;padding-inline-start:28px;font-weight:500;font-size:.88rem}
 .hub-main h2{margin:0 0 4px;font-size:1.35rem}
 .hub-main h2:focus{outline:none}
 .pane-hd{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px}
@@ -55,6 +56,9 @@
 .imgf{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 .imgf img{max-height:64px;max-width:160px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:4px}
 .hub-dlg{border:0;border-radius:16px;padding:0;width:min(760px,calc(100% - 24px));max-height:calc(100dvh - 24px);background:var(--surface);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.xi-pick{margin:10px 0}.xi-h{font-size:1rem;margin:14px 0 6px}.xi-tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;max-height:46vh}
+.xi-t{border-collapse:collapse;width:100%;font-size:.88rem}.xi-t th,.xi-t td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}.xi-t th{background:var(--surface2);position:sticky;top:0}
+.xi-t .n{text-align:end;font-variant-numeric:tabular-nums;width:3.5em}.xi-t tr.bad td{color:var(--bad,#b42318)}
 .hub-dlg::backdrop{background:rgba(5,15,25,.55)}
 .hub-dlg .dlg-hd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:1}
 .hub-dlg .dlg-hd h2{margin:0;font-size:1.15rem}
@@ -65,6 +69,7 @@
 .hub-nav{position:sticky;top:60px;z-index:5;flex-direction:row;overflow-x:auto;scrollbar-width:none;border-radius:12px}
 .hub-nav::-webkit-scrollbar{display:none}
 .hub-nav a{white-space:nowrap;flex:none;padding:8px 12px}
+.hub-nav a.sub{padding:8px 12px;min-height:40px}
 .hub-nav .n:empty{display:none}
 }
 @media (max-width:520px){.hub-dlg{width:100%;max-height:100dvh;height:100dvh;border-radius:0;margin:0;max-width:100%}}
@@ -234,3 +239,44 @@ dialog.qk{width:min(640px,calc(100vw - 24px));margin-top:10vh;padding:0;overflow
 @media (max-width:620px){.jl{grid-template-columns:repeat(2,minmax(0,1fr)) 40px}.jl>.lc:first-child{grid-column:1/-1}}
 @media print{.b2-dlg{display:none}}
 .stsheet .np{color:#B54708;font-weight:700;white-space:nowrap}
+/* party ledger, balance confirmation letter and group reports (ledger.js) */
+.lg-period select,.lg-gsel select{max-width:100%}
+.lg-gsel span,.lg-period label>span{margin-inline-end:4px}
+.lg-vt{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0}
+.lg-acts{margin:10px 0}
+.lg-print{display:grid;gap:16px}
+.stsheet .lg-h{margin:14px 0 6px;font-size:.95rem}
+.stsheet .lg-by{font-size:.82rem;line-height:1.35}
+.stsheet .lg-ob td{font-style:italic}
+.stsheet .lg-gh th{background:#f4f7fa;text-align:start}
+.stsheet .lg-gt th{background:#eef2f6}
+.stsheet .lg-tbl a{color:inherit}
+.lg-letter{line-height:1.55}
+.lg-letter p{margin:0 0 10px}
+.lg-sign{margin-top:16px}
+.lg-cut{margin:22px 0 14px;border-top:1px dashed #888;text-align:center;font-size:.75rem;color:#666;padding-top:2px}
+.lg-box{padding-inline-start:4px}
+.lg-sign2{margin-top:12px}
+.lg-paper,.lg-paper *{color:#111!important}
+.lg-paper{background:#fff!important;width:760px;min-width:0!important;border:0!important}
+@media print{
+.lg-print,.lg-print *{visibility:visible}
+.lg-print{position:absolute;left:0;top:0;width:100%;display:block}
+.lg-print .stsheet{position:static}
+.lg-print .stsheet+.stsheet{break-before:page}
+}
+/* final accounts and capital / loans (finrep.js) */
+.fr-print{display:none}
+@media print{.fr-print{display:block!important}}
+.fr-st th,.fr-tb th{font-weight:400}
+.fr-st th.sub,.fr-tb th.sub{padding-inline-start:1.6em}
+.fr-st tr.b th,.fr-st tr.b td{font-weight:600}
+.fr-st tr.tot th,.fr-st tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+.fr-st tr.big th,.fr-st tr.big td{font-size:1.05em}
+.fr-st tr.sec th,.fr-tb tr.sec th{background:var(--surface2);font-weight:700;font-size:.82rem;letter-spacing:.02em}
+.fr-st tr.bad th,.fr-st tr.bad td,.fr-tb tr.bad th{color:var(--bad)}
+.fr-tb tfoot th,.fr-st thead th,.fr-tb thead th{font-weight:700}
+.stsheet .fr-st tr.sec th,.stsheet .fr-tb tr.sec th{background:#f4f7fa;color:#111}
+.stsheet .fr-st tr.tot th,.stsheet .fr-st tr.tot td{border-top-color:#999}
+.fr-kinds{margin:6px 0 10px}
+.hub-main .fr-st,.hub-main .fr-tb{max-width:860px}
