@@ -162,13 +162,22 @@ body *{visibility:hidden}
 /* the shell: document makers and My data open in a frame inside the app */
 .bizbar .grow{flex:1 1 auto}
 .bizbar .newdoc{width:auto;max-width:100%;font-weight:600}
-.frame-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 10px}
-.frame-bar b{flex:1 1 auto;font:700 1.1rem var(--font-head);min-width:0;overflow-wrap:anywhere}
-.app-frame{display:block;width:100%;height:calc(100dvh - 170px);min-height:520px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
+/* every document opens on an App screen: the App's title row (Back + what is open), then the maker's own copy on the App's
+   address (/do/<site>/) in a borderless frame that app.js sizes to the rest of the screen; a soft shimmer until it is in */
+.fr-hd{margin-bottom:8px;gap:10px;flex-wrap:nowrap}
+.fr-hd h2{flex:1 1 auto;min-width:0;margin:0;font-size:clamp(1.05rem,3.6vw,1.3rem);overflow-wrap:anywhere}
+.fr-back{flex:none}
+.fr-box{position:relative}
+.fr-wait{position:absolute;inset:0 0 auto;display:grid;gap:12px;pointer-events:none}
+.fr-wait .shim{height:64px;border-radius:var(--r)}
+.fr-box:has(>.app-frame.on)>.fr-wait{display:none}
+.app-frame{display:block;width:100%;height:calc(100dvh - 170px);min-height:380px;border:0;border-radius:var(--r);background:transparent;opacity:0;transition:opacity .2s}
+.app-frame.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.app-frame{transition:none}}
+html.app-frame-on .sample-note,html.app-frame-on .sponsor-slot{display:none!important}
 html.app-in .hero,html.app-in .app-about{display:none}
 html.app-in .hub{margin-top:18px}
-@media (max-width:860px){.app-frame{height:calc(100dvh - 200px);min-height:440px}}
-@media print{html.app-frame-on .hd,html.app-frame-on .hub-nav,html.app-frame-on .frame-bar,html.app-frame-on .ft{display:none!important}}
+@media print{html.app-frame-on .hd,html.app-frame-on .hub-nav,html.app-frame-on .fr-hd,html.app-frame-on .ft{display:none!important}}
 
 /* sample data */
 .sample-note{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin:0 0 12px}

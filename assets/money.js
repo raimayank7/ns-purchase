@@ -96,7 +96,11 @@
   function debitNote(id) {
     var d = A.data().doc.filter(function (x) { return x.id === id; })[0]; if (!d) return;
     var t = B.itemTotals(d), b = d.seller || {}, s = d.buyer || {}, rows = (d.items || []).filter(function (it) { return it.desc || num(it.rate); });
-    var w = window.open('', '_blank'); if (!w) return;
+    /* printed from a hidden frame of this page (no new window or tab: it stays inside the App) */
+    var f = document.createElement('iframe'); f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
+    f.style.cssText = 'position:fixed;width:0;height:0;border:0;left:0;top:0;visibility:hidden';
+    document.body.appendChild(f);
+    var w = f.contentWindow; w.addEventListener('afterprint', function () { setTimeout(function () { f.remove(); }, 200); });
     w.document.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Debit note ' + esc(d.no || '') + '</title><style>' +
       'body{font:14px/1.45 system-ui,Segoe UI,Arial,sans-serif;color:#111;margin:24px}h1{font-size:20px;text-align:center;margin:0 0 14px;letter-spacing:.06em}' +
       '.two{display:flex;justify-content:space-between;gap:24px;margin-bottom:12px}table{border-collapse:collapse;width:100%;margin:10px 0}th,td{border:1px solid #999;padding:5px 7px;text-align:left}' +

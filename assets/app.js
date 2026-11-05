@@ -23,31 +23,83 @@
      #do/<site><path?query#hash> shows <site> in the frame; Back returns to the screen it was opened from. */
   var NEWDOCS = [['billing', 'invoice'], ['quotation', 'quote'], ['proforma', 'proforma'], ['sales-order', 'so'], ['challan', 'challan'], ['purchase-order', 'po'], ['credit-note', 'note', 'k.credit'], ['debit-note', 'note', 'k.debit'],
     ['cash-memo', 'cashmemo'], ['receipt', 'receipt'], ['voucher', 'voucher'], ['self-invoice', 'self'], ['rent-receipt', 'rent'], ['salary-slip', 'salary'], ['petty-cash', 'petty']];
+  /* every Nivesh Sahayak site the App knows (build.py INAPP_MAP): [host, local port, how it opens, name key].
+     'twin' = the App's own copy of the maker (or My data) at /do/<site>/, same engine and data home, shown on an App screen;
+     '#<section>' = a door site whose screens the App has itself; 'frame' = any other site, only its content, in the App's frame */
+  var INAPP = (window.NS_CFG && NS_CFG.inapp) || {};
+  function siteHome(s) { var x = INAPP[s]; if (!x) return s === 'my' ? myUrl() : toolUrl(s); return LOCAL ? (x[1] ? 'http://localhost:' + x[1] + '/' : '') : 'https://' + x[0] + '/'; }
   function siteOf(u) {
     if (u.origin === location.origin) return '';
     if (u.href.indexOf(myUrl()) === 0) return 'my';
+    var ks = Object.keys(INAPP).sort(function (a, b) { return (INAPP[a][2] === 'twin' ? 0 : 1) - (INAPP[b][2] === 'twin' ? 0 : 1); });   /* makers first */
+    for (var i = 0; i < ks.length; i++) { var h = siteHome(ks[i]); if (h && u.href.indexOf(h) === 0) return ks[i]; }
     var x = TOOLS.filter(function (x) { return u.href.indexOf(toolUrl(x[0])) === 0; })[0];
     return x ? x[0] : '';
   }
+  /* a link, a button or a maker asks for href: open it on an App screen. false = not an App place (the caller goes there itself) */
   function openUrl(href) {
     var u; try { u = new URL(href, location.href); } catch (e) { return false; }
+    if (u.origin === location.origin) {   /* the App's own addresses, asked for by a maker copy or My data */
+      if (/^\/do\/[a-z0-9-]+\//.test(u.pathname)) { go(u.pathname.slice(1) + u.search + u.hash); return true; }
+      var h = u.hash.slice(1).split('/')[0];
+      if (u.pathname === '/' && h && !DOOR && (SECS.indexOf(h) >= 0 || EXT[h])) { go(u.hash.slice(1)); return true; }
+      return false;
+    }
     var s = DOOR ? '' : siteOf(u);
     if (!s) return false;
-    go('do/' + s + u.pathname + u.search + u.hash);
+    var how = (INAPP[s] || [])[2] || 'twin', path = u.pathname.replace(/^\/[a-z]{2,3}\/$/, '/');   /* a language home (/hi/) is the maker too */
+    if (how.charAt(0) === '#') { var sh = u.hash.slice(1), s0 = sh.split('/')[0]; go(sh && (SECS.indexOf(s0) >= 0 || EXT[s0]) ? sh : how.slice(1)); return true; }
+    go('do/' + s + (how === 'twin' && path === '/' ? '/' : u.pathname) + u.search + u.hash);
     return true;
   }
-  var backTo = '';
+  /* the maker a saved record opens in (a counter bill is an invoice made on pos.) and its address: the App shows it inside */
+  var SLIPSITE = { rent: 'rent-receipt', salary: 'salary-slip', petty: 'petty-cash' };
+  function docSite(d) { var ty = d.type || 'invoice'; return ty === 'note' && d.kind === 'debit' ? 'debit-note' : ty === 'invoice' && d.counter ? 'pos' : SITEOF[ty] || KITSITE[ty] || SLIPSITE[ty] || ''; }
+  function docUrl(d) { var s = docSite(d); return s ? siteHome(s) + '?open=' + encodeURIComponent(d.id) : ''; }
+  var backTo = '', trail = [];
+  function frameTitle(site, rest) {
+    var id = (/[?&]open=([^&#]+)/.exec(rest) || [])[1], d = id && C.doc.filter(function (x) { return x.id === decodeURIComponent(id); })[0];
+    if (d) return docName(d) + (d.no ? ' ' + d.no : '');
+    var nd = NEWDOCS.filter(function (n) { return n[0] === site; })[0], k = (INAPP[site] || [])[3], nm = nd ? NS.t(nd[2] || 'Doc.' + nd[1]) : k ? NS.t(k) : site;
+    if (/[?&]from=/.test(rest)) return T('fr_conv', { doc: nm });
+    if (site === 'my') return NS.t('my.title');
+    return nd && !id && /^\/(\?|#|$)/.test(rest) ? T('fr_new', { doc: nm }) : nm;
+  }
+  /* a maker copy tells what it has saved (inapp.js): the App's address and title follow it (replaceState: no new history step) */
+  function frameAt(site, j) {
+    if (cur !== 'do' || arg.split(/[\/?#]/)[0] !== site) return;
+    var h = j ? 'do/' + site + '/?open=' + encodeURIComponent(j.id) : /[?&]from=/.test(arg) ? 'do/' + site + '/' : '';
+    if (!h || h === 'do/' + arg) return;
+    history.replaceState(null, '', '#' + h); arg = h.slice(3); trail[trail.length - 1] = h;
+    var fr = $('iframe.app-frame'); if (fr) fr.setAttribute('data-url', '/' + h);
+    var h2 = $('.fr-hd h2'); if (h2 && j && j.doc) h2.textContent = docName(j.doc) + (j.doc.no ? ' ' + j.doc.no : '');
+  }
+  /* the frame fills the screen below the title row (above the phone tab bar and the status bar), so the document scrolls inside it */
+  function sizeFrame() {
+    var fr = $('iframe.app-frame'); if (!fr) return;
+    var bottom = 0;
+    $$('.tabbar, .sbar').forEach(function (b) { var r = b.getBoundingClientRect(), cs = getComputedStyle(b); if (r.height && cs.display !== 'none' && cs.position === 'fixed' && r.top > innerHeight / 2) bottom = Math.max(bottom, innerHeight - r.top); });
+    var top = fr.getBoundingClientRect().top + scrollY;
+    fr.style.height = Math.max(380, innerHeight - top - bottom - 6) + 'px';
+  }
   function frame(a) {
     var site = a.split(/[\/?#]/)[0], rest = a.slice(site.length) || '/';
-    var url = (site === 'my' ? myUrl() : toolUrl(site)).replace(/\/$/, '') + rest;
-    var nd = NEWDOCS.filter(function (n) { return n[0] === site; })[0], title = site === 'my' ? NS.t('my.title') : nd ? NS.t(nd[2] || 'Doc.' + nd[1]) : site;
+    var how = (INAPP[site] || [])[2] || (site === 'my' ? 'twin' : 'frame'), path = rest.replace(/[?#].*$/, '');
+    var url = how === 'twin' && path === '/' ? '/do/' + site + rest : siteHome(site).replace(/\/$/, '') + rest;
+    if (how === 'twin' && site !== 'my' && rest === '/') url += '?new=1';   /* "New ...": a fresh document, not the one last opened */
+    var title = frameTitle(site, rest);
     var pane = $('[data-pane]'), fr = $('iframe.app-frame', pane);
     document.documentElement.classList.add('app-in', 'app-frame-on');
     if (fr && fr.getAttribute('data-url') === url) return;
-    pane.innerHTML = '<div class="frame-bar"><button type="button" class="btn sm" data-fback>' + esc(T('back')) + '</button><b>' + esc(title) + '</b>' +
-      '<a class="btn sm" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(T('newtab')) + ' \u2197</a></div>' +
-      '<iframe class="app-frame" data-url="' + esc(url) + '" src="' + esc(url) + '" title="' + esc(title) + '"></iframe>';
-    $('[data-fback]', pane).addEventListener('click', function () { go(backTo); });
+    /* the App's own title row (Back + what is open), then the document: no second website, no new tab */
+    pane.innerHTML = '<div class="pane-hd fr-hd"><button type="button" class="btn sm fr-back" data-fback>' + esc(T('back')) + '</button><h2>' + esc(title) + '</h2></div>' +
+      '<div class="fr-box"><div class="fr-wait" aria-hidden="true"><div class="shim"></div><div class="shim"></div><div class="shim"></div></div>' +
+      '<iframe class="app-frame" data-url="' + esc(url) + '" src="' + esc(url) + '" title="' + esc(title) + '" allow="web-share; clipboard-write"></iframe></div>';
+    fr = $('iframe.app-frame', pane);
+    fr.addEventListener('load', function () { fr.classList.add('on'); sizeFrame(); });
+    $('[data-fback]', pane).addEventListener('click', function () { if (trail.length > 1) history.back(); else go(backTo || 'home'); });
+    sizeFrame(); requestAnimationFrame(sizeFrame);
+    var h2 = $('h2', pane); h2.tabIndex = -1; h2.focus({ preventScroll: true });
   }
   var MODES = ['cash', 'upi', 'cheque', 'bank', 'card', 'dd', 'other'];
   var EXP = ['rent', 'power', 'salary', 'transport', 'phone', 'repair', 'office', 'fuel', 'bank', 'prof', 'ads', 'misc'];
@@ -97,6 +149,8 @@
   /* ---------- sections ---------- */
   function route() {
     var h = decodeURIComponent(location.hash.slice(1)), p = h.split('/');
+    /* where the App has been, so the title row's Back goes back the way the user came (a maker opened from another maker too) */
+    if (trail.length > 1 && trail[trail.length - 2] === h) trail.pop(); else if (trail[trail.length - 1] !== h) trail.push(h);
     cur = p[0] === 'do' && !DOOR ? 'do' : SECS.indexOf(p[0]) >= 0 || EXT[p[0]] ? p[0] : 'home'; arg = p.slice(1).join('/');
     /* one cash screen: where the cash, bank and day book screen (money.js) is on hand, #cash and #cash/bank open it */
     if (cur === 'cash' && EXT.books && (!DOOR || DOOR.indexOf('books') >= 0)) { cur = 'books'; arg = arg === 'bank' ? 'bank' : 'cash'; }
@@ -108,7 +162,11 @@
   var showSeq = 0;
   function show(focus) {
     $$('[data-sec]').forEach(function (b) { var on = b.getAttribute('data-sec') === (cur === 'st' ? 'parties' : cur); b.setAttribute('aria-current', on ? 'page' : 'false'); });
-    if (cur === 'do') { document.documentElement.classList.add('no-sponsor'); frame(arg); return Promise.resolve(); }
+    if (cur === 'do') {
+      document.documentElement.classList.add('no-sponsor'); frame(arg);
+      /* after a reload the saved documents come in later: name the open one then */
+      return load().then(function () { var h2 = $('.fr-hd h2'), st = arg.split(/[\/?#]/)[0]; if (cur === 'do' && h2 && /[?&]open=/.test(arg)) h2.textContent = frameTitle(st, arg.slice(st.length)); });
+    }
     /* a redraw started earlier (window focus when the user clicks, late data) must not paint over a newer screen or the frame */
     var mine_ = ++showSeq, want = cur + '/' + arg;
     return load().then(function () {
@@ -194,8 +252,7 @@
       var acts = [];
       if (d.photo) acts.push('<button type="button" class="btn sm" data-photo="' + d.id + '">' + esc(T('photo')) + '</button>');
       if (appMade && ty !== 'cashmemo') acts.push('<button type="button" class="btn sm" data-edit="' + d.id + '">' + esc(T('edit')) + '</button>');
-      if (site && (!appMade || /^(receipt|voucher|cashmemo)$/.test(ty))) acts.push('<a class="btn sm" href="' + toolUrl(site) + '?open=' + encodeURIComponent(d.id) + '">' + esc(T('open')) + '</a>');
-      else if (KITSITE[ty]) acts.push('<a class="btn sm" href="https://' + KITSITE[ty] + '.niveshsahayak.in/?open=' + encodeURIComponent(d.id) + '" target="_blank" rel="noopener">' + esc(T('open')) + '</a>');
+      if (docUrl(d) && (!site || !appMade || /^(receipt|voucher|cashmemo)$/.test(ty))) acts.push('<a class="btn sm" href="' + docUrl(d) + '">' + esc(T('open')) + '</a>');
       if (left[d.id] > 0.004 && (ty === 'invoice' || ty === 'cashmemo')) acts.push('<button type="button" class="btn sm" data-form="min" data-for="' + d.id + '">' + esc(T('recpay')) + '</button>');
       if (left[d.id] > 0.004 && ty === 'pbill') acts.push('<button type="button" class="btn sm" data-form="mout" data-for="' + d.id + '">' + esc(T('recpay')) + '</button>');
       if (CONVERT[ty] && !opts.noconv) acts.push('<select class="sm conv" data-conv="' + d.id + '" aria-label="' + esc(T('convert')) + ' ' + esc(d.no || '') + '"><option value="">' + esc(T('convert')) + '…</option>' +
@@ -707,7 +764,7 @@
     mine: mine, biz: function () { return BIZ; }, bizName: bizName, data: function () { return C; }, docName: docName, enName: enName, amountOf: amountOf,
     rowsHtml: rowsHtml, leftMap: leftMap, searchBar: searchBar, match: match, byDate: byDate, fyStart: fyStart, toolUrl: toolUrl, myUrl: myUrl, ldate: ldate,
     range: function (f, t) { if (f) stFrom = f; if (t) stTo = t; if (!stTo) stTo = NS.today(); if (!stFrom) stFrom = fyStart(stTo); return [stFrom, stTo]; },
-    markPaid: markPaid, openUrl: openUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },
+    markPaid: markPaid, openUrl: openUrl, siteHome: siteHome, frameAt: frameAt, docUrl: docUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },
     whatsapp: whatsapp, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
     door: function () { return DOOR; }
   };
@@ -716,7 +773,11 @@
     var ds = $('#app').getAttribute('data-secs'); if (ds) DOOR = ds.split(/\s+/);
     $$('[data-sec]').forEach(function (b) { b.addEventListener('click', function () { q = ''; filt = 'all'; }); });   /* the group filter stays: Parties, Dues and Group reports share it */
     window.addEventListener('hashchange', route);
-    document.addEventListener('ns-lang', function () { if (cur !== 'do') show(); });
+    document.addEventListener('ns-lang', function () {
+      if (cur !== 'do') return show();
+      var b = $('[data-fback]'), h2 = $('.fr-hd h2'), st = arg.split(/[\/?#]/)[0]; if (b) b.textContent = T('back'); if (h2) h2.textContent = frameTitle(st, arg.slice(st.length) || '/');
+    });
+    window.addEventListener('resize', sizeFrame);
     /* links to a document maker or My data open inside the app (new-tab and modified clicks are left alone) */
     document.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('a[href]');
