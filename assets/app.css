@@ -216,3 +216,21 @@ dialog.qk{width:min(640px,calc(100vw - 24px));margin-top:10vh;padding:0;overflow
 }
 /* device test fix (5 Nov 2026): on phones the Install button would push the header to three rows; installing stays in the browser menu and the search box */
 @media (max-width:480px){.hd nav>.qk-install{display:none}}
+/* Batch 2 (more.js): journal lines, transfer and raw material rows, trend bars */
+.jl{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) 40px;gap:6px;align-items:end;margin-bottom:8px}
+.jl .lc[hidden]{display:none}
+.jl .rm{align-self:end;height:44px}
+.b2-dlg{width:min(760px,calc(100vw - 24px))}
+[data-jsum].bad,.b2-dlg .bad{color:var(--bad,#B42318);font-weight:700}
+.warn-card{border-color:var(--warn,#B54708)}
+.tiles button.tile{font:inherit;text-align:start;cursor:pointer}
+.tiles button.tile[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.tiles .tile small{display:block}
+.bars{display:flex;align-items:flex-end;gap:4px;height:120px;margin:12px 0;padding:0 2px;overflow-x:auto}
+.bars .bar{flex:1 0 22px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:4px}
+.bars .bar i{display:block;width:70%;min-height:2px;background:var(--accent);border-radius:4px 4px 0 0}
+.bars .bar span{font:600 .68rem var(--mono);color:var(--soft)}
+.tbl td.neg{color:var(--bad,#B42318)}
+@media (max-width:620px){.jl{grid-template-columns:repeat(2,minmax(0,1fr)) 40px}.jl>.lc:first-child{grid-column:1/-1}}
+@media print{.b2-dlg{display:none}}
+.stsheet .np{color:#B54708;font-weight:700;white-space:nowrap}

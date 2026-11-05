@@ -52,7 +52,7 @@
   var CONVERT = { quote: ['so', 'challan', 'invoice'], proforma: ['invoice'], so: ['challan', 'invoice'], challan: ['invoice'] };
   var SECS = ['home', 'sales', 'buy', 'money', 'dues', 'parties', 'cash', 'st'];
   /* EXT: sections added by other files (NSApp.addSection); DOOR: the sections a door site shows (#app data-secs), first = start */
-  var EXT = {}, DOOR = null;
+  var EXT = {}, DOOR = null, HOME = [];
 
   var C = { biz: [], party: [], item: [], doc: [] }, CFG = {}, BIZ = null, cur = 'home', arg = '', q = '', filt = 'all';
 
@@ -160,6 +160,7 @@
       '<div class="card"><h3>' + esc(T('overdue')) + '</h3>' + (bw.length ? '<ul class="rows">' + bw.map(function (b) {
         return '<li><a href="#st/' + encodeURIComponent(key(b.party)) + '"><b>' + esc(b.party) + '</b><span class="soft">' + esc(docName(b)) + ' ' + esc(b.no) + ' · ' + ldate(b.date) + ' · ' + esc(T('days', { n: B.daysBetween(b.date, today) })) + '</span></a><b class="amt">' + money(b.left) + '</b></li>'; }).join('') + '</ul>'
         : '<p class="soft">' + esc(T('nodues')) + '</p>') + '</div>' +
+      HOME.map(function (f) { try { return f() || ''; } catch (e) { return ''; } }).join('') +
       '<div class="card"><h3>' + esc(T('recent')) + '</h3>' + rowsHtml(recent) + '</div>' +
       '<details class="card"><summary><b>' + esc(T('help')) + '</b></summary><p>' + esc(T('helpp')) + '</p><p class="soft">' + esc(T('invfix')) + '</p></details>';
   }
@@ -221,20 +222,25 @@
     var side = arg === 'pay' ? 'pay' : 'recv', D = mine(), today = NS.today(), R = B.bills(D, bizName());
     var by = {};
     R.bills.filter(function (b) { return b.side === side; }).forEach(function (b) { var k = key(b.party); (by[k] = by[k] || { name: b.party, list: [] }).list.push(b); });
-    var P = B.parties(D, bizName()), rows = Object.keys(by).map(function (k) { var a = B.ageing(by[k].list, today); return { k: k, name: by[k].name, a: a, tot: r2(a[0] + a[1] + a[2] + a[3]), phone: phoneOf(k, P) }; })
+    var P = B.parties(D, bizName()), rows = Object.keys(by).map(function (k) {
+      /* credit days of the party (Configuration Hub) give bills without a due date one; ageing then counts from the due date */
+      var pm = C.party.filter(function (p) { return key(p.name) === k; })[0] || {}, list = by[k].list.map(function (b) { return b.due || !num(pm.cdays) ? b : Object.assign({}, b, { due: B.addDays(b.date, num(pm.cdays)) }); });
+      var a = B.ageing(list, today, true), tot = r2(a[0] + a[1] + a[2] + a[3]);
+      return { k: k, name: by[k].name, a: a, tot: tot, phone: phoneOf(k, P), late: B.overdue(list, today), lim: num(pm.climit), over: num(pm.climit) && side === 'recv' && tot > num(pm.climit) };
+    })
       .filter(function (r) { return !q || r.name.toLowerCase().indexOf(q.toLowerCase()) >= 0; }).sort(function (a, b) { return b.tot - a.tot; });
     var tot = [0, 0, 0, 0]; rows.forEach(function (r) { r.a.forEach(function (v, i) { tot[i] = r2(tot[i] + v); }); });
     var advs = Object.keys(R.advances).filter(function (k) { return R.advances[k][side] > 0.004; });
     return '<div class="pane-hd"><h2>' + esc(T('dues')) + '</h2><div class="seg" role="group"><a class="btn sm" href="#dues" aria-pressed="' + (side === 'recv') + '">' + esc(T('recv')) + '</a><a class="btn sm" href="#dues/pay" aria-pressed="' + (side === 'pay') + '">' + esc(T('pay')) + '</a></div></div>' +
       '<div class="tiles">' + ['a0', 'a1', 'a2', 'a3'].map(function (x, i) { return '<div class="tile' + (i === 3 && tot[3] ? ' warn' : '') + '"><span>' + esc(T(x)) + '</span><b>' + money(tot[i]) + '</b></div>'; }).join('') + '</div>' +
       searchBar() +
-      (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + esc(T('party')) + '</th>' + ['a0', 'a1', 'a2', 'a3'].map(function (x) { return '<th class="n">' + esc(T(x)) + '</th>'; }).join('') + '<th class="n">' + esc(T('totaldue')) + '</th><th></th></tr></thead><tbody>' +
+      (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + esc(T('party')) + '</th>' + ['a0', 'a1', 'a2', 'a3'].map(function (x) { return '<th class="n">' + esc(T(x)) + '</th>'; }).join('') + '<th class="n">' + esc(T('totaldue')) + '</th><th class="n">' + esc(NS.t('b1.late')) + '</th><th></th></tr></thead><tbody>' +
         rows.map(function (r) {
-          return '<tr><th scope="row"><a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a></th>' + r.a.map(function (v) { return '<td class="n">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
-            '<td class="n"><b>' + money(r.tot, false) + '</b></td><td class="acts">' + (side === 'recv' ? '<button type="button" class="btn sm wa" data-wa="' + esc(r.k) + '">' + esc(T('remind')) + '</button>' : '') +
+          return '<tr><th scope="row"><a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v) { return '<td class="n">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
+            '<td class="n"><b>' + money(r.tot, false) + '</b></td><td class="n' + (r.late ? ' b1-warn' : '') + '">' + (r.late ? money(r.late, false) : '—') + '</td><td class="acts">' + (side === 'recv' ? '<button type="button" class="btn sm wa" data-wa="' + esc(r.k) + '">' + esc(T('remind')) + '</button>' : '') +
             '<button type="button" class="btn sm" data-form="' + (side === 'recv' ? 'min' : 'mout') + '" data-party="' + esc(r.name) + '">' + esc(T('recpay')) + '</button></td></tr>'; }).join('') +
         '</tbody></table></div>' : '<p class="soft">' + esc(T('nodues')) + '</p>') +
-      '<p class="soft">' + esc(T('ageh')) + '</p>' +
+      '<p class="soft">' + esc(NS.t('b1.ageh')) + '</p>' +
       (advs.length ? '<div class="card"><h3>' + esc(T('advance')) + '</h3><p class="soft">' + esc(T('advh')) + '</p><ul class="rows">' + advs.map(function (k) {
         return '<li><a href="#st/' + encodeURIComponent(k) + '"><b>' + esc((P[k] || { name: k }).name) + '</b></a><b class="amt">' + money(R.advances[k][side]) + '</b></li>'; }).join('') + '</ul></div>' : '');
   }
@@ -278,7 +284,7 @@
       '<h3>' + esc(T('recent')) + '</h3>' + rowsHtml(D.filter(function (d) { return key(B.partyName(d)) === k && B.role(d); }).sort(byDate).slice(0, 30), { left: leftMap(D) });
   }
   /* the statement is printed in English like every document */
-  var ENDOC = { invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice' };
+  var ENDOC = { jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice' };
   function enName(d) {
     var ty = d.type || 'invoice';
     return ENDOC[ty === 'note' ? d.kind : ty === 'receipt' && d.kind !== 'pay' ? d.kind : ty === 'pbill' && d.kind === 'return' ? 'pret' : ty] || ty;
@@ -315,7 +321,7 @@
     var b = e.target.closest('button'); if (!b) return;
     if (b.hasAttribute('data-form')) openForm(b.getAttribute('data-form'), { forId: b.getAttribute('data-for'), party: b.getAttribute('data-party'), mode: b.getAttribute('data-mode'), side: b.getAttribute('data-side') || '' });
     else if (b.hasAttribute('data-photo')) showPhoto(b.getAttribute('data-photo'));
-    else if (b.hasAttribute('data-edit')) { var d = C.doc.filter(function (x) { return x.id === b.getAttribute('data-edit'); })[0]; if (d) openForm(formOf(d), { rec: d }); }
+    else if (b.hasAttribute('data-edit')) { var d = C.doc.filter(function (x) { return x.id === b.getAttribute('data-edit'); })[0]; if (d && !(window.NSApp.editX && NSApp.editX(d))) openForm(formOf(d), { rec: d }); }
     else if (b.hasAttribute('data-del')) delRec(b.getAttribute('data-del'));
     else if (b.hasAttribute('data-wa')) whatsapp(b.getAttribute('data-wa'));
     else if (b.hasAttribute('data-print')) window.print();
@@ -344,11 +350,15 @@
 
   function delRec(id) {
     var d = C.doc.filter(function (x) { return x.id === id; })[0]; if (!d) return;
-    if (!confirm(T('cdel', { x: docName(d) + ' ' + (d.no || '') }))) return;
-    var jobs = [NSStore.del('doc', id)];
-    /* bills this payment had marked Paid go back to unpaid */
-    C.doc.forEach(function (x) { if (x.paidBy === id) { x.status = 'unpaid'; delete x.paidBy; jobs.push(NSStore.put('doc', x)); } });
-    Promise.all(jobs).then(function () { NS.toast(T('deleted')); show(); });
+    if (window.NSApp.closedMsg && NSApp.closedMsg(d.date)) { NS.toast(NSApp.closedMsg(d.date), 'bad'); return; }   /* closed financial year (more.js) */
+    var msg = NS.t('b1.cdel', { x: docName(d) + ' ' + (d.no || '') });
+    (NS.ask ? NS.ask(msg, { danger: true, ok: NS.t('desk.del') }) : Promise.resolve(confirm(msg))).then(function (yes) {
+      if (!yes) return;
+      var jobs = [NSStore.del('doc', id)];
+      /* bills this payment had marked Paid go back to unpaid */
+      C.doc.forEach(function (x) { if (x.paidBy === id) { x.status = 'unpaid'; delete x.paidBy; jobs.push(NSStore.put('doc', x)); } });
+      Promise.all(jobs).then(function () { NS.toast(NS.t('b1.binned')); show(); }, function (err) { NS.toast(err.message, 'bad'); show(); });
+    });
   }
 
   function whatsapp(k) {
@@ -409,7 +419,8 @@
         fld('f-state', T('state'), sel('f-state', (r.buyer && r.buyer.state) || pm.state || (BIZ.state || ''), [['', '—']].concat(NS.STATES.map(function (s) { return [s[0], s[0] + ' · ' + s[1]]; })))) +
         fld('f-no', T(kind === 'pret' ? 'billno' : 'sno'), inp('f-no', r.no || '', { ltr: 1, req: kind === 'pbill' })) +
         fld('f-date', T('date'), inp('f-date', r.date, { type: 'date', req: 1 })) +
-        (kind === 'pret' ? fld('f-orig', T('origno'), inp('f-orig', r.orig && r.orig.no || '', { ltr: 1 })) : fld('f-due', T('due'), inp('f-due', r.due || '', { type: 'date' }))) + '</div>' +
+        (kind === 'pret' ? fld('f-orig', T('origno'), inp('f-orig', r.orig && r.orig.no || '', { ltr: 1 })) : fld('f-due', T('due'), inp('f-due', r.due || '', { type: 'date' }))) +
+        (window.NSApp.gdField ? NSApp.gdField(r.gd) : '') + '</div>' +
         '<fieldset><legend>' + esc(T('items')) + '</legend><div data-lines></div><button type="button" class="btn sm" data-addline>' + esc(T('addline')) + '</button>' +
         '<label class="chk"><input type="checkbox" id="f-nogst"' + (r.noGst ? ' checked' : '') + '> ' + esc(T('nogst')) + '</label><label class="chk"><input type="checkbox" id="f-round"' + (r.round !== false ? ' checked' : '') + '> ' + esc(T('round')) + '</label>' +
         '<div class="sum" data-sum></div></fieldset>' +
@@ -501,14 +512,16 @@
   }
   function fillItem(i) {
     var m = C.item.filter(function (x) { return key(x.desc) === key(F.lines[i].desc); })[0]; if (!m) return;
-    var L = F.lines[i]; if (!L.hsn) L.hsn = m.hsn || ''; if (!num(L.rate) && m.rate) L.rate = m.rate; if (m.gst !== '' && m.gst != null) L.gst = m.gst;
+    var L = F.lines[i]; if (!L.hsn) L.hsn = m.hsn || ''; if (!num(L.rate) && (m.prate || m.rate)) L.rate = m.prate || m.rate; if (m.gst !== '' && m.gst != null) L.gst = m.gst;
     var row = $$('[data-row]', form)[i]; if (row) { $('[data-lk=hsn]', row).value = L.hsn; $('[data-lk=rate]', row).value = L.rate; $('[data-lk=gst]', row).value = L.gst; }
+    if (row && m.track && !$('[data-lk=batch],[data-lk=serial]', row)) { drawLines(); var di = $$('[data-lk=desc]', form)[i]; if (di) { di.focus(); di.setSelectionRange(di.value.length, di.value.length); } }   /* batch / serial item (more.js) */
   }
   function drawLines() {
     var box = $('[data-lines]', form);
     box.innerHTML = '<datalist id="dl-item">' + C.item.map(function (x) { return '<option value="' + esc(x.desc) + '">'; }).join('') + '</datalist>' + F.lines.map(function (L, i) {
       function c(k, lbl, o) { o = o || {}; return '<label class="lc lc-' + k + '"><span>' + esc(lbl) + '</span><input data-li="' + i + '" data-lk="' + k + '" value="' + esc(L[k] == null ? '' : L[k]) + '"' + (o.mode ? ' inputmode="' + o.mode + '" dir="ltr"' : ' dir="auto"') + (o.list ? ' list="' + o.list + '"' : '') + ' autocomplete="off"></label>'; }
       return '<div class="line" data-row>' + c('desc', T('item'), { list: 'dl-item' }) + c('hsn', T('hsn'), { mode: 'numeric' }) + c('qty', T('qty'), { mode: 'decimal' }) + c('rate', T('rate'), { mode: 'decimal' }) + c('gst', T('gst'), { mode: 'decimal' }) +
+        (window.NSApp.lineX ? NSApp.lineX(L, i, c) : '') +   /* batch, expiry, serial (more.js) */
         (F.lines.length > 1 ? '<button type="button" class="icon-btn rm" data-rm="' + i + '" aria-label="' + esc(T('rmline')) + '">✕</button>' : '') + '</div>';
     }).join('');
     $$('[data-rm]', box).forEach(function (b) { b.addEventListener('click', function () { F.lines.splice(+b.getAttribute('data-rm'), 1); drawLines(); }); });
@@ -517,7 +530,8 @@
   function billFromForm() {
     var d = { type: 'pbill', kind: F.kind === 'pret' ? 'return' : 'bill', seller: sellerCopy(), buyer: { name: $('#f-party', form).value.trim(), gstin: $('#f-gstin', form).value.trim().toUpperCase(), state: $('#f-state', form).value },
       no: $('#f-no', form).value.trim(), date: $('#f-date', form).value, noGst: $('#f-nogst', form).checked, round: $('#f-round', form).checked, photo: F.photo || '',
-      items: F.lines.filter(function (L) { return String(L.desc).trim() || num(L.rate); }).map(function (L) { return { desc: String(L.desc).trim(), hsn: String(L.hsn || '').trim(), qty: L.qty === '' ? 1 : num(L.qty), unit: 'Nos', rate: num(L.rate), gst: num(L.gst) }; }) };
+      items: F.lines.filter(function (L) { return String(L.desc).trim() || num(L.rate); }).map(function (L) { var it = { desc: String(L.desc).trim(), hsn: String(L.hsn || '').trim(), qty: L.qty === '' ? 1 : num(L.qty), unit: 'Nos', rate: num(L.rate), gst: num(L.gst) }; return window.NSApp.lineCopy ? NSApp.lineCopy(L, it) : it; }) };
+    if ($('#f-gd', form)) d.gd = $('#f-gd', form).value;
     if ($('#f-due', form)) d.due = $('#f-due', form).value; else d.orig = { no: $('#f-orig', form).value.trim() };
     var t = B.itemTotals(d), total = r2(t.taxable + t.cgst + t.sgst + t.igst);   /* IGST when the supplier's state differs from ours */
     d.total = d.round ? Math.round(total) : total;
@@ -560,6 +574,8 @@
   function submit() {
     var k = F.kind, miss = $$('[required]', form).filter(function (i) { return !String(i.value).trim(); });
     if (miss.length) { NS.toast(T('need', { f: miss.map(function (i) { return $('label[for="' + i.id + '"]', form).textContent; }).join(', ') }), 'bad'); miss[0].focus(); return; }
+    var lock = window.NSApp.closedMsg && $('#f-date', form) && (NSApp.closedMsg($('#f-date', form).value) || F.rec && NSApp.closedMsg(F.rec.date));   /* closed financial year (more.js) */
+    if (lock) { NS.toast(lock, 'bad'); return; }
     var rec = F.rec ? JSON.parse(JSON.stringify(F.rec)) : null, jobs = [], party = $('#f-party', form) ? $('#f-party', form).value.trim() : '', d;
     if (k === 'min' || k === 'mout') {
       var out = k === 'mout', amt = r2(num($('#f-amt', form).value)), alloc = $$('[data-alloc] input[data-al]:not([type=checkbox])', form).filter(function (i) { return num(i.value) > 0; }).map(function (i) {
@@ -662,11 +678,11 @@
 
   /* for door sites and extra sections (money.js) */
   window.NSApp = {
-    T: T, B: B, addSection: function (name, html, wire) { EXT[name] = { html: html, wire: wire }; }, show: show, openForm: openForm,
+    T: T, B: B, addSection: function (name, html, wire) { EXT[name] = { html: html, wire: wire }; }, addHome: function (f) { HOME.push(f); }, cfg: function () { return CFG; }, show: show, openForm: openForm,
     mine: mine, biz: function () { return BIZ; }, bizName: bizName, data: function () { return C; }, docName: docName, enName: enName, amountOf: amountOf,
     rowsHtml: rowsHtml, leftMap: leftMap, searchBar: searchBar, match: match, byDate: byDate, fyStart: fyStart, toolUrl: toolUrl, myUrl: myUrl, ldate: ldate,
     range: function (f, t) { if (f) stFrom = f; if (t) stTo = t; if (!stTo) stTo = NS.today(); if (!stFrom) stFrom = fyStart(stTo); return [stFrom, stTo]; },
-    markPaid: markPaid, openUrl: openUrl, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; }
+    markPaid: markPaid, openUrl: openUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; }
   };
   function init() {
     if (!$('#app')) return;

@@ -201,9 +201,12 @@
   });
   function setStatus(id, st) {
     var d = A.data().doc.filter(function (x) { return x.id === id; })[0]; if (!d) return;
-    if (st === 'bounce' && !confirm(T('cbounce', { n: d.ref || '', p: B.partyName(d) }))) return;
-    d.chq = Object.assign({ date: d.date, bank: '' }, d.chq || {}, { st: st, on: st === 'ok' ? NS.today() : st === 'bounce' ? NS.today() : '' });
-    NSStore.put('doc', d).then(function (saved) { return A.markPaid(saved); }).then(function () { NS.toast(T(st === 'bounce' ? 'bnote' : 'saved')); A.show(); });
+    var msg = st === 'bounce' ? T('cbounce', { n: d.ref || '', p: B.partyName(d) }) : '';
+    (!msg ? Promise.resolve(true) : NS.ask ? NS.ask(msg, { danger: true }) : Promise.resolve(confirm(msg))).then(function (yes) {
+      if (!yes) return;
+      d.chq = Object.assign({ date: d.date, bank: '' }, d.chq || {}, { st: st, on: st === 'ok' ? NS.today() : st === 'bounce' ? NS.today() : '' });
+      NSStore.put('doc', d).then(function (saved) { return A.markPaid(saved); }).then(function () { NS.toast(T(st === 'bounce' ? 'bnote' : 'saved')); A.show(); });
+    });
   }
 
   /* ---------- cash book, bank book, day book ---------- */
