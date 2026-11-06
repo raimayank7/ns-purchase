@@ -217,13 +217,19 @@
 
   /* ---------- WP-3: write-off of a bill's balance ---------- */
   function W(k, v) { return NS.t('wo.' + k, v); }
-  function woForm(rec, billId) {
-    var D = A.mine(), id = rec ? (rec.alloc && rec.alloc[0] || {}).id : billId;
-    var bl = B.bills(D.filter(function (d) { return !rec || d.id !== rec.id; }), A.bizName()).bills.filter(function (b) { return b.id === id; })[0];
-    if (!bl) { NS.toast(W('nobill'), 'bad'); return; }
+  /* billId = one bill; pty = { name, side } = every open bill of a party on that side (Dues screen, WP-5): the amount is spread over
+     the oldest bills first. An edited write-off works on the bills it was saved against. */
+  function woForm(rec, billId, pty) {
+    var D = A.mine(), all = B.bills(D.filter(function (d) { return !rec || d.id !== rec.id; }), A.bizName()).bills, list;
+    if (pty) list = all.filter(function (b) { return b.side === pty.side && key(b.party) === key(pty.name); });
+    else if (rec && rec.alloc && rec.alloc.length > 1) { var ids = {}; rec.alloc.forEach(function (a) { ids[a.id] = 1; }); list = all.filter(function (b) { return ids[b.id]; }); }
+    else { var id = rec ? (rec.alloc && rec.alloc[0] || {}).id : billId; list = all.filter(function (b) { return b.id === id; }); }
+    list = list.filter(function (b) { return b.left > 0.004; }).sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); });
+    if (!list.length) { NS.toast(W('nobill'), 'bad'); return; }
+    var bl = list.length === 1 ? list[0] : { party: list[0].party, side: list[0].side, no: '', left: r2(list.reduce(function (a, b) { return a + b.left; }, 0)) };
     var side = bl.side, r = rec || { date: today(), amount: bl.left, reason: side === 'pay' ? 'disc' : 'bad' };
     var reasons = side === 'pay' ? ['disc', 'small'] : ['bad', 'small', 'disc'];
-    open(W('t_' + side), '<p class="soft">' + esc(W('bill', { b: bl.no || A.docName(bl), p: bl.party, a: money(bl.left) })) + '</p><div class="fg">' +
+    open(W('t_' + side), '<p class="soft">' + esc(list.length > 1 ? W('party', { n: list.length, p: bl.party, a: money(bl.left) }) : W('bill', { b: bl.no || A.docName(bl), p: bl.party, a: money(bl.left) })) + '</p><div class="fg">' +
       fld('ax-date', A.T('date'), inp('ax-date', r.date, { type: 'date', req: 1 })) +
       fld('ax-amt', A.T('amount'), inp('ax-amt', r.amount, { mode: 'decimal', req: 1 })) +
       fld('ax-why', W('why'), sel('ax-why', r.reason, reasons.map(function (x) { return [x, W('r_' + side + '_' + x)]; })), { wide: 1 }) +
@@ -235,9 +241,10 @@
       if (!(amt > 0) || amt > r2(bl.left) + 0.004) { NS.toast(W('toomuch', { a: money(bl.left) }), 'bad'); return; }
       if (closed(date) || rec && closed(rec.date)) return;
       var why = val('ax-why');
+      var rest = amt, alloc = list.map(function (b) { var x = r2(Math.min(b.left, rest)); rest = r2(rest - x); return { id: b.id, no: b.no || '', amt: x }; }).filter(function (a) { return a.amt > 0; });
       var d = Object.assign(rec ? JSON.parse(JSON.stringify(rec)) : { type: 'wo', no: nextNo('wo', 'WO', date) }, { date: date, seller: sellerCopy(), buyer: { name: bl.party }, side: side, reason: why, amount: amt,
-        alloc: [{ id: bl.id, no: bl.no || '', amt: amt }], notes: val('ax-note'), total: amt });
-      d.narr = [ENW[side + '_' + why], bl.no ? 'bill ' + bl.no : '', d.notes].filter(Boolean).join(' · ');
+        alloc: alloc, notes: val('ax-note'), total: amt });
+      d.narr = [ENW[side + '_' + why], alloc.length ? (alloc.length > 1 ? 'bills ' : 'bill ') + alloc.map(function (a) { return a.no; }).filter(Boolean).join(', ') : '', d.notes].filter(Boolean).join(' · ');
       saved(d);
     }, function (f) {
       function upd() { var why = val('ax-why'); $('[data-wohint]', f).textContent = W('h_' + side + '_' + why) + (side === 'recv' ? ' ' + W('gstnote') : ''); }
@@ -251,6 +258,14 @@
       if (b.nextElementSibling && b.nextElementSibling.hasAttribute('data-wofor')) return;
       var x = NS.el('button', { type: 'button', 'class': 'btn sm', 'data-wofor': b.getAttribute('data-for'), 'data-i18n': 'wo.btn' }, esc(W('btn')));
       x.addEventListener('click', function () { woForm(null, x.getAttribute('data-wofor')); });
+      b.insertAdjacentElement('afterend', x);
+    });
+    /* Dues: one button per party writes off what is left on its bills (WP-5) */
+    $$('.dues-t [data-form="min"][data-party], .dues-t [data-form="mout"][data-party]').forEach(function (b) {
+      if (b.nextElementSibling && b.nextElementSibling.hasAttribute('data-woparty')) return;
+      var side = b.getAttribute('data-form') === 'mout' ? 'pay' : 'recv';
+      var x = NS.el('button', { type: 'button', 'class': 'btn sm', 'data-woparty': b.getAttribute('data-party'), 'data-i18n': 'wo.btn' }, esc(W('btn')));
+      x.addEventListener('click', function () { woForm(null, null, { name: x.getAttribute('data-woparty'), side: side }); });
       b.insertAdjacentElement('afterend', x);
     });
   }
