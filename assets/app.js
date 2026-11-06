@@ -114,13 +114,17 @@
   function load() {
     return Promise.all(['biz', 'party', 'item', 'doc'].map(function (s) { return NSStore.list(s); }).concat([NSStore.meta('settings'), NSStore.meta('groups')])).then(function (r) {
       C = { biz: r[0], party: r[1], item: r[2], doc: r[3] }; CFG = r[4] || {}; GRP = r[5] || {};
-      if (window.NSStock && NSStock.valuation) NSStock.valuation(CFG.stockValue);   /* FIFO or weighted average, My data › Settings */
-      var want; try { want = localStorage.getItem('ns-app-biz'); } catch (e) {}
-      BIZ = C.biz.filter(function (b) { return b.id === want; })[0] || C.biz.filter(function (b) { return b.id === CFG.defBiz; })[0] || C.biz[0] || null;
+      NS.bizCache = C.biz;
+      if (NS.cfgSplit(CFG, C.biz)) NSStore.meta('settings', CFG).catch(function () {});   /* settings per business: one-time copy */
+      var RAW = CFG;
+      var want = NS.curBiz();   /* this tab's business (another tab switching business never moves it) */
+      BIZ = C.biz.filter(function (b) { return b.id === want; })[0] || C.biz.filter(function (b) { return b.id === CFG.defBiz; })[0] || C.biz[0] || null; if (BIZ && BIZ.id && BIZ.id !== want) try { sessionStorage.setItem('ns-app-biz', BIZ.id); } catch (e) {}
       if (!BIZ) {   /* no business master yet: use the seller name of the newest bill */
         var d = C.doc.slice().sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); }).filter(function (d) { return d.seller && d.seller.name; })[0];
         if (d) BIZ = Object.assign({ id: '', name: d.seller.name }, d.seller);
       }
+      CFG = NS.cfgFor(RAW, BIZ, C.biz);   /* the settings of this tab's business */
+      if (window.NSStock && NSStock.valuation) NSStock.valuation(CFG.stockValue);   /* FIFO or weighted average, My data › Settings */
     });
   }
   function bizName() { return BIZ ? BIZ.name : ''; }
@@ -330,7 +334,7 @@
       '<div class="tools-row">' + grpSel() + '</div>' +
       (list.length ? '<ul class="rows">' + list.map(function (p) {
         var g = gmap[gidOf(p.key, P)];
-        return '<li><a href="#st/' + encodeURIComponent(p.key) + '"><b>' + esc(p.name) + '</b><span class="soft">' + (g ? esc(gname(g)) + ' · ' : '') + esc(p.bal > 0.004 ? T('theyowe', { p: '', a: '' }).trim() : p.bal < -0.004 ? T('weowe', { p: '', a: '' }).replace(/\s+/g, ' ').trim() : T('settled', { p: '' }).trim()) + '</span></a>' +
+        return '<li><a href="#st/' + encodeURIComponent(p.key) + '"><b>' + esc(p.name) + '</b><span class="soft">' + (g ? esc(gname(g)) + ' · ' : '') + esc(NS.t(p.bal > 0.004 ? 'ux.p.recv' : p.bal < -0.004 ? 'ux.p.pay' : 'ux.p.nil')) + '</span></a>' +
           '<b class="amt' + (p.bal < 0 ? ' neg' : '') + '">' + money(Math.abs(p.bal)) + (p.bal > 0.004 ? ' ' + T('dr') : p.bal < -0.004 ? ' ' + T('cr') : '') + '</b></li>'; }).join('') + '</ul>' : '<p class="soft">' + esc(T('none')) + '</p>');
   }
 
@@ -374,7 +378,7 @@
   /* ---------- events ---------- */
   function wire(pane) {
     var bs = $('[data-biz]', pane);
-    if (bs) bs.addEventListener('change', function () { try { localStorage.setItem('ns-app-biz', bs.value); } catch (e) {} show(); });
+    if (bs) bs.addEventListener('change', function () { NS.setCurBiz(bs.value); show(); });
     var nd = $('[data-newdoc]', pane);
     if (nd) nd.addEventListener('change', function () { var v = nd.value; nd.value = ''; if (v && !openUrl(toolUrl(v))) location.href = toolUrl(v); });
     var qi = $('[data-q]', pane);
@@ -463,7 +467,7 @@
     o = o || {};
     if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); }
     var rec = o.rec || null, today = NS.today(), h = '';
-    F = { kind: kind, rec: rec, forId: o.forId };
+    F = { kind: kind, rec: rec, forId: o.forId, biz: bizName() };
     var forDoc = o.forId && C.doc.filter(function (d) { return d.id === o.forId; })[0];
     var party = rec ? B.partyName(rec) : o.party || (forDoc ? B.partyName(forDoc) : '');
     if (kind === 'min' || kind === 'mout') {
@@ -525,7 +529,7 @@
         fld('f-amt', T('amount'), inp('f-amt', ob.amount || '', { mode: 'decimal', ltr: 1, req: 1 })) +
         fld('f-date', T('date'), inp('f-date', ob.date, { type: 'date', req: 1 })) + '</div>';
     }
-    $('[data-form-title]', dlg).textContent = T(kind) + (rec && rec.no ? ' ' + rec.no : '');
+    $('[data-form-title]', dlg).textContent = T(kind) + (rec && rec.no ? ' ' + rec.no : '') + (C.biz.length > 1 && bizName() ? ' · ' + bizName() : '');   /* two businesses: the form names the one it saves to */
     form.innerHTML = h + '<div class="dlg-foot"><button type="submit" class="btn primary">' + esc(T('save')) + '</button><button type="button" class="btn" data-close>' + esc(T('cancel')) + '</button></div>';
     $('[data-close]', form).addEventListener('click', function () { dlg.close(); });
     var al = $('[data-addline]', form);
@@ -654,6 +658,7 @@
   }
 
   function submit() {
+    if (F.biz !== bizName()) { NS.toast(NS.t('ux.bizmoved', { b: bizName() }), 'bad'); dlg.close(); show(); return; }   /* never save under a business the form did not show */
     var k = F.kind, miss = $$('[required]', form).filter(function (i) { return !String(i.value).trim(); });
     if (miss.length) { NS.toast(T('need', { f: miss.map(function (i) { return $('label[for="' + i.id + '"]', form).textContent; }).join(', ') }), 'bad'); miss[0].focus(); return; }
     var lock = window.NSApp.closedMsg && $('#f-date', form) && (NSApp.closedMsg($('#f-date', form).value) || F.rec && NSApp.closedMsg(F.rec.date));   /* closed financial year (more.js) */

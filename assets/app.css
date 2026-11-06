@@ -175,6 +175,16 @@ body *{visibility:hidden}
 .app-frame.on{opacity:1}
 @media (prefers-reduced-motion:reduce){.app-frame{transition:none}}
 html.app-frame-on .sample-note,html.app-frame-on .sponsor-slot{display:none!important}
+/* a document open in the App (user test 2026-11-06): no Report it bar under it (it sat half behind the status bar on computers),
+   the Back row stays in sight; phones: the maker's own bottom bar is the only bar (the App's tab bar steps aside, Back returns),
+   no footer under the frame, so the page itself does not scroll and the document is the one scroll area */
+html.app-frame-on .tell{display:none!important}
+html.app-frame-on .fr-hd{position:sticky;top:var(--hd-h,0px);z-index:6;background:var(--bg);margin-bottom:0;padding-block:6px}
+@media (max-width:860px){
+  html.app-frame-on .tabbar,html.app-frame-on .ft{display:none!important}
+  html.app-frame-on body{padding-bottom:0!important}
+  html.app-frame-on #main{padding-bottom:0}
+}
 html.app-in .hero,html.app-in .app-about{display:none}
 html.app-in .hub{margin-top:18px}
 @media print{html.app-frame-on .hd,html.app-frame-on .hub-nav,html.app-frame-on .fr-hd,html.app-frame-on .ft{display:none!important}}
