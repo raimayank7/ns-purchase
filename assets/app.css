@@ -170,6 +170,7 @@ body *{visibility:hidden}
 .fr-hd h2{flex:1 1 auto;min-width:0;margin:0;font-size:clamp(1.05rem,3.6vw,1.3rem);overflow-wrap:anywhere}
 .fr-back{flex:none}
 .fr-box{position:relative}
+.fr-shelf .fr-box:not(.cur){display:none}   /* makers kept ready in the background (app.js shelfEl) */
 .fr-wait{position:absolute;inset:0 0 auto;display:grid;gap:12px;pointer-events:none}
 .fr-wait .shim{height:64px;border-radius:var(--r)}
 .fr-box:has(>.app-frame.on)>.fr-wait{display:none}
@@ -361,12 +362,45 @@ html.app-frame-on #ns-remind{display:none!important}
 @media (min-width:961px){.tiles:has(>:nth-child(6):last-child){grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (min-width:1500px){.tiles:has(>:nth-child(6):last-child){grid-template-columns:repeat(6,minmax(0,1fr))}}
 /* round C (D1-22): My data on a 1366 laptop is not three columns (site menu + section menu + content): its section menu
-   becomes a row of tabs above the content up to 1500 px */
+   becomes a row of tabs above the content up to 1500 px. Inside the App (html.embed) the site menu is not in the page,
+   so the section menu stays a column on the left (owner, 2026-11-06) */
 @media (min-width:861px) and (max-width:1500px){
-  html:not(.has-hub) .hub{grid-template-columns:minmax(0,1fr);gap:12px}
-  html:not(.has-hub) .hub-nav{position:sticky;top:var(--hd-h,60px);z-index:5;flex-direction:row;overflow-x:auto;scrollbar-width:none;border-radius:12px}
-  html.embed:not(.has-hub) .hub-nav{top:0}
-  html:not(.has-hub) .hub-nav a{white-space:nowrap;flex:none;padding:8px 12px}
-  html:not(.has-hub) .hub-nav a.sub{padding:8px 12px;min-height:40px}
+  html:not(.has-hub):not(.embed) .hub{grid-template-columns:minmax(0,1fr);gap:12px}
+  html:not(.has-hub):not(.embed) .hub-nav{position:sticky;top:var(--hd-h,60px);z-index:5;flex-direction:row;overflow-x:auto;scrollbar-width:none;border-radius:12px}
+  html:not(.has-hub):not(.embed) .hub-nav a{white-space:nowrap;flex:none;padding:8px 12px}
+  html:not(.has-hub):not(.embed) .hub-nav a.sub{padding:8px 12px;min-height:40px}
+  html.embed:not(.has-hub) .hub{grid-template-columns:220px minmax(0,1fr);gap:18px}
 }
+@media (min-width:861px){html.embed:not(.has-hub) .hub-nav{top:12px;max-height:calc(100vh - 24px);overflow-y:auto}}
 [id^=set-]{scroll-margin-top:calc(var(--hd-h,64px) + 72px)}   /* a Settings card reached by a link is not under the sticky header and tabs (round C) */
+/* My data: the sections are one dropdown above the screen on every screen size (owner, 2026-11-06); vault/my.js secPick() */
+.hub.picked{display:block}
+.hub.picked>.hub-nav{display:none}
+.hub-pick{position:sticky;top:var(--hd-h,60px);z-index:5;background:var(--bg);padding:6px 0 10px}
+html.embed .hub-pick{top:0}
+.hub-pick select{width:100%;max-width:420px;min-height:46px;font-weight:600;font-size:1rem}
+/* the installed App (desk.js html.installed) opens like software: no website heading and introduction above the screens,
+   no language menu in the top bar (it is in Settings: App › Additional features and My data › Settings) (owner, 2026-11-06) */
+html.installed:has(#app:not([data-secs])) :is(.hero,.app-about){display:none}   /* the full App only: door sites (#app data-secs) keep theirs */
+html.installed:has(#app:not([data-secs])) .hd [data-lang-pick]{display:none}
+html.installed:has(#app:not([data-secs])) .hub{margin-top:14px}
+.nsf-lang{display:grid;gap:6px;max-width:420px}.nsf-lang select{min-height:44px}
+/* phones (owner, 2026-11-06): list tables as cards (app.js cardTables gives every cell its column name) and the screen's main
+   buttons in a bar just above the bottom tabs, always in reach of the thumb */
+@media (max-width:620px){
+  .tbl-cards thead{display:none}
+  .tbl-cards,.tbl-cards tbody,.tbl-cards tfoot{display:block;width:100%}
+  .tbl-cards tr{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 14px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+  .tbl-cards tfoot tr{background:var(--surface2)}
+  .tbl-cards :is(td,th){display:flex;flex-direction:column;align-items:flex-start;gap:1px;border:0;padding:0;text-align:start;white-space:normal}
+  .tbl-cards :is(td,th)[data-l]::before{content:attr(data-l);font:500 .76rem var(--font);color:var(--soft)}
+  .tbl-cards :is(td,th):empty{display:none}
+  .tbl-cards :is(td,th):first-child{grid-column:1/-1;font-weight:600}
+  .tbl-cards td.acts{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;gap:8px}.tbl-cards td.acts::before{display:none}
+  .tbl-wrap:has(>.tbl-cards){overflow:visible;background:none}
+  html.ready.has-hub #main>#app{animation-name:ns-fade}   /* a slide-up (transform) would hold the fixed button bar inside the screen */
+  html.has-hub:not(.app-frame-on) .hub-main>.pane-hd>:is(.quick,a.btn.primary){position:fixed;inset-inline:0;bottom:calc(66px + env(safe-area-inset-bottom,0px));z-index:34;display:flex;flex-wrap:nowrap;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0;padding:8px 12px;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -4px 12px rgb(0 0 0 / .08)}
+  html.has-hub:not(.app-frame-on) .hub-main>.pane-hd>a.btn.primary{inset-inline:12px;justify-content:center;border-radius:12px;padding:12px;bottom:calc(74px + env(safe-area-inset-bottom,0px))}
+  html.has-hub:not(.app-frame-on) .hub-main>.pane-hd>.quick .btn{flex:none;min-height:44px}
+  html.has-hub:not(.app-frame-on):has(.hub-main>.pane-hd>:is(.quick,a.btn.primary)) body{padding-bottom:calc(128px + env(safe-area-inset-bottom,0px))}
+}

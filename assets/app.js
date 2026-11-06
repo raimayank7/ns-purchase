@@ -72,33 +72,55 @@
     var h = j ? 'do/' + site + '/?open=' + encodeURIComponent(j.id) : /[?&]from=/.test(arg) ? 'do/' + site + '/' : '';
     if (!h || h === 'do/' + arg) return;
     history.replaceState(null, '', '#' + h); arg = h.slice(3); trail[trail.length - 1] = h;
-    var fr = $('iframe.app-frame'); if (fr) fr.setAttribute('data-url', '/' + h);
+    var box = curBox(); if (box) box.setAttribute('data-url', '/' + h);
     var h2 = $('.fr-hd h2'); if (h2 && j && j.doc) h2.textContent = docName(j.doc) + (j.doc.no ? ' ' + j.doc.no : '');
   }
   /* the frame fills the screen below the title row (above the phone tab bar and the status bar), so the document scrolls inside it */
   function sizeFrame() {
-    var fr = $('iframe.app-frame'); if (!fr) return;
+    var box = curBox(), fr = box && $('iframe.app-frame', box); if (!fr) return;
     var bottom = 0;
     $$('.tabbar, .sbar').forEach(function (b) { var r = b.getBoundingClientRect(), cs = getComputedStyle(b); if (r.height && cs.display !== 'none' && cs.position === 'fixed' && r.top > innerHeight / 2) bottom = Math.max(bottom, innerHeight - r.top); });
     var top = fr.getBoundingClientRect().top + scrollY;
     fr.style.height = Math.max(380, innerHeight - top - bottom - 6) + 'px';
   }
+  /* makers opened in the App stay ready in the background (up to KEEP, the least used one goes first): going back to one
+     shows it at once, as it was left, instead of loading the page again. They sit on a shelf next to the screen, never inside it,
+     because moving an iframe in the page reloads it; a hidden one keeps its place and its typing (owner, 2026-11-06) */
+  var KEEP = 4, shelf = null;
+  function shelfEl() {
+    if (shelf && shelf.isConnected) return shelf;
+    var pane = $('[data-pane]'); if (!pane) return null;
+    shelf = document.createElement('div'); shelf.className = 'fr-shelf'; shelf.hidden = true;
+    pane.parentNode.insertBefore(shelf, pane.nextSibling);
+    return shelf;
+  }
+  function curBox() { return shelf && $('.fr-box.cur', shelf); }
+  function shelve() { if (shelf) { shelf.hidden = true; var b = curBox(); if (b) b.classList.remove('cur'); } }
   function frame(a) {
     var site = a.split(/[\/?#]/)[0], rest = a.slice(site.length) || '/';
     var how = (INAPP[site] || [])[2] || (site === 'my' ? 'twin' : 'frame'), path = rest.replace(/[?#].*$/, '');
     var url = how === 'twin' && path === '/' ? '/do/' + site + rest : siteHome(site).replace(/\/$/, '') + rest;
     if (how === 'twin' && site !== 'my' && rest === '/') url += '?new=1';   /* "New ...": a fresh document, not the one last opened */
     var title = frameTitle(site, rest);
-    var pane = $('[data-pane]'), fr = $('iframe.app-frame', pane);
+    var pane = $('[data-pane]'), sh = shelfEl(), box = curBox();
     document.documentElement.classList.add('app-in', 'app-frame-on');
-    if (fr && fr.getAttribute('data-url') === url) return;
+    if (box && box.getAttribute('data-url') === url && !sh.hidden) return;
     /* the App's own title row (Back + what is open), then the document: no second website, no new tab */
-    pane.innerHTML = '<div class="pane-hd fr-hd"><button type="button" class="btn sm fr-back" data-fback>' + esc(T('back')) + '</button><h2>' + esc(title) + '</h2></div>' +
-      '<div class="fr-box"><div class="fr-wait" aria-hidden="true"><div class="shim"></div><div class="shim"></div><div class="shim"></div></div>' +
-      '<iframe class="app-frame" data-url="' + esc(url) + '" src="' + esc(url) + '" title="' + esc(title) + '" allow="web-share; clipboard-write"></iframe></div>';
-    fr = $('iframe.app-frame', pane);
-    fr.addEventListener('load', function () { fr.classList.add('on'); sizeFrame(); });
+    pane.innerHTML = '<div class="pane-hd fr-hd"><button type="button" class="btn sm fr-back" data-fback>' + esc(T('back')) + '</button><h2>' + esc(title) + '</h2></div>';
     $('[data-fback]', pane).addEventListener('click', function () { if (trail.length > 1) history.back(); else go(backTo || 'home'); });
+    var boxes = $$('.fr-box', sh);
+    boxes.forEach(function (b) { b.classList.remove('cur'); });
+    box = boxes.filter(function (b) { return b.getAttribute('data-url') === url; })[0];
+    if (!box) {
+      if (boxes.length >= KEEP) boxes.sort(function (x, y) { return +x.getAttribute('data-used') - +y.getAttribute('data-used'); })[0].remove();
+      box = document.createElement('div'); box.className = 'fr-box'; box.setAttribute('data-url', url);
+      box.innerHTML = '<div class="fr-wait" aria-hidden="true"><div class="shim"></div><div class="shim"></div><div class="shim"></div></div>' +
+        '<iframe class="app-frame" src="' + esc(url) + '" title="' + esc(title) + '" allow="web-share; clipboard-write"></iframe>';
+      sh.appendChild(box);
+      var fr = $('iframe.app-frame', box);
+      fr.addEventListener('load', function () { fr.classList.add('on'); sizeFrame(); });
+    } else $('iframe.app-frame', box).title = title;
+    box.classList.add('cur'); box.setAttribute('data-used', String(Date.now())); sh.hidden = false;
     sizeFrame(); requestAnimationFrame(sizeFrame);
     var h2 = $('h2', pane); h2.tabIndex = -1; h2.focus({ preventScroll: true });
   }
@@ -166,7 +188,7 @@
     cur = p[0] === 'do' && !DOOR ? 'do' : SECS.indexOf(p[0]) >= 0 || EXT[p[0]] ? p[0] : 'home'; arg = p.slice(1).join('/');
     /* one cash screen: where the cash, bank and day book screen (money.js) is on hand, #cash and #cash/bank open it */
     if (cur === 'cash' && EXT.books && (!DOOR || DOOR.indexOf('books') >= 0)) { cur = 'books'; arg = arg === 'bank' ? 'bank' : 'cash'; }
-    if (cur !== 'do') { backTo = h; document.documentElement.classList.remove('app-frame-on'); }
+    if (cur !== 'do') { backTo = h; document.documentElement.classList.remove('app-frame-on'); shelve(); }
     if (DOOR && DOOR.indexOf(cur) < 0 && cur !== 'st') { cur = DOOR[0]; arg = ''; }
     show(true);
   }
@@ -821,6 +843,18 @@
     whatsapp: whatsapp, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
     door: function () { return DOOR; }
   };
+  function cardTables(root) {
+    $$('table.tbl:not(.tbl-cards):not(.dues-t)', root).forEach(function (tb) {
+      if (tb.closest('.stsheet')) return;
+      var hd = $$('thead th', tb).map(function (th) { return th.textContent.trim(); });
+      if (!hd.length) return;
+      tb.classList.add('tbl-cards');
+      $$('tbody tr, tfoot tr', tb).forEach(function (tr) {
+        var i = 0;
+        Array.prototype.forEach.call(tr.cells, function (c) { if (!c.hasAttribute('data-l') && hd[i]) c.setAttribute('data-l', hd[i]); i += c.colSpan || 1; });
+      });
+    });
+  }
   function init() {
     if (!$('#app')) return;
     var ds = $('#app').getAttribute('data-secs'); if (ds) DOOR = ds.split(/\s+/);
@@ -831,6 +865,10 @@
       var b = $('[data-fback]'), h2 = $('.fr-hd h2'), st = arg.split(/[\/?#]/)[0]; if (b) b.textContent = T('back'); if (h2) h2.textContent = frameTitle(st, arg.slice(st.length) || '/');
     });
     window.addEventListener('resize', sizeFrame);
+    /* phones: every list table of a screen reads as cards (each value with its column name), like the dues (owner, 2026-11-06);
+       printable sheets (.stsheet) and the dues table keep their own layout */
+    var pn = $('[data-pane]');
+    if (pn) new MutationObserver(function () { cardTables(pn); }).observe(pn, { childList: true, subtree: true });
     /* links to a document maker or My data open inside the app (new-tab and modified clicks are left alone) */
     document.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('a[href]');
