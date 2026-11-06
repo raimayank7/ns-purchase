@@ -217,7 +217,7 @@
   var bk = 'cash';
   var ACC = { sales: 'Sales', 'sales-return': 'Sales returns', purchases: 'Purchases', 'purchase-return': 'Purchase returns', cash: 'Cash', bank: 'Bank', 'chq-in': 'Cheques received (not cleared)', 'chq-out': 'Cheques issued (not cleared)',
     'gst-out-cgst': 'Output CGST', 'gst-out-sgst': 'Output SGST', 'gst-out-utgst': 'Output UTGST', 'gst-out-igst': 'Output IGST', 'gst-in-cgst': 'Input CGST', 'gst-in-sgst': 'Input SGST', 'gst-in-igst': 'Input IGST',
-    'gst-rcm-payable': 'GST payable (reverse charge)', 'tds-receivable': 'TDS receivable', 'tds-payable': 'TDS payable', 'round-off': 'Round off', opening: 'Opening balances', 'p:cash-customer': 'Cash customer', 'p:unknown': 'Creditors (unnamed)' };
+    'gst-rcm-payable': 'GST payable (reverse charge)', 'gst-adv': 'GST paid on advances', 'tds-receivable': 'TDS receivable', 'tds-payable': 'TDS payable', 'round-off': 'Round off', opening: 'Opening balances', 'p:cash-customer': 'Cash customer', 'p:unknown': 'Creditors (unnamed)' };
   function accName(a, d) {
     if (ACC[a]) return ACC[a];
     if (a.indexOf('p:') === 0) return B.partyName(d) || a.slice(2);
@@ -227,6 +227,7 @@
   function particulars(d) {
     if (d.type === 'contra') return d.from === 'bank' ? 'Cash withdrawn from bank' : 'Cash deposited in bank';
     if (d.type === 'ob' && (d.side === 'cash' || d.side === 'bank')) return d.side === 'bank' ? 'Opening bank balance' : 'Opening cash in hand';
+    if (d.type === 'advadj') return A.enName(d) + ' ' + d.rv + (d.bill ? ' > ' + d.bill : '') + (d.pname ? ' · ' + d.pname : '');   /* GST of an advance used by a bill or refund (round C) */
     var p = B.partyName(d); return A.enName(d) + (d.no ? ' ' + d.no : '') + (p ? ' · ' + p : d.cat ? ' · ' + d.cat : '');
   }
   var bkArg = '';
