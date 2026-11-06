@@ -1,0 +1,15 @@
+/* Accounts coverage (heads.js, acctx.js, hubheads.js): heads card in My data, head hints on the expense form, other income and tax forms */
+.hd-grp{border:1px solid var(--line);border-radius:var(--r,10px);padding:8px 12px;margin:0 0 10px;background:var(--surface)}
+.hd-grp summary{cursor:pointer;min-height:36px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.hd-t th,.hd-t td{font-size:.88rem}
+.hd-own{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) 40px;gap:8px;align-items:end;margin:0 0 8px}
+.hd-own input,.hd-own select{width:100%;box-sizing:border-box}
+@media (max-width:520px){.hd-own{grid-template-columns:minmax(0,1fr) 40px}.hd-own .lc:first-child{grid-column:1/-1}}
+.hd-help p{margin:0}
+.hd-help p.bad{color:var(--bad,#b42318);font-weight:600}
+.hd-new{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:.9rem}
+.acx-tax{display:grid;grid-template-columns:minmax(0,1.2fr) repeat(var(--n,4),minmax(0,1fr));gap:6px;align-items:center}
+.acx-tax input{width:100%;box-sizing:border-box;text-align:right}
+.acx-tax .h{font-size:.78rem;font-weight:600;color:var(--soft)}
+@media (max-width:620px){.acx-tax{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.acx-tax .h.c{display:none}.acx-tax .rl{grid-column:1/-1;font-weight:600;margin-top:6px}}
+.acx-sum{font-weight:600;margin:8px 0 0}

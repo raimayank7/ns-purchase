@@ -69,6 +69,7 @@ html.no-sponsor .sponsor-slot{display:none!important}
 .hub{grid-template-columns:1fr;gap:12px}
 .hub-nav{position:sticky;top:60px;z-index:5;flex-direction:row;overflow-x:auto;scrollbar-width:none;border-radius:12px}
 .hub-nav::-webkit-scrollbar{display:none}
+html.embed .hub-nav{top:0}   /* inside the App the site header is hidden: tabs stick to the very top, never over the section's own buttons */
 .hub-nav a{white-space:nowrap;flex:none;padding:8px 12px}
 .hub-nav a.sub{padding:8px 12px;min-height:40px}
 .hub-nav .n:empty{display:none}
@@ -98,7 +99,7 @@ html.no-sponsor .sponsor-slot{display:none!important}
 .seg [aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .tbl-wrap{overflow-x:auto;margin:10px 0;-webkit-overflow-scrolling:touch}
 .tbl{border-collapse:collapse;width:100%;font-size:.92rem;background:var(--surface)}
-.tbl th,.tbl td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+.tbl th,.tbl td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:start;vertical-align:top}
 .tbl thead th{background:var(--surface2);font-size:.84rem}
 .tbl .n{text-align:right;font-family:var(--mono);white-space:nowrap}
 .tbl td.acts{display:table-cell;white-space:nowrap}
@@ -162,6 +163,7 @@ body *{visibility:hidden}
 /* the shell: document makers and My data open in a frame inside the app */
 .bizbar .grow{flex:1 1 auto}
 .bizbar .newdoc{width:auto;max-width:100%;font-weight:600}
+.bizbar .bzsel{display:inline-flex;align-items:center;gap:8px;min-width:0}
 /* every document opens on an App screen: the App's title row (Back + what is open), then the maker's own copy on the App's
    address (/do/<site>/) in a borderless frame that app.js sizes to the rest of the screen; a soft shimmer until it is in */
 .fr-hd{margin-bottom:8px;gap:10px;flex-wrap:nowrap}
@@ -233,7 +235,8 @@ dialog.qk{width:min(640px,calc(100vw - 24px));margin-top:10vh;padding:0;overflow
 .my-list li>a,.my-list li{align-items:center}
 .amt{font-variant-numeric:tabular-nums;white-space:nowrap}
 @media (max-width:620px){
-  .bizbar{flex-wrap:nowrap;gap:8px}.bizbar .grow{display:none}.bizbar .newdoc{flex:1 1 auto;min-width:0}.bizbar>.btn{flex:none;max-width:48%;white-space:normal;line-height:1.15;text-align:center}
+  .bizbar{flex-wrap:wrap;gap:8px}.bizbar .grow{display:none}
+  .bizbar .bzsel{flex:1 1 100%;display:flex;align-items:center;gap:8px;min-width:0}.bizbar .bzsel select{flex:1 1 auto;min-width:0;width:100%}.bizbar .newdoc{flex:1 1 auto;min-width:0}.bizbar>.btn{flex:none;max-width:48%;white-space:normal;line-height:1.15;text-align:center}
   .hub-main .tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .hub-main .tile{min-height:74px;padding:10px 12px}
   .hub-main .tile b{font-size:clamp(.9rem,12cqi,1.3rem)}
@@ -320,3 +323,50 @@ dialog.qk{width:min(640px,calc(100vw - 24px));margin-top:10vh;padding:0;overflow
 .fm-prow input{width:100%;min-width:0}
 .fm-biz h4{margin:12px 0 4px}
 @media (max-width:620px){.fm-prow{grid-template-columns:repeat(2,minmax(0,1fr));padding-bottom:8px;border-bottom:1px solid var(--line)}.fm-prow label:first-child{grid-column:1/-1}}
+/* round C (C-07): dues as one card per party below 1500 px: name, amounts with their labels, then WhatsApp + Record payment;
+   no sideways scrolling on phones or on 1366 laptops (also at 125-150 % zoom) */
+@media (max-width:1500px){
+  .dues-t thead{display:none}
+  .dues-t,.dues-t tbody{display:block;width:100%}
+  .dues-t tr{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px 14px;padding:12px 4px;border-bottom:1px solid var(--line)}
+  .dues-t th[scope=row]{grid-column:1/-1;text-align:start;padding:0;border:0;font-size:1rem;white-space:normal}
+  .dues-t td{display:flex;flex-direction:column;align-items:flex-start;gap:1px;border:0;padding:0;text-align:start}
+  .dues-t td::before{content:attr(data-l);font:500 .76rem var(--font);color:var(--soft);white-space:normal}
+  .dues-t td.nil{display:none}
+  .dues-t td.acts{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:4px}
+  .dues-t td.acts::before{display:none}
+  .dues-t td.acts .btn{min-height:40px}
+}
+/* round C: one backup reminder, the App's own; none above a document open inside the App */
+html.app-frame-on #ns-remind{display:none!important}
+/* round C (D1-08): a document open inside the App on a computer is the only scroll area: the frame fills the window under
+   the header and its Back row, the page footer steps aside */
+@media (min-width:961px){
+  html.app-frame-on .ft{display:none!important}
+  html.app-frame-on .app-frame{height:calc(100dvh - var(--hd-h,64px) - var(--sbh,30px) - 78px)}
+}
+/* round C (m-36): small phones see figures sooner. Form footer: Save and Cancel share a row, "Save and add another" is a
+   slim link-style button under them; New document and Settings share a row; the sample note is one slim line */
+@media (max-width:520px){
+  .hub-dlg .dlg-foot{padding:8px 0 10px}
+  .hub-dlg .dlg-foot>.btn{flex:1 1 40%}
+  .hub-dlg .dlg-foot>[data-again]{order:3;flex:1 1 100%;min-height:36px;border:0;background:none;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+  .bizbar .newdoc{flex:1 1 0;min-width:0}
+  .sample-note{font-size:.84rem;padding:6px 8px;gap:6px}
+  .sample-note .btn{min-height:36px;padding:4px 10px}
+  .pane-hd{margin-bottom:8px}
+  .pane-hd h2{font-size:1.15rem}
+}
+/* round C (t-18): six money tiles show as 3 + 3 on laptops (not 5 + 1), 6 across on wide screens */
+@media (min-width:961px){.tiles:has(>:nth-child(6):last-child){grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1500px){.tiles:has(>:nth-child(6):last-child){grid-template-columns:repeat(6,minmax(0,1fr))}}
+/* round C (D1-22): My data on a 1366 laptop is not three columns (site menu + section menu + content): its section menu
+   becomes a row of tabs above the content up to 1500 px */
+@media (min-width:861px) and (max-width:1500px){
+  html:not(.has-hub) .hub{grid-template-columns:minmax(0,1fr);gap:12px}
+  html:not(.has-hub) .hub-nav{position:sticky;top:var(--hd-h,60px);z-index:5;flex-direction:row;overflow-x:auto;scrollbar-width:none;border-radius:12px}
+  html.embed:not(.has-hub) .hub-nav{top:0}
+  html:not(.has-hub) .hub-nav a{white-space:nowrap;flex:none;padding:8px 12px}
+  html:not(.has-hub) .hub-nav a.sub{padding:8px 12px;min-height:40px}
+}
+[id^=set-]{scroll-margin-top:calc(var(--hd-h,64px) + 72px)}   /* a Settings card reached by a link is not under the sticky header and tabs (round C) */

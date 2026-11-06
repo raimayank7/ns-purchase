@@ -116,7 +116,7 @@
     var W = B.billwise(A.mine(), A.bizName(), k, r[1]), sides = ['recv', 'pay'].filter(function (s) { return W.bills.some(function (b) { return b.side === s; }); });
     var tbl = function (s) {
       var L = W.bills.filter(function (b) { return b.side === s; });
-      return '<h4 class="lg-h">' + (s === 'recv' ? 'Bills to receive' : 'Bills to pay') + '</h4><table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Bill</th><th class="n">Amount</th><th>Settled by</th><th class="n">Still due</th><th class="n">Days</th></tr></thead><tbody>' +
+      return '<h4 class="lg-h">' + (s === 'recv' ? 'Bills to receive' : 'Bills to pay') + '</h4><table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Bill</th><th class="n">Amount</th><th>Settled by</th><th class="n">Still due</th><th class="n">Days since bill</th></tr></thead><tbody>' +
         L.map(function (b) {
           return '<tr><td>' + A.ldate(b.date) + '</td><td>' + esc(A.enName(b)) + ' ' + esc(b.no) + (b.due ? '<br><span class="soft">Due ' + A.ldate(b.due) + '</span>' : '') + '</td><td class="n">' + money(b.total, false) + '</td>' +
             '<td class="lg-by">' + (b.by.length ? b.by.map(function (x) { return esc(x.type === 'paid' ? 'Paid on the bill' : A.enName(x) + ' ' + (x.no || '')) + (x.adv ? ' (advance)' : '') + ' <span class="soft">' + A.ldate(x.date) + '</span> ' + money(x.amt, false); }).join('<br>') : '—') + '</td>' +

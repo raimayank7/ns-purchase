@@ -22,7 +22,8 @@
   /* the shell: document makers and My data open inside the app (a frame next to the menu), not as another website.
      #do/<site><path?query#hash> shows <site> in the frame; Back returns to the screen it was opened from. */
   var NEWDOCS = [['billing', 'invoice'], ['quotation', 'quote'], ['proforma', 'proforma'], ['sales-order', 'so'], ['challan', 'challan'], ['purchase-order', 'po'], ['credit-note', 'note', 'k.credit'], ['debit-note', 'note', 'k.debit'],
-    ['cash-memo', 'cashmemo'], ['receipt', 'receipt'], ['voucher', 'voucher'], ['self-invoice', 'self'], ['rent-receipt', 'rent'], ['salary-slip', 'salary'], ['petty-cash', 'petty']];
+    ['cash-memo', 'cashmemo'], ['receipt', 'receipt'], ['voucher', 'voucher'], ['self-invoice', 'self'], ['rent-receipt', 'rent'], ['salary-slip', 'salary'], ['petty-cash', 'petty'],
+    ['pos', 'pos', 'nav.pos'], ['pharmacy', 'pharma', 'nav.pharmacy'], ['restaurant', 'resto', 'nav.restaurant'], ['bilty', 'lr', 'nav.bilty'], ['job-card', 'job', 'Doc.job'], ['contractor-bill', 'rabill', 'nav.contractorbill'], ['fee-receipt', 'fee', 'Doc.fee']];
   /* every Nivesh Sahayak site the App knows (build.py INAPP_MAP): [host, local port, how it opens, name key].
      'twin' = the App's own copy of the maker (or My data) at /do/<site>/, same engine and data home, shown on an App screen;
      '#<section>' = a door site whose screens the App has itself; 'frame' = any other site, only its content, in the App's frame */
@@ -138,9 +139,16 @@
     if (ty === 'voucher') return T(d.forBill ? 'd_voucher' : 'd_vexp');
     if (ty === 'pbill') return T(d.kind === 'return' ? 'd_pret' : 'd_pbill');
     if (ty === 'contra') return T(d.from === 'bank' ? 'd_withdraw' : 'd_deposit');
-    return T('d_' + ty);
+    /* shop and trade kits and slips have no app.d_ name: use the maker's own name (never a raw key) */
+    var k = 'app.d_' + ty, v = NS.t(k);
+    return v !== k ? v : NS.t(KITNAME[ty] || 'Doc.' + ty);
   }
+  var KITNAME = { pos: 'nav.pos', pharma: 'nav.pharmacy', resto: 'nav.restaurant', lr: 'nav.bilty', rabill: 'nav.contractorbill' };
   function ldate(iso) { return NS.fmtDate(iso); }
+  /* expense heads: a head picked from the list is saved as its code (rent) or English name, never as the words of the screen
+     language, so one head is one ledger whatever language it was typed in; shown in the screen language (round C) */
+  function catName(c) { if (EXP.indexOf(c) >= 0) return T('ex_' + c); var h = window.NSHeads && NSHeads.find(c); return h && !h.custom ? NSHeads.label(h) : c; }
+  function catCode(c) { var h = window.NSHeads && NSHeads.find(c); return !h || h.custom ? c : NSHeads.APPCODE[h.id] ? h.id : h.en; }
   function fyStart(iso) { return NS.fy(iso).slice(0, 4) + '-04-01'; }
   function amountOf(d) {
     var R = B.role(d);
@@ -198,7 +206,7 @@
     $$('a[href$="how-it-works/"]').forEach(function (a) { a.setAttribute('href', L === 'en' ? '/how-it-works/' : '/' + L + '/how-it-works/'); });
   }
   function noBiz() {
-    return '<div class="card"><h2>' + esc(T('nobiz')) + '</h2><p>' + esc(T('nobizp')) + '</p><p><a class="btn primary" href="' + myUrl('#biz') + '">' + esc(T('addbiz')) + '</a></p></div>' +
+    return '<div class="card"><h2>' + esc(T('nobiz')) + '</h2><p>' + esc(T('nobizp')) + '</p><p><a class="btn primary" href="' + myUrl('#biz/new') + '">' + esc(T('addbiz')) + '</a></p></div>' +
       (window.NSSample && !DOOR ? '<div class="card sample-try"><h3>' + esc(T('sm_try')) + '</h3><p>' + esc(T('sm_tryp')) + '</p><p><button type="button" class="btn" data-sample>' + esc(T('sm_try')) + '</button></p></div>' : '');
   }
   /* sample data: shown on every screen while it is there, with one tap to take it away */
@@ -208,13 +216,13 @@
   function wireSample(pane) {
     var a = $('[data-sample]', pane), r = $('[data-unsample]', pane);
     if (a) a.addEventListener('click', function () { a.disabled = true; NSSample.add().then(function () { NS.toast(T('sm_added')); go(''); show(); }, function (e) { a.disabled = false; NS.toast(NS.t('nosave', { e: e.message }), 'bad'); }); });
-    if (r) r.addEventListener('click', function () { if (!confirm(T('sm_conf'))) return; r.disabled = true; NSSample.remove().then(function () { NS.toast(T('sm_gone')); show(); }); });
+    if (r) r.addEventListener('click', function () { (NS.ask ? NS.ask(T('sm_conf')) : Promise.resolve(confirm(T('sm_conf')))).then(function (ok) { if (!ok) return; r.disabled = true; NSSample.remove().then(function () { NS.toast(T('sm_gone')); show(); }); }); });
   }
   function bizBar() {
-    var bz = C.biz.length < 2 ? '' : '<label for="app-biz">' + esc(T('biz')) + '</label><select id="app-biz" data-biz>' + C.biz.map(function (b) {
-      return '<option value="' + esc(b.id) + '"' + (BIZ && b.id === BIZ.id ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>';
+    var bz = C.biz.length < 2 ? '' : '<span class="bzsel"><label for="app-biz">' + esc(T('biz')) + '</label><select id="app-biz" data-biz>' + C.biz.map(function (b) {
+      return '<option value="' + esc(b.id) + '"' + (BIZ && b.id === BIZ.id ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select></span>';
     var nw = '<select class="newdoc" data-newdoc aria-label="' + esc(T('newdoc')) + '"><option value="">+ ' + esc(T('newdoc')) + '</option>' +
-      NEWDOCS.filter(function (n) { return TOOLS.some(function (x) { return x[0] === n[0]; }); }).map(function (n) { return '<option value="' + n[0] + '">' + esc(NS.t(n[2] || 'Doc.' + n[1])) + '</option>'; }).join('') + '</select>';
+      NEWDOCS.filter(function (n) { return TOOLS.some(function (x) { return x[0] === n[0]; }) || INAPP[n[0]]; }).map(function (n) { return '<option value="' + n[0] + '">' + esc(NS.t(n[2] || 'Doc.' + n[1])) + '</option>'; }).join('') + '</select>';
     return '<div class="bizbar">' + bz + '<span class="grow"></span>' + nw + '<a class="btn sm" href="' + myUrl() + '">' + esc(NS.t('my.title')) + '</a></div>';
   }
 
@@ -230,6 +238,8 @@
     var recent = D.filter(function (d) { return B.role(d); }).sort(function (a, b) { return (b.date || '').localeCompare(a.date || '') || (b.updated || 0) - (a.updated || 0); }).slice(0, 8);
     return '<h2>' + esc(T('home')) + ' <small class="soft">' + esc(bizName()) + '</small></h2>' +
       '<div class="tiles">' + tiles.map(function (x) { return '<a href="' + x[2] + '" class="tile' + (x[1] < 0 ? ' neg' : '') + '"><span>' + esc(T(x[0])) + '</span><b>' + money(x[1]) + '</b></a>'; }).join('') + '</div>' +
+      /* cash below zero: money went out that never came in, usually the opening cash is missing (round C) */
+      ((A.cash || 0) < -0.004 ? '<p class="note">' + esc(T('negcash')) + ' <button type="button" class="btn sm" data-form="ob">' + esc(T('ob')) + '</button></p>' : '') +
       '<div class="card"><h3>' + esc(T('quick')) + '</h3><div class="quick">' +
         '<a class="btn primary" href="' + toolUrl('billing') + '">+ ' + esc(T('newinv')) + '</a>' +
         ['min', 'mout', 'pbill', 'exp', 'ob'].map(function (f) { return '<button type="button" class="btn" data-form="' + f + '">+ ' + esc(T(f)) + '</button>'; }).join('') + '</div></div>' +
@@ -262,7 +272,7 @@
       if (CONVERT[ty] && !opts.noconv) acts.push('<select class="sm conv" data-conv="' + d.id + '" aria-label="' + esc(T('convert')) + ' ' + esc(d.no || '') + '"><option value="">' + esc(T('convert')) + '…</option>' +
         CONVERT[ty].map(function (x) { return '<option value="' + x + '">' + esc(T(x === 'invoice' ? 'makeinv' : x === 'so' ? 'makeso' : 'makedc')) + '</option>'; }).join('') + '</select>');
       if (appMade) acts.push('<button type="button" class="btn sm danger" data-del="' + d.id + '">' + esc(T('del')) + '</button>');
-      return '<li><div class="ln"><span><b>' + esc(docName(d)) + ' ' + esc(d.no || d.billNo || '') + '</b> ' + pills + '<span class="soft"> · ' + ldate(d.date) + (B.partyName(d) ? ' · ' + esc(B.partyName(d)) : d.cat ? ' · ' + esc(d.cat) : '') + '</span></span>' +
+      return '<li><div class="ln"><span><b>' + esc(docName(d)) + ' ' + esc(d.no || d.billNo || '') + '</b> ' + pills + '<span class="soft"> · <span class="nw">' + ldate(d.date) + '</span>' + (B.partyName(d) ? ' · ' + esc(B.partyName(d)) : d.cat ? ' · ' + esc(catName(d.cat)) : '') + '</span></span>' +
         '<b class="amt">' + money(amountOf(d)) + '</b></div><div class="acts">' + acts.join('') + '</div></li>';
     }).join('') + '</ul>';
   }
@@ -276,13 +286,13 @@
 
   function salesHtml() {
     var D = mine(), L = leftMap(D);
-    var list = D.filter(function (d) { return SALES[d.type || 'invoice']; }).filter(match).filter(function (d) {
+    var list = D.filter(function (d) { return SALES[d.type || 'invoice'] && !(d.type === 'note' && d.side === 'purchase'); }).filter(match).filter(function (d) {
       if (filt === 'unpaid') return L[d.id] > 0.004; if (filt === 'paid') return L[d.id] != null && L[d.id] <= 0.004; return true; }).sort(byDate);
     return '<div class="pane-hd"><h2>' + esc(T('sales')) + '</h2><a class="btn primary" href="' + toolUrl('billing') + '">+ ' + esc(T('newinv')) + '</a></div>' + searchBar(['all', 'unpaid', 'paid']) + rowsHtml(list.slice(0, 200), { left: L });
   }
   function buyHtml() {
     var D = mine(), L = leftMap(D);
-    var list = D.filter(function (d) { return /^(pbill|exp|self|po)$/.test(d.type) || d.type === 'voucher' && !d.forBill; }).filter(match).filter(function (d) {
+    var list = D.filter(function (d) { return /^(pbill|exp|self|po)$/.test(d.type) || d.type === 'voucher' && !d.forBill || d.type === 'note' && d.side === 'purchase'; }).filter(match).filter(function (d) {
       if (filt === 'unpaid') return L[d.id] > 0.004 || d.type === 'exp' && d.mode === 'credit'; if (filt === 'paid') return L[d.id] != null && L[d.id] <= 0.004; return true; }).sort(byDate);
     return '<div class="pane-hd"><h2>' + esc(T('buy')) + '</h2><div class="quick">' + ['pbill', 'exp', 'pret'].map(function (f) { return '<button type="button" class="btn' + (f === 'pbill' ? ' primary' : '') + '" data-form="' + f + '">+ ' + esc(T(f)) + '</button>'; }).join('') + '</div></div>' +
       searchBar(['all', 'unpaid', 'paid']) + rowsHtml(list.slice(0, 200), { left: L });
@@ -309,18 +319,20 @@
     var tot = [0, 0, 0, 0]; rows.forEach(function (r) { r.a.forEach(function (v, i) { tot[i] = r2(tot[i] + v); }); });
     var advs = Object.keys(R.advances).filter(function (k) { return R.advances[k][side] > 0.004; });
     return '<div class="pane-hd"><h2>' + esc(T('dues')) + '</h2><div class="seg" role="group"><a class="btn sm" href="#dues" aria-pressed="' + (side === 'recv') + '">' + esc(T('recv')) + '</a><a class="btn sm" href="#dues/pay" aria-pressed="' + (side === 'pay') + '">' + esc(T('pay')) + '</a></div></div>' +
-      '<div class="tiles">' + ['a0', 'a1', 'a2', 'a3'].map(function (x, i) { return '<div class="tile' + (i === 3 && tot[3] ? ' warn' : '') + '"><span>' + esc(T(x)) + '</span><b>' + money(tot[i]) + '</b></div>'; }).join('') + '</div>' +
+      '<div class="tiles">' + ['a0', 'a1', 'a2', 'a3'].map(function (x, i) { return '<div class="tile' + (i === 3 && tot[3] ? ' warn' : '') + '"><span>' + rng(esc(T(x))) + '</span><b>' + money(tot[i]) + '</b></div>'; }).join('') + '</div>' +
       searchBar() + '<div class="tools-row">' + grpSel() + '</div>' +
-      (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + esc(T('party')) + '</th>' + ['a0', 'a1', 'a2', 'a3'].map(function (x) { return '<th class="n">' + esc(T(x)) + '</th>'; }).join('') + '<th class="n">' + esc(T('totaldue')) + '</th><th class="n">' + esc(NS.t('b1.late')) + '</th><th></th></tr></thead><tbody>' +
+      (rows.length ? '<div class="tbl-wrap"><table class="tbl dues-t"><thead><tr><th>' + esc(T('party')) + '</th>' + ['a0', 'a1', 'a2', 'a3'].map(function (x) { return '<th class="n">' + rng(esc(T(x))) + '</th>'; }).join('') + '<th class="n">' + esc(T('totaldue')) + '</th><th class="n">' + esc(NS.t('b1.late')) + '</th><th></th></tr></thead><tbody>' +
         rows.map(function (r) {
-          return '<tr><th scope="row"><a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v) { return '<td class="n">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
-            '<td class="n"><b>' + money(r.tot, false) + '</b></td><td class="n' + (r.late ? ' b1-warn' : '') + '">' + (r.late ? money(r.late, false) : '—') + '</td><td class="acts">' + (side === 'recv' ? '<button type="button" class="btn sm wa" data-wa="' + esc(r.k) + '">' + esc(T('remind')) + '</button>' : '') +
+          return '<tr><th scope="row"><a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v, i) { return '<td class="n' + (v ? '' : ' nil') + '" data-l="' + rng(esc(T('a' + i))) + '">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
+            '<td class="n" data-l="' + esc(T('totaldue')) + '"><b>' + money(r.tot, false) + '</b></td><td class="n' + (r.late ? ' b1-warn' : ' nil') + '" data-l="' + esc(NS.t('b1.late')) + '">' + (r.late ? money(r.late, false) : '—') + '</td><td class="acts">' + (side === 'recv' ? '<button type="button" class="btn sm wa" data-wa="' + esc(r.k) + '">' + esc(T('remind')) + '</button>' : '') +
             '<button type="button" class="btn sm" data-form="' + (side === 'recv' ? 'min' : 'mout') + '" data-party="' + esc(r.name) + '">' + esc(T('recpay')) + '</button></td></tr>'; }).join('') +
         '</tbody></table></div>' : '<p class="soft">' + esc(T('nodues')) + '</p>') +
       '<p class="soft">' + esc(NS.t('b1.ageh')) + '</p>' +
       (advs.length ? '<div class="card"><h3>' + esc(T('advance')) + '</h3><p class="soft">' + esc(T('advh')) + '</p><ul class="rows">' + advs.map(function (k) {
         return '<li><a href="#st/' + encodeURIComponent(k) + '"><b>' + esc((P[k] || { name: k }).name) + '</b></a><b class="amt">' + money(R.advances[k][side]) + '</b></li>'; }).join('') + '</ul></div>' : '');
   }
+  /* an age range like 0–30 keeps its order in right-to-left languages */
+  function rng(s) { return String(s).replace(/(\d+\s*[–-]\s*\d+\+?|\d+\+)/g, '\u2066$1\u2069'); }
   function phoneOf(k, P) {
     var m = C.party.filter(function (p) { return key(p.name) === k; })[0];
     return String(m && m.phone || P && P[k] && P[k].phone || '').replace(/\D/g, '');
@@ -355,7 +367,7 @@
       return '<option value="' + esc(g.id) + '"' + (g.id === grp ? ' selected' : '') + '>' + new Array(g.depth + 1).join('\u2003') + esc(gname(g)) + '</option>'; }).join('') + '</select></label>';
   }
   /* the statement is printed in English like every document */
-  var ENDOC = { jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice' };
+  var ENDOC = { jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice', oinc: 'Other income', taxpay: 'Tax paid', gstset: 'GST set-off', wo: 'Write-off', pdd: 'Provision for doubtful debts' };
   function enName(d) {
     var ty = d.type || 'invoice';
     return ENDOC[ty === 'note' ? d.kind : ty === 'receipt' && d.kind !== 'pay' ? d.kind : ty === 'pbill' && d.kind === 'return' ? 'pret' : ty] || ty;
@@ -371,7 +383,7 @@
       '<div class="tools-row"><label>' + esc(T('from')) + ' <input type="date" data-stfrom value="' + stFrom + '"></label><label>' + esc(T('to')) + ' <input type="date" data-stto value="' + stTo + '"></label></div>' +
       '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + esc(T('date')) + '</th><th>' + esc(T('particulars')) + '</th><th class="n">' + esc(T('in')) + '</th><th class="n">' + esc(T('out')) + '</th><th class="n">' + esc(T('balance')) + '</th></tr></thead><tbody>' +
       '<tr><td>' + ldate(stFrom) + '</td><td>' + esc(T('opening')) + '</td><td></td><td></td><td class="n">' + money(Bk.open, false) + '</td></tr>' +
-      Bk.rows.map(function (r) { return '<tr><td>' + ldate(r.date) + '</td><td>' + esc(docName(r.d)) + ' ' + esc(r.d.no || '') + (B.partyName(r.d) ? ' · ' + esc(B.partyName(r.d)) : r.d.cat ? ' · ' + esc(r.d.cat) : '') + '</td><td class="n">' + (r.dr ? money(r.dr, false) : '') + '</td><td class="n">' + (r.cr ? money(r.cr, false) : '') + '</td><td class="n">' + money(r.bal, false) + '</td></tr>'; }).join('') +
+      Bk.rows.map(function (r) { return '<tr><td>' + ldate(r.date) + '</td><td>' + esc(docName(r.d)) + ' ' + esc(r.d.no || '') + (B.partyName(r.d) ? ' · ' + esc(B.partyName(r.d)) : r.d.cat ? ' · ' + esc(catName(r.d.cat)) : '') + '</td><td class="n">' + (r.dr ? money(r.dr, false) : '') + '</td><td class="n">' + (r.cr ? money(r.cr, false) : '') + '</td><td class="n">' + money(r.bal, false) + '</td></tr>'; }).join('') +
       '</tbody><tfoot><tr><th colspan="4">' + esc(T('closing')) + '</th><th class="n">' + money(Bk.close, false) + '</th></tr></tfoot></table></div>';
   }
 
@@ -380,14 +392,21 @@
     var bs = $('[data-biz]', pane);
     if (bs) bs.addEventListener('change', function () { NS.setCurBiz(bs.value); show(); });
     var nd = $('[data-newdoc]', pane);
-    if (nd) nd.addEventListener('change', function () { var v = nd.value; nd.value = ''; if (v && !openUrl(toolUrl(v))) location.href = toolUrl(v); });
+    if (nd) nd.addEventListener('change', function () { var v = nd.value; nd.value = ''; if (!v) return; var u = toolUrl(v) === '#' ? siteHome(v) : toolUrl(v); if (!openUrl(u)) location.href = u; });
     var qi = $('[data-q]', pane);
     if (qi) qi.addEventListener('input', function () { q = qi.value; var pos = qi.selectionStart; show().then(function () { var n = $('[data-q]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }); });
     $$('[data-filt]', pane).forEach(function (b) { b.addEventListener('click', function () { filt = b.getAttribute('data-filt'); show(); }); });
     $$('[data-grp]', pane).forEach(function (g) { g.addEventListener('change', function () { grp = g.value; show(); }); });
     $$('[data-stfrom],[data-stto]', pane).forEach(function (i) { i.addEventListener('change', function () { if (i.hasAttribute('data-stfrom')) stFrom = i.value; else stTo = i.value; show(); }); });
     pane.addEventListener('click', onClick);
-    $$('[data-conv]', pane).forEach(function (s) { s.addEventListener('change', function () { if (!s.value) return; var u = toolUrl(SITEOF[s.value]) + '?from=' + encodeURIComponent(s.getAttribute('data-conv')); if (!openUrl(u)) location.href = u; }); });
+    $$('[data-conv]', pane).forEach(function (s) { s.addEventListener('change', function () {
+      if (!s.value) return;
+      var v = s.value, src = C.doc.filter(function (x) { return x.id === s.getAttribute('data-conv'); })[0];
+      var go = function () { var u = toolUrl(SITEOF[v]) + '?from=' + encodeURIComponent(s.getAttribute('data-conv')); if (!openUrl(u)) location.href = u; };
+      /* already converted once: ask before making a second one (round C) */
+      if (src && src.nextNo) { s.value = ''; (NS.ask ? NS.ask(T('convagain', { x: src.nextNo })) : Promise.resolve(confirm(T('convagain', { x: src.nextNo })))).then(function (ok) { if (ok) go(); }); return; }
+      go();
+    }); });
   }
   function onClick(e) {
     var b = e.target.closest('button'); if (!b) return;
@@ -476,19 +495,22 @@
       h = '<div class="fg">' + fld('f-date', T('date'), inp('f-date', rec ? rec.date : today, { type: 'date', req: 1 })) +
         fld('f-party', T(out ? 'supp' : 'cust'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList(out ? 'supplier' : 'customer')) +
         fld('f-amt', T('amount'), inp('f-amt', amt, { mode: 'decimal', ltr: 1, req: 1 })) +
-        fld('f-mode', T('mode'), sel('f-mode', rec ? rec.mode : o.mode || 'upi', modeOpts())) +
+        fld('f-mode', T('mode'), sel('f-mode', rec ? rec.mode : o.mode || (BIZ && /^(shop|resto|pharma)$/.test(BIZ.kind || '') ? 'cash' : 'upi'), modeOpts())) +   /* shops are paid in cash mostly (round C) */
+        fld('f-ref', T('ref'), inp('f-ref', rec ? rec.ref : '', { ltr: 1 })) +
+        chqFields(out, rec && rec.chq) + '</div>' +
+        /* the bills come right after the amount; TDS, discount and note fold away (round C: the bill list was below the fold) */
+        '<fieldset class="alloc"><legend>' + esc(T('against')) + '</legend><p class="soft">' + esc(T('againsth')) + '</p><div data-alloc></div><p class="soft" data-advleft></p></fieldset>' +
+        '<details class="more"' + (rec && (num(rec.tds) || num(rec.tdsRate) || num(rec.disc)) ? ' open' : '') + '><summary>' + esc(T('mmore')) + '</summary><div class="fg">' +
         (out ? fld('f-tds', T('tdsout'), inp('f-tds', rec ? rec.tdsRate : '', { mode: 'decimal', ltr: 1 }), { hint: T('tdsouth') }) + fld('f-tdsx', NS.t('uf.tdsa'), inp('f-tdsx', '', { mode: 'decimal', ltr: 1 }))
           : fld('f-tds', T('tdsin'), inp('f-tds', rec ? rec.tds : '', { mode: 'decimal', ltr: 1 }), { hint: T('tdsinh') }) + fld('f-tdsx', NS.t('uf.tdsr'), inp('f-tdsx', '', { mode: 'decimal', ltr: 1 }))) +
-        fld('f-ref', T('ref'), inp('f-ref', rec ? rec.ref : '', { ltr: 1 })) +
-        chqFields(out, rec && rec.chq) +
-        fld('f-note', T('note'), inp('f-note', rec ? (out ? (rec.lines && rec.lines[0] || {}).desc : rec.purpose) : ''), { wide: 1 }) + '</div>' +
-        '<fieldset class="alloc"><legend>' + esc(T('against')) + '</legend><p class="soft">' + esc(T('againsth')) + '</p><div data-alloc></div><p class="soft" data-advleft></p></fieldset>';
+        fld('f-disc', NS.t(out ? 'wo.discr' : 'wo.disca'), inp('f-disc', rec ? rec.disc || '' : '', { mode: 'decimal', ltr: 1 }), { hint: NS.t(out ? 'wo.discrh' : 'wo.discah') }) +   /* cash discount (WP-3) */
+        fld('f-note', T('note'), inp('f-note', rec ? (out ? (rec.lines && rec.lines[0] || {}).desc : rec.purpose) : ''), { wide: 1 }) + '</div></details>';
     } else if (kind === 'pbill' || kind === 'pret') {
       var r = rec || { date: today, items: [{ desc: '', hsn: '', qty: 1, rate: '', gst: 18 }], round: true, buyer: { name: party } };
       var pm = C.party.filter(function (p) { return key(p.name) === key(party); })[0] || {};
       h = '<div class="fg">' + fld('f-party', T('supp'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList('supplier')) +
         fld('f-gstin', T('gstin'), inp('f-gstin', (r.buyer && r.buyer.gstin) || pm.gstin || '', { ltr: 1 })) +
-        fld('f-state', T('state'), sel('f-state', (r.buyer && r.buyer.state) || pm.state || (BIZ.state || ''), [['', '—']].concat(NS.STATES.map(function (s) { return [s[0], s[0] + ' · ' + s[1]]; })))) +
+        fld('f-state', T('state'), sel('f-state', (r.buyer && r.buyer.state) || pm.state || (BIZ.state || ''), [['', '—']].concat(NS.STATES.map(function (s) { return [s[0], s[0] + ' · ' + NS.stateLoc(s[0])]; })))) +
         fld('f-no', T(kind === 'pret' ? 'billno' : 'sno'), inp('f-no', r.no || '', { ltr: 1, req: kind === 'pbill' })) +
         fld('f-date', T('date'), inp('f-date', r.date, { type: 'date', req: 1 })) +
         (kind === 'pret' ? fld('f-orig', T('origno'), inp('f-orig', r.orig && r.orig.no || '', { ltr: 1 })) : fld('f-due', T('due'), inp('f-due', r.due || '', { type: 'date' }))) +
@@ -502,9 +524,9 @@
     } else if (kind === 'exp') {
       var x = rec || { date: today, mode: 'cash', gst: '' };
       h = '<div class="fg">' + fld('f-date', T('date'), inp('f-date', x.date, { type: 'date', req: 1 })) +
-        fld('f-cat', T('cat'), inp('f-cat', x.cat || '', { req: 1, list: 'dl-cat' }) + '<datalist id="dl-cat">' + EXP.map(function (k) { return '<option value="' + esc(T('ex_' + k)) + '">'; }).join('') + '</datalist>') +
+        fld('f-cat', T('cat'), inp('f-cat', catName(x.cat || ''), { req: 1, list: 'dl-cat' }) + '<datalist id="dl-cat">' + EXP.map(function (k) { return '<option value="' + esc(T('ex_' + k)) + '">'; }).join('') + '</datalist>') +
         fld('f-amt', T('amount'), inp('f-amt', x.amount || '', { mode: 'decimal', ltr: 1, req: 1 })) +
-        fld('f-mode', T('mode'), sel('f-mode', x.mode, modeOpts(true))) +
+        fld('f-mode', T('paidhow'), sel('f-mode', x.mode, modeOpts(true))) +   /* we pay an expense: not the customer's "how did he pay" (round C) */
         fld('f-party', T('payee'), inp('f-party', B.partyName(x), { list: 'dl-party' }) + partyList('supplier')) +
         fld('f-no', T('billno'), inp('f-no', x.no || '', { ltr: 1 })) +
         fld('f-gst', T('incgst'), sel('f-gst', x.gst || '', [['', '—'], ['5', '5%'], ['12', '12%'], ['18', '18%'], ['40', '40%']])) +
@@ -580,7 +602,7 @@
     if (id === 'f-gstin') { var st = e.target.value.trim().slice(0, 2); if (/^\d\d$/.test(st) && NS.stateName(st)) { $('#f-state', form).value = st; drawSum(); } }
     if (id === 'f-party' && F.lines) { var pm = C.party.filter(function (p) { return key(p.name) === key(e.target.value); })[0]; if (pm) { if (pm.gstin && !$('#f-gstin', form).value) $('#f-gstin', form).value = pm.gstin; if (pm.state) $('#f-state', form).value = pm.state; drawSum(); } }
     if ((F.kind === 'min' || F.kind === 'mout') && (id === 'f-tdsx' || id === 'f-tds' || id === 'f-amt')) tdsPair(id);
-    if ((F.kind === 'min' || F.kind === 'mout') && (id === 'f-party' || id === 'f-amt' || id === 'f-tds' || id === 'f-tdsx')) drawAlloc();
+    if ((F.kind === 'min' || F.kind === 'mout') && (id === 'f-party' || id === 'f-amt' || id === 'f-tds' || id === 'f-tdsx' || id === 'f-disc')) drawAlloc();
     if (e.target.hasAttribute && e.target.hasAttribute('data-al')) advLeft();
   }
   /* TDS asked both ways on Money received and Money paid: the box that is saved (received: rupees, paid: rate) and its twin.
@@ -590,11 +612,34 @@
     var out = F.kind === 'mout', amt = num($('#f-amt', form).value), fix = function (n) { return n ? String(+n.toFixed(2)) : ''; };
     if (id === 'f-tdsx') {
       var v = num(x.value);
-      a.value = !x.value.trim() ? '' : out ? (amt ? fix(v / amt * 100) : '') : (v > 0 && v < 100 && amt ? String(r2(amt * v / (100 - v))) : '');
+      a.value = !x.value.trim() ? '' : out ? (amt ? fix(v / amt * 100) : '') : (v > 0 && v < 100 && amt ? String(tdsIn(v, amt)) : '');
     } else {
-      var s = num(a.value);
-      x.value = !a.value.trim() ? '' : out ? (amt ? String(r2(amt * s / 100)) : '') : (amt + s ? fix(s / (amt + s) * 100) : '');
+      var s = num(a.value), base = out ? 0 : tdsBase(amt + s);
+      x.value = !a.value.trim() ? '' : out ? (amt ? String(r2(amt * s / 100)) : '') : (base ? fix(s / base * 100) : '');
     }
+  }
+  /* Money received: TDS is cut on the bill's value WITHOUT the GST shown on it (CBDT Circular 23/2017), so the rate works on
+     the taxable part of the open bills this payment settles (oldest first), and is rounded to the rupee (s.288B), as tds. does.
+     Money beyond the bills (an advance) has no GST known: rate on the whole of it. (round C: a 10% rate gave 8.47%) */
+  function openRecv() {
+    var p = key($('#f-party', form).value), D = mine().filter(function (d) { return !F.rec || d.id !== F.rec.id; });
+    return p ? B.bills(D, bizName(), p).bills.filter(function (b) { return b.side === 'recv'; }).sort(function (a, b) { return a.date.localeCompare(b.date); }) : [];
+  }
+  function taxPart(b) { var d = C.doc.filter(function (x) { return x.id === b.id; })[0], t = d && d.items ? B.itemTotals(d) : null; return t && t.total > 0 ? Math.min(1, t.taxable / t.total) : 1; }
+  function tdsIn(rate, cash) {
+    var r = rate / 100, left = cash, tds = 0;
+    openRecv().forEach(function (b) {
+      if (left <= 0.004) return;
+      var q = taxPart(b), net = b.left * (1 - r * q);
+      if (left >= net - 0.005) { tds += r * q * b.left; left -= net; } else { tds += r * q * left / (1 - r * q); left = 0; }
+    });
+    if (left > 0.004) tds += left * r / (1 - r);
+    return Math.round(tds);
+  }
+  function tdsBase(gross) {
+    var left = gross, base = 0;
+    openRecv().forEach(function (b) { if (left <= 0.004) return; var c = Math.min(b.left, left); base += c * taxPart(b); left -= c; });
+    return r2(base + Math.max(0, left));
   }
   function fillItem(i) {
     var m = C.item.filter(function (x) { return key(x.desc) === key(F.lines[i].desc); })[0]; if (!m) return;
@@ -633,7 +678,7 @@
     var out = F.kind === 'mout', side = out ? 'pay' : 'recv', p = key($('#f-party', form).value), box = $('[data-alloc]', form);
     var D = mine().filter(function (d) { return !F.rec || d.id !== F.rec.id; });
     var open = p ? B.bills(D, bizName(), p).bills.filter(function (b) { return b.side === side; }).sort(function (a, b) { return a.date.localeCompare(b.date); }) : [];
-    var gross = num($('#f-amt', form).value) + (out ? 0 : num($('#f-tds', form).value));
+    var gross = num($('#f-amt', form).value) + (out ? 0 : num($('#f-tds', form).value)) + num(($('#f-disc', form) || {}).value);
     var had = {}; ((F.rec && F.rec.alloc) || []).forEach(function (a) { had[a.id] = num(a.amt); });
     var left = gross;
     if (F.forId && open.some(function (b) { return b.id === F.forId; })) open.sort(function (a, b) { return (b.id === F.forId) - (a.id === F.forId); });
@@ -646,6 +691,8 @@
       c.addEventListener('change', function () {
         var amtI = $('input[data-al="' + c.getAttribute('data-al') + '"]:not([type=checkbox])', box);
         if (!c.checked) amtI.value = ''; else { var used = sumAlloc() - num(amtI.value); amtI.value = r2(Math.max(0, Math.min(num(amtI.getAttribute('data-max')), gross - used))) || amtI.getAttribute('data-max'); }
+        /* nothing typed in the amount yet: ticking a bill fills it with what is left on the ticked bills (round C) */
+        var ai = $('#f-amt', form); if (c.checked && ai && !ai.value.trim()) { ai.value = String(r2(sumAlloc())); gross = sumAlloc(); var tx = $('#f-tdsx', form); if (tx && tx.value.trim()) tdsPair('f-tdsx'); }
         advLeft();
       });
     });
@@ -653,7 +700,7 @@
   }
   function sumAlloc() { return r2($$('[data-alloc] input[data-al]:not([type=checkbox])', form).reduce(function (a, i) { return a + num(i.value); }, 0)); }
   function advLeft() {
-    var out = F.kind === 'mout', gross = num($('#f-amt', form).value) + (out ? 0 : num($('#f-tds', form).value)), x = r2(gross - sumAlloc());
+    var out = F.kind === 'mout', gross = num($('#f-amt', form).value) + (out ? 0 : num($('#f-tds', form).value)) + num(($('#f-disc', form) || {}).value), x = r2(gross - sumAlloc());
     $('[data-advleft]', form).textContent = x > 0.004 && $('#f-party', form).value.trim() ? T('advleft', { a: money(x) }) : '';
   }
 
@@ -670,13 +717,13 @@
       var date = $('#f-date', form).value, nos = alloc.map(function (a) { return a.no; }).filter(Boolean).join(', ');
       if (out) {
         d = Object.assign(rec || { type: 'voucher', no: nextNo('voucher', 'PV', date), paper: 'a4', design: 'classic', copies: 1, copyLabel: 'orig', tdsSec: '', rcm: false, rcmRate: '18', prep: '', appr: '', status: '' }, {
-          app: 1, forBill: true, date: date, seller: Object.assign(rec ? rec.seller : {}, sellerCopy()), mode: $('#f-mode', form).value, ref: $('#f-ref', form).value.trim(), tdsRate: $('#f-tds', form).value.trim(), alloc: alloc,
+          app: 1, forBill: true, date: date, seller: Object.assign(rec ? rec.seller : {}, sellerCopy()), mode: $('#f-mode', form).value, ref: $('#f-ref', form).value.trim(), tdsRate: $('#f-tds', form).value.trim(), disc: r2(num($('#f-disc', form).value)), alloc: alloc,
           lines: [{ desc: $('#f-note', form).value.trim() || (nos ? 'Payment against bill ' + nos : 'Payment on account'), head: 'Supplier payment', amt: amt }] });
         d.buyer = Object.assign(rec ? rec.buyer : { addr: '', phone: '', gstin: '', pan: '' }, { name: party });
       } else {
-        var unpaidLeft = r2(amt + num($('#f-tds', form).value) - alloc.reduce(function (a, x) { return a + x.amt; }, 0));
+        var unpaidLeft = r2(amt + num($('#f-tds', form).value) + num($('#f-disc', form).value) - alloc.reduce(function (a, x) { return a + x.amt; }, 0));
         d = Object.assign(rec || { type: 'receipt', no: nextNo('receipt', 'RCT', date), paper: 'a4', design: 'classic', copies: 1, copyLabel: '', gstAdv: false, rate: '18', pos: '', sac: '', rv: '', rvDate: '', refDate: '', bank: '', balance: '', status: '' }, {
-          app: 1, kind: alloc.length ? 'pay' : 'adv', date: date, seller: Object.assign(rec ? rec.seller : {}, sellerCopy()), amount: amt, tds: $('#f-tds', form).value.trim(), mode: $('#f-mode', form).value,
+          app: 1, kind: alloc.length ? 'pay' : 'adv', date: date, seller: Object.assign(rec ? rec.seller : {}, sellerCopy()), amount: amt, tds: $('#f-tds', form).value.trim(), disc: r2(num($('#f-disc', form).value)), mode: $('#f-mode', form).value,
           ref: $('#f-ref', form).value.trim(), against: nos, purpose: $('#f-note', form).value.trim() || (unpaidLeft > 0.004 && alloc.length ? 'Part advance' : ''), alloc: alloc });
         d.buyer = Object.assign(rec ? rec.buyer : { addr: '', phone: '', gstin: '', pan: '' }, { name: party });
       }
@@ -696,7 +743,8 @@
       d.items.forEach(function (it) {
         if (!it.desc) return;
         var hit = C.item.filter(function (x) { return key(x.desc) === key(it.desc); })[0];
-        if (!hit) jobs.push(NSStore.put('item', { desc: it.desc, hsn: it.hsn, unit: it.unit, rate: '', gst: it.gst, kind: 'goods' }));
+        if (!hit) jobs.push(NSStore.put('item', { desc: it.desc, hsn: it.hsn, unit: it.unit, rate: '', prate: it.rate, gst: it.gst, kind: 'goods' }));
+        else if (k === 'pbill' && num(it.rate) && num(it.rate) !== num(hit.prate)) jobs.push(NSStore.put('item', Object.assign({}, hit, { prate: it.rate })));   /* the purchase rate only, never the sale rate */
       });
       return Promise.all(jobs).then(function () { return NSStore.put('doc', d); }).then(function (saved) {
         if (mode === 'credit' || k !== 'pbill') return saved;
@@ -709,7 +757,7 @@
       }).then(done);
     }
     if (k === 'exp') {
-      d = Object.assign(rec || { type: 'exp', app: 1 }, { date: $('#f-date', form).value, seller: sellerCopy(), cat: $('#f-cat', form).value.trim(), amount: r2(num($('#f-amt', form).value)), mode: $('#f-mode', form).value,
+      d = Object.assign(rec || { type: 'exp', app: 1 }, { date: $('#f-date', form).value, seller: sellerCopy(), cat: catCode($('#f-cat', form).value.trim()), amount: r2(num($('#f-amt', form).value)), mode: $('#f-mode', form).value,
         buyer: { name: party }, no: $('#f-no', form).value.trim(), gst: $('#f-gst', form).value, itc: $('#f-itc', form).checked, inter: $('#f-inter', form).checked, notes: $('#f-note', form).value.trim() });
       d.total = d.amount;
       if (d.mode === 'credit' && !party) { NS.toast(T('need', { f: T('payee') }), 'bad'); $('#f-party', form).focus(); return; }
