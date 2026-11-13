@@ -176,7 +176,7 @@
       (names.length ? '<div class="card"><h3>' + esc(F('advleft')) + '</h3><ul class="rows">' + names.map(function (k) { var e = EMPS.filter(function (x) { return key(x.name) === k; })[0]; return '<li><span>' + esc(k === 'staff' ? F('advstaff') : e ? e.name : k) + '</span><b class="amt">' + money(left[k]) + '</b></li>'; }).join('') + '</ul></div>' : '') +
       A.searchBar() + (L.length ? '<ul class="rows">' + L.slice(0, 300).map(function (d) {
         return '<li><div class="ln"><span><b>' + esc(A.docName(d)) + ' ' + esc(d.no || '') + '</b><span class="soft"> · ' + A.ldate(d.date) + ' · ' + esc(F(d.kind === 'back' ? 'k_back' : 'k_give', { e: d.emp })) + '</span></span><b class="amt">' + money(num(d.amount)) + '</b></div>' +
-          '<div class="acts"><button type="button" class="btn sm" data-sfedit="' + esc(d.id) + '">' + esc(A.T('edit')) + '</button><button type="button" class="btn sm danger" data-sfdel="' + esc(d.id) + '">' + esc(A.T('del')) + '</button></div></li>';
+          '<div class="acts"><button type="button" class="btn sm" data-sfedit="' + esc(d.id) + '">' + esc(A.T('edit')) + '</button><button type="button" class="btn sm" data-vprint="' + esc(d.id) + '">' + esc(A.T('print')) + '</button><button type="button" class="btn sm danger" data-sfdel="' + esc(d.id) + '">' + esc(A.T('del')) + '</button></div></li>';
       }).join('') + '</ul>' : '<p class="soft">' + esc(F('noadv')) + '</p>');
   }
   function loanHtml() {

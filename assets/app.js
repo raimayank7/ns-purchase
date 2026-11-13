@@ -134,8 +134,22 @@
 
   var C = { biz: [], party: [], item: [], doc: [] }, CFG = {}, GRP = {}, BIZ = null, cur = 'home', arg = '', q = '', filt = 'all', grp = '';
 
+  /* MEM = what the data home gave last, SIG = its stamp (count and save times of every list, plus the settings): a screen
+     shows from memory at once and is drawn again only when the stamp changed (owner, 2026-11-11: shortcuts felt stuck) */
+  var MEM = null, SIG = '', painted = false, readyFns = [];
+  function sigOf(r) {
+    return r.slice(0, 4).map(function (L) { var s = 0; L.forEach(function (x) { s = (s + (x.updated || 0)) % 1e15; }); return L.length + ':' + s; }).join('|') + '|' + JSON.stringify([r[4] || 0, r[5] || 0]);
+  }
+  function whenReady(fn) { if (MEM) fn(); else readyFns.push(fn); }
   function load() {
     return Promise.all(['biz', 'party', 'item', 'doc'].map(function (s) { return NSStore.list(s); }).concat([NSStore.meta('settings'), NSStore.meta('groups')])).then(function (r) {
+      apply(r);
+      var s = sigOf(r), ch = s !== SIG; MEM = r; SIG = s;   /* stamped after apply: its one-time settings copy is part of it */
+      readyFns.splice(0).forEach(function (f) { try { f(); } catch (e) {} });
+      return ch;
+    });
+  }
+  function apply(r) {
       C = { biz: r[0], party: r[1], item: r[2], doc: r[3] }; CFG = r[4] || {}; GRP = r[5] || {};
       NS.bizCache = C.biz;
       if (NS.cfgSplit(CFG, C.biz)) NSStore.meta('settings', CFG).catch(function () {});   /* settings per business: one-time copy */
@@ -148,7 +162,7 @@
       }
       CFG = NS.cfgFor(RAW, BIZ, C.biz);   /* the settings of this tab's business */
       if (window.NSStock && NSStock.valuation) NSStock.valuation(CFG.stockValue);   /* FIFO or weighted average, My data › Settings */
-    });
+      bizChip();
   }
   function bizName() { return BIZ ? BIZ.name : ''; }
   function mine() { var b = key(bizName()); return C.doc.filter(function (d) { return key(d.seller && d.seller.name) === b; }); }
@@ -194,7 +208,7 @@
   }
   function go(h) { location.hash = h; }
   var showSeq = 0;
-  function show(focus) {
+  function show(focus, soft) {
     $$('[data-sec]').forEach(function (b) { var on = b.getAttribute('data-sec') === (cur === 'st' ? 'parties' : cur); b.setAttribute('aria-current', on ? 'page' : 'false'); });
     if (cur === 'do') {
       document.documentElement.classList.add('no-sponsor'); frame(arg);
@@ -202,9 +216,20 @@
       return load().then(function () { var h2 = $('.fr-hd h2'), st = arg.split(/[\/?#]/)[0]; if (cur === 'do' && h2 && /[?&]open=/.test(arg)) h2.textContent = frameTitle(st, arg.slice(st.length)); });
     }
     /* a redraw started earlier (window focus when the user clicks, late data) must not paint over a newer screen or the frame */
-    var mine_ = ++showSeq, want = cur + '/' + arg;
-    return load().then(function () {
+    var mine_ = ++showSeq, want = cur + '/' + arg, first = false;
+    /* a screen change, a key or a tap shows what is in memory at once; the data home is read after that.
+       soft = the window came back or late data arrived: draw again only if something changed, and never under an open
+       form or list (a redraw used to close the business list while it was being used) */
+    if (MEM && !soft) { apply(MEM); paint(focus); first = true; }
+    return load().then(function (changed) {
       if (mine_ !== showSeq || cur === 'do' || cur + '/' + arg !== want) return;
+      if (painted && !changed && (first || soft)) return;
+      if (soft && $('dialog[open]')) return;
+      paint(focus && !first);
+    });
+  }
+  function paint(focus) {
+      painted = true;
       var pane = $('[data-pane]');
       $('[data-mode]').textContent = T(NSStore.mode() === 'vault' ? 'vault' : 'local');
       labels();
@@ -218,7 +243,6 @@
       /* no sponsored card where a document is made or printed (statement, ledger, books, reports): the Support page promise */
       document.documentElement.classList.toggle('no-sponsor', !!$('[data-print], [data-b2print], [data-m-print], [data-lgpdf], [data-sheet], .stsheet', pane));
       if (focus) { var h2 = $('h2', pane); if (h2) { h2.tabIndex = -1; h2.focus({ preventScroll: true }); } }
-    });
   }
   function labels() {
     $$('[data-sec]').forEach(function (b) { $('span', b).textContent = T(b.getAttribute('data-sec')); });
@@ -241,8 +265,11 @@
     if (r) r.addEventListener('click', function () { (NS.ask ? NS.ask(T('sm_conf')) : Promise.resolve(confirm(T('sm_conf')))).then(function (ok) { if (!ok) return; r.disabled = true; NSSample.remove().then(function () { NS.toast(T('sm_gone')); show(); }); }); });
   }
   function bizBar() {
-    var bz = C.biz.length < 2 ? '' : '<span class="bzsel"><label for="app-biz">' + esc(T('biz')) + '</label><select id="app-biz" data-biz>' + C.biz.map(function (b) {
-      return '<option value="' + esc(b.id) + '"' + (BIZ && b.id === BIZ.id ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select></span>';
+    /* up to 4 businesses: one button each, one tap switches; more: one button that opens the list (also Alt S, the title bar and the status bar) */
+    var bz = C.biz.length < 2 ? '' : C.biz.length <= 4 ? '<span class="bz-tabs" role="group" aria-label="' + esc(T('biz')) + '">' + C.biz.map(function (b) {
+      var on = BIZ && b.id === BIZ.id;
+      return '<button type="button" class="bz-tab" data-noic data-bizgo="' + esc(b.id) + '" aria-pressed="' + on + '" title="' + esc(b.name) + '">' + esc(b.name) + '</button>'; }).join('') + '</span>'
+      : '<button type="button" class="btn bz-btn" data-noic data-bizsw aria-haspopup="dialog"><span class="soft">' + esc(T('biz')) + '</span> <b>' + esc(BIZ ? BIZ.name : '') + '</b> <span aria-hidden="true">▾</span></button>';
     var nw = '<select class="newdoc" data-newdoc aria-label="' + esc(T('newdoc')) + '"><option value="">+ ' + esc(T('newdoc')) + '</option>' +
       NEWDOCS.filter(function (n) { return TOOLS.some(function (x) { return x[0] === n[0]; }) || INAPP[n[0]]; }).map(function (n) { return '<option value="' + n[0] + '">' + esc(NS.t(n[2] || 'Doc.' + n[1])) + '</option>'; }).join('') + '</select>';
     return '<div class="bizbar">' + bz + '<span class="grow"></span>' + nw + '<a class="btn sm" href="' + myUrl() + '">' + esc(NS.t('my.title')) + '</a></div>';
@@ -293,8 +320,9 @@
       if (left[d.id] > 0.004 && ty === 'pbill') acts.push('<button type="button" class="btn sm" data-form="mout" data-for="' + d.id + '">' + esc(T('recpay')) + '</button>');
       if (CONVERT[ty] && !opts.noconv) acts.push('<select class="sm conv" data-conv="' + d.id + '" aria-label="' + esc(T('convert')) + ' ' + esc(d.no || '') + '"><option value="">' + esc(T('convert')) + '…</option>' +
         CONVERT[ty].map(function (x) { return '<option value="' + x + '">' + esc(T(x === 'invoice' ? 'makeinv' : x === 'so' ? 'makeso' : 'makedc')) + '</option>'; }).join('') + '</select>');
+      if (ty === 'exp') acts.push('<button type="button" class="btn sm" data-vprint="' + d.id + '">' + esc(T('print')) + '</button>');
       if (appMade) acts.push('<button type="button" class="btn sm danger" data-del="' + d.id + '">' + esc(T('del')) + '</button>');
-      return '<li><div class="ln"><span><b>' + esc(docName(d)) + ' ' + esc(d.no || d.billNo || '') + '</b> ' + pills + '<span class="soft"> · <span class="nw">' + ldate(d.date) + '</span>' + (B.partyName(d) ? ' · ' + esc(B.partyName(d)) : d.cat ? ' · ' + esc(catName(d.cat)) : '') + '</span></span>' +
+      return '<li><div class="ln"><span><b>' + esc(docName(d)) + ' ' + esc(d.no || d.billNo || (ty === 'exp' && d.vno) || '') + '</b> ' + pills + '<span class="soft"> · <span class="nw">' + ldate(d.date) + '</span>' + (B.partyName(d) ? ' · ' + esc(B.partyName(d)) : d.cat ? ' · ' + esc(catName(d.cat)) : '') + '</span></span>' +
         '<b class="amt">' + money(amountOf(d)) + '</b></div><div class="acts">' + acts.join('') + '</div></li>';
     }).join('') + '</ul>';
   }
@@ -411,8 +439,8 @@
 
   /* ---------- events ---------- */
   function wire(pane) {
-    var bs = $('[data-biz]', pane);
-    if (bs) bs.addEventListener('change', function () { NS.setCurBiz(bs.value); show(); });
+    $$('[data-bizgo]', pane).forEach(function (b) { b.addEventListener('click', function () { setBiz(b.getAttribute('data-bizgo')); }); });
+    var bs = $('[data-bizsw]', pane); if (bs) bs.addEventListener('click', switchBiz);
     var nd = $('[data-newdoc]', pane);
     if (nd) nd.addEventListener('change', function () { var v = nd.value; nd.value = ''; if (!v) return; var u = toolUrl(v) === '#' ? siteHome(v) : toolUrl(v); if (!openUrl(u)) location.href = u; });
     var qi = $('[data-q]', pane);
@@ -438,6 +466,103 @@
     else if (b.hasAttribute('data-del')) delRec(b.getAttribute('data-del'));
     else if (b.hasAttribute('data-wa')) whatsapp(b.getAttribute('data-wa'));
     else if (b.hasAttribute('data-print')) window.print();
+    else if (b.hasAttribute('data-vprint')) { var v = C.doc.filter(function (x) { return x.id === b.getAttribute('data-vprint'); })[0]; if (v) printVoucher(v); }
+  }
+
+  /* ---------- switch business: one list, reachable from every screen (title bar, status bar, Alt S) ---------- */
+  var bzDlg = null, chipEl = null;
+  function bizChip() {
+    if (DOOR) return;
+    var nav = $('.hd nav'), many = C.biz.length > 1 && !!BIZ;
+    if (!chipEl && nav) {
+      chipEl = document.createElement('button'); chipEl.type = 'button'; chipEl.className = 'btn sm bz-chip'; chipEl.setAttribute('data-noic', ''); chipEl.setAttribute('aria-haspopup', 'dialog'); chipEl.setAttribute('aria-keyshortcuts', 'Alt+S');
+      chipEl.addEventListener('click', switchBiz); nav.insertBefore(chipEl, nav.firstChild);
+    }
+    if (chipEl) { chipEl.hidden = !many; if (many) { chipEl.innerHTML = '<b>' + esc(BIZ.name) + '</b> <span aria-hidden="true">▾</span>'; chipEl.title = T('biz') + ' (Alt S)'; chipEl.setAttribute('aria-label', T('biz') + ': ' + BIZ.name); } }
+    var sb = $('[data-s-biz]');
+    if (sb && BIZ) { sb.textContent = BIZ.name; sb.hidden = false; sb.classList.toggle('can', many); if (many && !sb._bz) { sb._bz = 1; sb.addEventListener('click', function () { if (C.biz.length > 1) switchBiz(); }); } }
+  }
+  function setBiz(id) {
+    if (bzDlg && bzDlg.open) bzDlg.close();
+    var b = C.biz.filter(function (x) { return x.id === id; })[0];
+    if (!b || BIZ && b.id === BIZ.id) return;
+    NS.setCurBiz(id);
+    /* makers kept ready hold documents of the business just left: the next one starts fresh, in the new business */
+    if (shelf) $$('.fr-box', shelf).forEach(function (x) { x.remove(); });
+    q = ''; filt = 'all';
+    if (cur === 'do' || cur === 'st') go(cur === 'do' && backTo && !/^(do|st)\//.test(backTo) ? backTo : 'home'); else show(true);
+    apply(MEM || [C.biz, C.party, C.item, C.doc, null, GRP]);
+    NS.toast('✓ ' + b.name);
+  }
+  function switchBiz() {
+    if (C.biz.length < 2) return;
+    if ($$('dialog').some(function (d) { return d.open && d !== bzDlg; })) return;
+    if (!bzDlg) {
+      bzDlg = document.createElement('dialog'); bzDlg.className = 'desk-keys bz-dlg'; bzDlg.setAttribute('aria-labelledby', 'bz-h'); document.body.appendChild(bzDlg);
+      bzDlg.addEventListener('click', function (e) {
+        var it = e.target.closest('[data-bizgo]');
+        if (it) setBiz(it.getAttribute('data-bizgo')); else if (e.target === bzDlg || e.target.closest('[data-close], a')) bzDlg.close();
+      });
+      bzDlg.addEventListener('keydown', function (e) {
+        var its = $$('[data-bizgo]', bzDlg), i = its.indexOf(document.activeElement);
+        if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) { if (its[+e.key - 1]) { e.preventDefault(); setBiz(its[+e.key - 1].getAttribute('data-bizgo')); } }
+        else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); (its[(i + (e.key === 'ArrowDown' ? 1 : its.length - 1)) % its.length] || its[0]).focus(); }
+      });
+    }
+    if (bzDlg.open) { bzDlg.close(); return; }
+    bzDlg.innerHTML = '<div class="dk-hd"><h2 id="bz-h">' + esc(T('biz')) + '</h2><button type="button" class="icon-btn" aria-label="' + esc(NS.t('close')) + '" data-close>✕</button></div><div class="bz-list">' +
+      C.biz.map(function (b, i) {
+        var on = BIZ && b.id === BIZ.id, sub = [b.gstin, b.city].filter(Boolean).join(' · ');
+        return '<button type="button" class="bz-it" data-noic data-bizgo="' + esc(b.id) + '"' + (on ? ' aria-current="true"' : '') + '>' + (i < 9 ? '<kbd>' + (i + 1) + '</kbd>' : '<kbd></kbd>') +
+          '<span class="bz-nm"><b>' + esc(b.name) + '</b>' + (sub ? '<small dir="ltr">' + esc(sub) + '</small>' : '') + '</span><span class="bz-ck" aria-hidden="true">' + (on ? '✓' : '') + '</span></button>'; }).join('') +
+      '</div><p class="bz-ft"><a class="btn sm" href="' + myUrl('#biz/new') + '">+ ' + esc(T('addbiz')) + '</a></p>';
+    bzDlg.showModal();
+    var nx = $$('[data-bizgo]', bzDlg).filter(function (x) { return !x.hasAttribute('aria-current'); })[0]; if (nx) nx.focus();
+  }
+
+  /* ---------- a printed voucher for an expense or a staff advance: the hard copy the receiver signs (owner, 2026-11-11) ---------- */
+  function vnoNext(date) {
+    var fy = NS.fy(date), short = fy.slice(2, 4) + '-' + fy.slice(5), c = CFG.exp || {}, digits = Math.min(6, Math.max(1, +((CFG.invoice || {}).digits) || 3)), max = 0;
+    var pre = String(c.prefix != null && c.prefix !== '' ? c.prefix : 'EXP').replace(/[^A-Za-z0-9\/\-]/g, '');
+    mine().forEach(function (d) { if (d.type !== 'exp' || NS.fy(d.date) !== fy) return; var m = String(d.vno || '').match(/(\d+)\s*$/); if (m) max = Math.max(max, +m[1]); });
+    return (pre ? pre + '/' : '') + short + '/' + String(max + 1).padStart(digits, '0');
+  }
+  var ENMODE = { cash: 'Cash', upi: 'UPI', cheque: 'Cheque', bank: 'Bank transfer', card: 'Card', dd: 'Demand draft', other: 'Other', credit: 'On credit (not paid yet)' };
+  function voucherSheet(d) {
+    var b = BIZ || d.seller || {}, sadv = d.type === 'sadv', back = sadv && d.kind === 'back', amt = num(d.amount), who = sadv ? d.emp : B.partyName(d);
+    var head = sadv ? '' : (EXP.indexOf(d.cat) >= 0 ? NS.tEn('app.ex_' + d.cat) : (function () { var h = window.NSHeads && NSHeads.find(d.cat); return h && h.en || d.cat || ''; })());
+    var title = back ? 'ADVANCE RETURN RECEIPT' : sadv ? 'STAFF ADVANCE VOUCHER' : 'EXPENSE VOUCHER';
+    var row = function (k, v) { return v ? '<tr><th scope="row">' + esc(k) + '</th><td>' + v + '</td></tr>' : ''; };
+    var line = '<span class="vch-blank"></span>';
+    return '<div class="stsheet sh vch" dir="ltr" lang="en" data-sheet>' +
+      '<div class="st-hd"><div><b class="vch-biz">' + esc(b.name || '') + '</b>' + (b.addr ? '<br>' + esc(b.addr).replace(/\n/g, '<br>') : '') + ([b.city, b.pin].filter(Boolean).length ? '<br>' + esc([b.city, b.pin].filter(Boolean).join(' - ')) : '') +
+        (b.phone ? '<br>Phone ' + esc(b.phone) : '') + (b.gstin ? '<br>GSTIN ' + esc(b.gstin) : '') + '</div>' +
+      '<div class="r"><b class="vch-ttl">' + title + '</b><br>No. ' + (esc(sadv ? d.no || '' : d.vno || '') || line) + '<br>Date ' + ldate(d.date) + '</div></div>' +
+      '<table class="tbl st vch-t"><tbody>' +
+      row(back ? 'Received from' : 'Paid to', who ? esc(who) : line) +
+      row('Towards', sadv ? (back ? 'Advance paid back' : 'Advance against salary / wages') + (d.notes ? ' · ' + esc(d.notes) : '') : esc(head) + (d.notes ? ' · ' + esc(d.notes) : '')) +
+      row('Bill no.', !sadv && d.no ? esc(d.no) : '') +
+      row(back ? 'Received by' : 'Paid by', esc(ENMODE[d.mode] || d.mode || '') + (d.ref ? ' · ' + esc(d.ref) : '')) +
+      row('Amount', '<b class="vch-amt">' + NS.money(amt) + '</b>' + (!sadv && num(d.gst) ? ' <span class="soft">(includes GST at ' + esc(d.gst) + '%)</span>' : '') + '<br>' + esc(NS.inWords(amt))) +
+      '</tbody></table>' +
+      '<p class="vch-rcv">' + (back ? 'Received the above amount.' : d.mode === 'credit' ? 'The above amount is payable.' : 'Received the above amount' + (sadv ? ' as advance. It may be adjusted against my salary / wages.' : '.')) + '</p>' +
+      '<div class="vch-sign"><div>Prepared by</div><div>Approved by</div><div>' + (!back && d.mode === 'cash' && amt > 5000 ? '<span class="vch-stamp">Revenue stamp</span>' : '') +
+        (back ? 'Signature of receiver (for ' + esc(b.name || '') + ')' : 'Signature of receiver' + (who ? '<small>' + esc(who) + '</small>' : '')) + '</div></div>' +
+      '<p class="st-ft">Made with Nivesh Sahayak on ' + ldate(NS.today()) + '.</p></div>';
+  }
+  function printVoucher(d) {
+    var go = function (rec) {
+      var host = $('#vch-print');
+      if (!host) { host = document.createElement('div'); host.id = 'vch-print'; host.className = 'vch-print'; document.body.appendChild(host); }
+      host.innerHTML = voucherSheet(rec);
+      document.documentElement.classList.add('vch-on');
+      var off = function () { window.removeEventListener('afterprint', off); document.documentElement.classList.remove('vch-on'); host.innerHTML = ''; };
+      window.addEventListener('afterprint', off);
+      setTimeout(function () { window.print(); }, 60);
+    };
+    /* an expense saved before vouchers had numbers gets its number now, so the paper and the record carry the same one */
+    if (d.type === 'exp' && !d.vno) { var c = JSON.parse(JSON.stringify(d)); c.vno = vnoNext(c.date); NSStore.put('doc', c).then(function (s) { go(s || c); show(false, true); }, function () { go(d); }); }
+    else go(d);
   }
   function showPhoto(id) {
     var d = C.doc.filter(function (x) { return x.id === id; })[0]; if (!d || !d.photo) return;
@@ -504,9 +629,10 @@
     return (pre ? pre + '/' : '') + short + '/' + String(max + 1).padStart(digits, '0');
   }
 
+  var andPrint = false;
   function openForm(kind, o) {
     o = o || {};
-    if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); }
+    if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); andPrint = !!(e.submitter && e.submitter.hasAttribute('data-andprint')); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); }
     var rec = o.rec || null, today = NS.today(), h = '';
     F = { kind: kind, rec: rec, forId: o.forId, biz: bizName() };
     var forDoc = o.forId && C.doc.filter(function (d) { return d.id === o.forId; })[0];
@@ -574,7 +700,8 @@
         fld('f-date', T('date'), inp('f-date', ob.date, { type: 'date', req: 1 })) + '</div>';
     }
     $('[data-form-title]', dlg).textContent = T(kind) + (rec && rec.no ? ' ' + rec.no : '') + (C.biz.length > 1 && bizName() ? ' · ' + bizName() : '');   /* two businesses: the form names the one it saves to */
-    form.innerHTML = h + '<div class="dlg-foot"><button type="submit" class="btn primary">' + esc(T('save')) + '</button><button type="button" class="btn" data-close>' + esc(T('cancel')) + '</button></div>';
+    form.innerHTML = h + '<div class="dlg-foot"><button type="submit" class="btn primary">' + esc(T('save')) + '</button>' +
+      (kind === 'exp' ? '<button type="submit" class="btn" data-andprint data-ic="print">' + esc(T('save')) + ' + ' + esc(T('print')) + '</button>' : '') + '<button type="button" class="btn" data-close>' + esc(T('cancel')) + '</button></div>';
     $('[data-close]', form).addEventListener('click', function () { dlg.close(); });
     var al = $('[data-addline]', form);
     if (al) al.addEventListener('click', function () { F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form).checked ? 0 : 18 }); drawLines(); });
@@ -784,7 +911,9 @@
       d.total = d.amount;
       if (d.mode === 'credit' && !party) { NS.toast(T('need', { f: T('payee') }), 'bad'); $('#f-party', form).focus(); return; }
       if (party) jobs.push(savePartyRole(party, 'supplier'));
-      return Promise.all(jobs).then(function () { return NSStore.put('doc', d); }).then(done);
+      if (!d.vno) d.vno = vnoNext(d.date);   /* our own voucher number (the bill no. box is the supplier's), printed on the voucher */
+      var pr = andPrint;
+      return Promise.all(jobs).then(function () { return NSStore.put('doc', d); }).then(function (saved) { done(); if (pr) printVoucher(saved || d); });
     }
     if (k === 'csale') {   /* a sale on credit (udhaar) is saved as an unpaid cash memo, so cash-memo. can print it */
       var amt2 = r2(num($('#f-amt', form).value)), date2 = $('#f-date', form).value, ph = $('#f-phone', form).value.trim();
@@ -841,7 +970,7 @@
     range: function (f, t) { if (f) stFrom = f; if (t) stTo = t; if (!stTo) stTo = NS.today(); if (!stFrom) stFrom = fyStart(stTo); return [stFrom, stTo]; },
     markPaid: markPaid, openUrl: openUrl, siteHome: siteHome, frameAt: frameAt, docUrl: docUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },
     whatsapp: whatsapp, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
-    door: function () { return DOOR; }
+    door: function () { return DOOR; }, whenReady: whenReady, switchBiz: switchBiz, setBiz: setBiz, printVoucher: printVoucher
   };
   function cardTables(root) {
     $$('table.tbl:not(.tbl-cards):not(.dues-t)', root).forEach(function (tb) {
@@ -876,8 +1005,17 @@
       if (openUrl(a.href)) e.preventDefault();
     });
     NSStore.ready().then(route).then(function () { NSStore.persist().catch(function () {}); });
-    window.addEventListener('focus', function () { if (cur !== 'do' && (!dlg || !dlg.open)) show(); });
-    document.addEventListener('ns-data', function () { if (cur !== 'do' && (!dlg || !dlg.open)) show(); });   /* the data home came in late */   /* bills made in another tab show up when you come back */
+    window.addEventListener('focus', function () { if (cur !== 'do' && !$('dialog[open]')) show(false, true); });
+    document.addEventListener('ns-data', function () { if (cur !== 'do' && !$('dialog[open]')) show(false, true); });
+    /* the App icon's own shortcuts (Dues, Money in and out, New invoice): with the App already open the browser only brings
+       its window forward and hands the address here; without this they did nothing (owner, 2026-11-11) */
+    try {
+      if (window.launchQueue && launchQueue.setConsumer) launchQueue.setConsumer(function (p) {
+        if (!p || !p.targetURL) return;
+        var u = new URL(p.targetURL);
+        if (u.origin === location.origin && u.hash.length > 1 && u.hash !== location.hash) { var open = $('dialog[open]'); if (open && open.close) open.close(); location.hash = u.hash; }
+      });
+    } catch (e) {}   /* the data home came in late */   /* bills made in another tab show up when you come back */
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
