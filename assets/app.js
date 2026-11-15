@@ -253,7 +253,7 @@
       if (focus) { var h2 = $('h2', pane); if (h2) { h2.tabIndex = -1; h2.focus({ preventScroll: true }); } }
   }
   function labels() {
-    $$('[data-sec]').forEach(function (b) { $('span', b).textContent = T(b.getAttribute('data-sec')); });
+    $$('[data-sec]').forEach(function (b) { var k = 'app.' + b.getAttribute('data-sec'), w = NS.t(k); if (w !== k) $('span', b).textContent = w; });   /* no app.<sec> word (cadoc, b2...): the label keeps its own data-i18n */
     $$('[data-t]').forEach(function (e) { e.textContent = T(e.getAttribute('data-t')); });
     /* the guide exists in every language: point its link at the one on screen */
     var L = NS.lang ? NS.lang() : 'en';
