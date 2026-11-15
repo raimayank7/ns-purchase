@@ -56,6 +56,13 @@
     NS.sharePdf(nodes, name, 'a4', title, '');
   }
 
+  /* link to the Share maker (share.niveshsahayak.in) with this party chosen: a snapshot link or file for the customer (platform group P3) */
+  function shareUrl(k) {
+    var x = (window.NS_CFG && NS_CFG.inapp || {}).share; if (!x) return '';
+    var local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    return (local && x[1] ? 'http://localhost:' + x[1] + '/' : 'https://' + x[0] + '/') + '#stmt/' + encodeURIComponent(k);
+  }
+
   /* ---------- the party ledger ---------- */
   A.addSection('st', function (k) {
     var p = partyOf(k), r = A.range(), today = NS.today(), G = A.groups(), g = B.groupTree(G).filter(function (x) { return x.id === A.gidOf(k); })[0];
@@ -63,6 +70,7 @@
     var body = view === 'bills' ? billsSheet(k, p, r) : view === 'letter' ? letterSheets(k, p, r) : ledgerSheet(k, p, r, types);
     return '<p><a href="#parties" class="link">' + esc(T('back')) + '</a></p><div class="pane-hd"><h2>' + esc(p.name) + (g ? ' <small class="pill">' + esc(A.gname(g)) + '</small>' : '') + '</h2><div class="quick">' +
         (p.bal > 0.004 ? '<button type="button" class="btn wa" data-wa="' + esc(k) + '">' + esc(T('remind')) + '</button>' : '') +
+        (p.bal > 0.004 && shareUrl(k) ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(shareUrl(k)) + '">' + esc(NS.t('sh.app.link')) + '</a>' : '') +
         '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button></div></div>' +
       '<p class="big">' + esc(line) + '</p>' +
       seg('lgview', [['all', T('lg_all')], ['bills', T('lg_bills')], ['letter', T('lg_letter')]], view) +

@@ -15,7 +15,8 @@
   var LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   var TOOLS = (window.NS_CFG && NS_CFG.tools) || [];
   /* shop and trade records (kit.js) open in their own site, which is not in TOOLS */
-  var KITSITE = { pos: 'pos', pharma: 'pharmacy', resto: 'restaurant', lr: 'bilty', job: 'job-card', rabill: 'contractor-bill', fee: 'fee-receipt' };
+  var KITSITE = { pos: 'pos', pharma: 'pharmacy', resto: 'restaurant', lr: 'bilty', job: 'job-card', hotel: 'hotel', rentb: 'rent', rabill: 'contractor-bill', fee: 'fee-receipt' };
+  KITSITE.jewel = 'jewellery'; KITSITE.garment = 'garment';   /* group C trade tools */
   var SITEOF = { invoice: 'billing', quote: 'quotation', proforma: 'proforma', so: 'sales-order', challan: 'challan', po: 'purchase-order', self: 'self-invoice', note: 'credit-note', cashmemo: 'cash-memo', receipt: 'receipt', voucher: 'voucher' };
   function toolUrl(site) { var x = TOOLS.filter(function (x) { return x[0] === site; })[0]; if (!x) return '#'; return LOCAL ? 'http://localhost:' + x[4] + '/' : 'https://' + x[1] + '/'; }
   function myUrl(h) { return (LOCAL ? 'http://localhost:8862/' : 'https://my.niveshsahayak.in/') + (h || ''); }
@@ -23,7 +24,10 @@
      #do/<site><path?query#hash> shows <site> in the frame; Back returns to the screen it was opened from. */
   var NEWDOCS = [['billing', 'invoice'], ['quotation', 'quote'], ['proforma', 'proforma'], ['sales-order', 'so'], ['challan', 'challan'], ['purchase-order', 'po'], ['credit-note', 'note', 'k.credit'], ['debit-note', 'note', 'k.debit'],
     ['cash-memo', 'cashmemo'], ['receipt', 'receipt'], ['voucher', 'voucher'], ['self-invoice', 'self'], ['rent-receipt', 'rent'], ['salary-slip', 'salary'], ['petty-cash', 'petty'],
-    ['pos', 'pos', 'nav.pos'], ['pharmacy', 'pharma', 'nav.pharmacy'], ['restaurant', 'resto', 'nav.restaurant'], ['bilty', 'lr', 'nav.bilty'], ['job-card', 'job', 'Doc.job'], ['contractor-bill', 'rabill', 'nav.contractorbill'], ['fee-receipt', 'fee', 'Doc.fee']];
+    ['pos', 'pos', 'nav.pos'], ['pharmacy', 'pharma', 'nav.pharmacy'], ['restaurant', 'resto', 'nav.restaurant'], ['bilty', 'lr', 'nav.bilty'], ['job-card', 'job', 'Doc.job'], ['hotel', 'hotel', 'Doc.hotel'], ['rent', 'rentb', 'Doc.rentb'], ['contractor-bill', 'rabill', 'nav.contractorbill'], ['fee-receipt', 'fee', 'Doc.fee']];
+  NEWDOCS.push(['clinic', 'visit', 'nav.clinic'], ['salon', 'svc', 'nav.salon']);
+  NEWDOCS.push(['jewellery', 'jewel', 'nav.jewellery'], ['garment', 'garment', 'nav.garment']);
+  NEWDOCS.push(['mandi', 'mandi', 'nav.mandi'], ['petrol', 'pump', 'nav.petrol']); KITSITE.mandi = 'mandi'; KITSITE.pump = 'petrol';
   /* every Nivesh Sahayak site the App knows (build.py INAPP_MAP): [host, local port, how it opens, name key].
      'twin' = the App's own copy of the maker (or My data) at /do/<site>/, same engine and data home, shown on an App screen;
      '#<section>' = a door site whose screens the App has itself; 'frame' = any other site, only its content, in the App's frame */
@@ -54,6 +58,7 @@
     return true;
   }
   /* the maker a saved record opens in (a counter bill is an invoice made on pos.) and its address: the App shows it inside */
+  KITSITE.visit = 'clinic'; KITSITE.svc = 'salon';
   var SLIPSITE = { rent: 'rent-receipt', salary: 'salary-slip', petty: 'petty-cash' };
   function docSite(d) { var ty = d.type || 'invoice'; return ty === 'note' && d.kind === 'debit' ? 'debit-note' : ty === 'invoice' && d.counter ? 'pos' : SITEOF[ty] || KITSITE[ty] || SLIPSITE[ty] || ''; }
   function docUrl(d) { var s = docSite(d); return s ? siteHome(s) + '?open=' + encodeURIComponent(d.id) : ''; }
@@ -127,6 +132,7 @@
   var MODES = ['cash', 'upi', 'cheque', 'bank', 'card', 'dd', 'other'];
   var EXP = ['rent', 'power', 'salary', 'transport', 'phone', 'repair', 'office', 'fuel', 'bank', 'prof', 'ads', 'misc'];
   var SALES = { invoice: 1, cashmemo: 1, note: 1, quote: 1, proforma: 1, so: 1, challan: 1 };
+  SALES.jewel = 1; SALES.garment = 1;   /* group C trade tools: their bills are in the Sales list */
   var CONVERT = { quote: ['so', 'challan', 'invoice'], proforma: ['invoice'], so: ['challan', 'invoice'], challan: ['invoice'] };
   var SECS = ['home', 'sales', 'buy', 'money', 'dues', 'parties', 'cash', 'st'];
   /* EXT: sections added by other files (NSApp.addSection); DOOR: the sections a door site shows (#app data-secs), first = start */
@@ -180,6 +186,8 @@
     return v !== k ? v : NS.t(KITNAME[ty] || 'Doc.' + ty);
   }
   var KITNAME = { pos: 'nav.pos', pharma: 'nav.pharmacy', resto: 'nav.restaurant', lr: 'nav.bilty', rabill: 'nav.contractorbill' };
+  KITNAME.jewel = 'nav.jewellery'; KITNAME.garment = 'nav.garment';
+  KITNAME.mandi = 'nav.mandi'; KITNAME.pump = 'nav.petrol';
   function ldate(iso) { return NS.fmtDate(iso); }
   /* expense heads: a head picked from the list is saved as its code (rent) or English name, never as the words of the screen
      language, so one head is one ledger whatever language it was typed in; shown in the screen language (round C) */
@@ -320,6 +328,8 @@
       if (left[d.id] > 0.004 && ty === 'pbill') acts.push('<button type="button" class="btn sm" data-form="mout" data-for="' + d.id + '">' + esc(T('recpay')) + '</button>');
       if (CONVERT[ty] && !opts.noconv) acts.push('<select class="sm conv" data-conv="' + d.id + '" aria-label="' + esc(T('convert')) + ' ' + esc(d.no || '') + '"><option value="">' + esc(T('convert')) + '…</option>' +
         CONVERT[ty].map(function (x) { return '<option value="' + x + '">' + esc(T(x === 'invoice' ? 'makeinv' : x === 'so' ? 'makeso' : 'makedc')) + '</option>'; }).join('') + '</select>');
+      if (window.NSReuse && ty === 'pbill' && d.kind !== 'return' && d.items && d.items.length) acts.push('<button type="button" class="btn sm" data-reorder="' + d.id + '">' + esc(NS.t('cap.again_order')) + '</button>');
+      if (window.NSReuse && /^(invoice|cashmemo)$/.test(ty) && docUrl(d) && d.items && d.items.length) acts.push('<a class="btn sm" href="' + docUrl(d).replace('open=', 'copy=') + '">' + esc(NS.t('cap.again_sale')) + '</a>');
       if (ty === 'exp') acts.push('<button type="button" class="btn sm" data-vprint="' + d.id + '">' + esc(T('print')) + '</button>');
       if (appMade) acts.push('<button type="button" class="btn sm danger" data-del="' + d.id + '">' + esc(T('del')) + '</button>');
       return '<li><div class="ln"><span><b>' + esc(docName(d)) + ' ' + esc(d.no || d.billNo || (ty === 'exp' && d.vno) || '') + '</b> ' + pills + '<span class="soft"> · <span class="nw">' + ldate(d.date) + '</span>' + (B.partyName(d) ? ' · ' + esc(B.partyName(d)) : d.cat ? ' · ' + esc(catName(d.cat)) : '') + '</span></span>' +
@@ -344,7 +354,7 @@
     var D = mine(), L = leftMap(D);
     var list = D.filter(function (d) { return /^(pbill|exp|self|po)$/.test(d.type) || d.type === 'voucher' && !d.forBill || d.type === 'note' && d.side === 'purchase'; }).filter(match).filter(function (d) {
       if (filt === 'unpaid') return L[d.id] > 0.004 || d.type === 'exp' && d.mode === 'credit'; if (filt === 'paid') return L[d.id] != null && L[d.id] <= 0.004; return true; }).sort(byDate);
-    return '<div class="pane-hd"><h2>' + esc(T('buy')) + '</h2><div class="quick">' + ['pbill', 'exp', 'pret'].map(function (f) { return '<button type="button" class="btn' + (f === 'pbill' ? ' primary' : '') + '" data-form="' + f + '">+ ' + esc(T(f)) + '</button>'; }).join('') + '</div></div>' +
+    return '<div class="pane-hd"><h2>' + esc(T('buy')) + '</h2><div class="quick">' + ['pbill', 'exp', 'pret'].map(function (f) { return '<button type="button" class="btn' + (f === 'pbill' ? ' primary' : '') + '" data-form="' + f + '">+ ' + esc(T(f)) + '</button>'; }).join('') + (window.NSApp && NSApp.scan ? '<button type="button" class="btn" data-scan data-ic="camera">' + esc(NS.t('cap.btn')) + '</button>' : '') + '</div></div>' +
       searchBar(['all', 'unpaid', 'paid']) + rowsHtml(list.slice(0, 200), { left: L });
   }
   function moneyHtml() {
@@ -460,7 +470,9 @@
   }
   function onClick(e) {
     var b = e.target.closest('button'); if (!b) return;
-    if (b.hasAttribute('data-form')) openForm(b.getAttribute('data-form'), { forId: b.getAttribute('data-for'), party: b.getAttribute('data-party'), mode: b.getAttribute('data-mode'), side: b.getAttribute('data-side') || '' });
+    if (b.hasAttribute('data-reorder')) { var od = C.doc.filter(function (x) { return x.id === b.getAttribute('data-reorder'); })[0], dr = od && NSReuse.orderAgain(od); if (dr) { dr.date = NS.today(); openForm('pbill', { draft: dr, after: function (form) { var n = document.createElement('div'); n.className = 'scan-note'; n.setAttribute('role', 'note'); n.textContent = NS.t('cap.reorder_note', { p: B.partyName(od), d: ldate(od.date) }); form.insertBefore(n, form.firstChild); } }); } }
+    else if (b.hasAttribute('data-scan') && window.NSApp && NSApp.scan) NSApp.scan();
+    else if (b.hasAttribute('data-form')) openForm(b.getAttribute('data-form'), { forId: b.getAttribute('data-for'), party: b.getAttribute('data-party'), mode: b.getAttribute('data-mode'), side: b.getAttribute('data-side') || '' });
     else if (b.hasAttribute('data-photo')) showPhoto(b.getAttribute('data-photo'));
     else if (b.hasAttribute('data-edit')) { var d = C.doc.filter(function (x) { return x.id === b.getAttribute('data-edit'); })[0]; if (d && !(window.NSApp.editX && NSApp.editX(d))) openForm(formOf(d), { rec: d }); }
     else if (b.hasAttribute('data-del')) delRec(b.getAttribute('data-del'));
@@ -636,7 +648,7 @@
     var rec = o.rec || null, today = NS.today(), h = '';
     F = { kind: kind, rec: rec, forId: o.forId, biz: bizName() };
     var forDoc = o.forId && C.doc.filter(function (d) { return d.id === o.forId; })[0];
-    var party = rec ? B.partyName(rec) : o.party || (forDoc ? B.partyName(forDoc) : '');
+    var party = rec ? B.partyName(rec) : o.party || (o.draft && o.draft.buyer ? o.draft.buyer.name : '') || (forDoc ? B.partyName(forDoc) : '');
     if (kind === 'min' || kind === 'mout') {
       var out = kind === 'mout', amt = rec ? (out ? amountOf(rec) : num(rec.amount)) : '';
       if (!rec && forDoc) { var bl = B.bills(mine(), bizName()).bills.filter(function (b) { return b.id === forDoc.id; })[0]; amt = bl ? bl.left : ''; }
@@ -654,7 +666,7 @@
         fld('f-disc', NS.t(out ? 'wo.discr' : 'wo.disca'), inp('f-disc', rec ? rec.disc || '' : '', { mode: 'decimal', ltr: 1 }), { hint: NS.t(out ? 'wo.discrh' : 'wo.discah') }) +   /* cash discount (WP-3) */
         fld('f-note', T('note'), inp('f-note', rec ? (out ? (rec.lines && rec.lines[0] || {}).desc : rec.purpose) : ''), { wide: 1 }) + '</div></details>';
     } else if (kind === 'pbill' || kind === 'pret') {
-      var r = rec || { date: today, items: [{ desc: '', hsn: '', qty: 1, rate: '', gst: 18 }], round: true, buyer: { name: party } };
+      var r = rec || o.draft || { date: today, items: [{ desc: '', hsn: '', qty: 1, rate: '', gst: 18 }], round: true, buyer: { name: party } };   /* o.draft: a purchase bill read from a photo (billscan.js), not saved until confirmed */
       var pm = C.party.filter(function (p) { return key(p.name) === key(party); })[0] || {};
       h = '<div class="fg">' + fld('f-party', T('supp'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList('supplier')) +
         fld('f-gstin', T('gstin'), inp('f-gstin', (r.buyer && r.buyer.gstin) || pm.gstin || '', { ltr: 1 })) +
@@ -709,6 +721,7 @@
     if (kind === 'min' || kind === 'mout') { tdsPair('f-tds'); drawAlloc(true); chqShow(); }
     if (kind === 'ob') obShow();
     if (F.lines) drawPhoto();
+    if (o.after) o.after(form, F);   /* billscan.js marks the fields it was unsure about */
     dlg.showModal();
     var first = $('input:not([type=date]),select', form); if (first && !first.value) first.focus();
   }
@@ -791,8 +804,10 @@
     return r2(base + Math.max(0, left));
   }
   function fillItem(i) {
-    var m = C.item.filter(function (x) { return key(x.desc) === key(F.lines[i].desc); })[0]; if (!m) return;
-    var L = F.lines[i]; if (!L.hsn) L.hsn = m.hsn || ''; if (!num(L.rate) && (m.prate || m.rate)) L.rate = m.prate || m.rate; if (m.gst !== '' && m.gst != null) L.gst = m.gst;
+    var m = C.item.filter(function (x) { return key(x.desc) === key(F.lines[i].desc); })[0];
+    var sp = window.NSReuse && $('#f-party', form) ? NSReuse.partyRate(C.party.filter(function (p) { return key(p.name) === key($('#f-party', form).value); })[0], F.lines[i].desc) : null;   /* this supplier's own price list (My data) */
+    if (!m && sp == null) return; m = m || {};
+    var L = F.lines[i]; if (!L.hsn) L.hsn = m.hsn || ''; if (!num(L.rate) && (sp != null || m.prate || m.rate)) L.rate = sp != null ? sp : m.prate || m.rate; if (m.gst !== '' && m.gst != null) L.gst = m.gst;
     var row = $$('[data-row]', form)[i]; if (row) { $('[data-lk=hsn]', row).value = L.hsn; $('[data-lk=rate]', row).value = L.rate; $('[data-lk=gst]', row).value = L.gst; }
     if (row && m.track && !$('[data-lk=batch],[data-lk=serial]', row)) { drawLines(); var di = $$('[data-lk=desc]', form)[i]; if (di) { di.focus(); di.setSelectionRange(di.value.length, di.value.length); } }   /* batch / serial item (more.js) */
   }

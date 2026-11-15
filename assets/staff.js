@@ -137,9 +137,11 @@
   function slipUrl(d) { return A.siteHome ? A.siteHome('salary-slip') + (d ? '?open=' + encodeURIComponent(d.id) : '?new=1') : ''; }
 
   /* ---------- the section ---------- */
-  var TABS = ['sal', 'emp', 'adv', 'loan'];
+  var EXT = {}; A.staffExt = EXT;   /* tabs added by other files (payroll.js: att, pf, esi) */
+  var ORDER = ['sal', 'emp', 'att', 'pf', 'esi', 'adv', 'loan'];
+  function tabList() { return ORDER.filter(function (t) { return !{ att: 1, pf: 1, esi: 1 }[t] || EXT[t]; }); }
   function tabs(cur) {
-    return '<div class="seg" role="group">' + TABS.map(function (t) { return '<a class="btn sm" href="#stf' + (t === 'sal' ? '' : '/' + t) + '" aria-pressed="' + (t === cur) + '">' + esc(F('t_' + t)) + '</a>'; }).join('') + '</div>';
+    return '<div class="seg" role="group">' + tabList().map(function (t) { return '<a class="btn sm" href="#stf' + (t === 'sal' ? '' : '/' + t) + '" aria-pressed="' + (t === cur) + '">' + esc(F('t_' + t)) + '</a>'; }).join('') + '</div>';
   }
   function payables() {
     var acc = B.accounts(A.mine(), A.bizName());
@@ -151,10 +153,10 @@
   function salHtml() {
     var L = slips().filter(A.match);
     return '<p class="soft">' + esc(F('salh')) + '</p>' + payables() + A.searchBar() +
-      (L.length ? '<div class="tbl-wrap"><table class="tbl sf-t"><thead><tr><th>' + esc(F('month')) + '</th><th>' + esc(F('emp')) + '</th><th class="n">' + esc(F('gross')) + '</th><th class="n">' + esc(F('ded')) + '</th><th class="n">' + esc(F('net')) + '</th><th>' + esc(F('status')) + '</th><th></th></tr></thead><tbody>' +
+      (L.length ? '<div class="tbl-wrap"><table class="tbl sf-t"><thead><tr><th>' + esc(F('month')) + '</th><th>' + esc(F('emp')) + '</th><th class="n">' + esc(F('paiddays')) + '</th><th class="n">' + esc(F('gross')) + '</th><th class="n">' + esc(F('ded')) + '</th><th class="n">' + esc(F('net')) + '</th><th>' + esc(F('status')) + '</th><th></th></tr></thead><tbody>' +
         L.slice(0, 400).map(function (d) {
           var s = B.salSplit(d), st = !d.acct ? '<span class="pill">' + esc(F('notin')) + '</span>' : d.payDate ? '<span class="pill ok">' + esc(F('paidon', { d: A.ldate(d.payDate) })) + '</span>' : '<span class="pill warn">' + esc(F('unpaid')) + '</span>';
-          return '<tr><td data-l="' + esc(F('month')) + '">' + esc(month(d.month)) + '</td><th scope="row">' + esc(B.partyName(d) || '—') + '</th><td class="n" data-l="' + esc(F('gross')) + '">' + money(s.gross, false) + '</td><td class="n" data-l="' + esc(F('ded')) + '">' + money(s.ded, false) + '</td>' +
+          return '<tr><td data-l="' + esc(F('month')) + '">' + esc(month(d.month)) + '</td><th scope="row">' + esc(B.partyName(d) || '—') + '</th><td class="n" data-l="' + esc(F('paiddays')) + '">' + esc(d.days ? (d.paid === '' || d.paid == null ? d.days : d.paid) + '/' + d.days : '') + '</td><td class="n" data-l="' + esc(F('gross')) + '">' + money(s.gross, false) + '</td><td class="n" data-l="' + esc(F('ded')) + '">' + money(s.ded, false) + '</td>' +
             '<td class="n" data-l="' + esc(F('net')) + '"><b>' + money(s.net, false) + '</b></td><td data-l="' + esc(F('status')) + '">' + st + '</td><td class="acts">' +
             (slipUrl(d) ? '<a class="btn sm" data-sfopen href="' + esc(slipUrl(d)) + '">' + esc(A.T('open')) + '</a>' : '') +
             (!d.acct ? '<button type="button" class="btn sm" data-sfin="' + esc(d.id) + '">' + esc(F('addin')) + '</button>' : '<button type="button" class="btn sm" data-sfpay="' + esc(d.id) + '">' + esc(F(d.payDate ? 'chgpaid' : 'markpaid')) + '</button>') + '</td></tr>';
@@ -197,12 +199,13 @@
   }
   var BTN = { sal: [['slip', 'newslip'], ['emp', 'empnew']], emp: [['emp', 'empnew'], ['give', 'advgive']], adv: [['give', 'advgive'], ['back', 'advback']], loan: [['loan', 'loannew']] };
   A.addSection('stf', function (arg) {
-    var cur = TABS.indexOf(arg) >= 0 ? arg : 'sal';
-    var body = cur === 'emp' ? empHtml() : cur === 'adv' ? advHtml() : cur === 'loan' ? loanHtml() : salHtml();
-    return '<div class="pane-hd"><h2>' + esc(A.T('stf')) + '</h2><div class="quick">' + BTN[cur].map(function (b, i) {
+    var cur = tabList().indexOf(arg) >= 0 ? arg : 'sal';
+    var body = EXT[cur] ? EXT[cur].html() : cur === 'emp' ? empHtml() : cur === 'adv' ? advHtml() : cur === 'loan' ? loanHtml() : salHtml();
+    return '<div class="pane-hd"><h2>' + esc(A.T('stf')) + '</h2><div class="quick">' + (BTN[cur] || []).map(function (b, i) {
       return b[0] === 'slip' ? '<a class="btn' + (i ? '' : ' primary') + '" data-sfopen href="' + esc(slipUrl()) + '">+ ' + esc(F(b[1])) + '</a>' : '<button type="button" class="btn' + (i ? '' : ' primary') + '" data-sfnew="' + b[0] + '">+ ' + esc(F(b[1])) + '</button>';
     }).join('') + '</div></div>' + tabs(cur) + body;
   }, function (pane) {
+    var hm = /^#stf\/(\w+)/.exec(location.hash); if (hm && EXT[hm[1]] && EXT[hm[1]].bind) EXT[hm[1]].bind(pane);
     $$('[data-sfopen]', pane).forEach(function (a) { a.addEventListener('click', function (e) { if (A.openUrl && A.openUrl(a.href)) e.preventDefault(); }); });
     $$('[data-sfnew]', pane).forEach(function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-sfnew'); if (k === 'emp') empForm(); else if (k === 'loan') loanForm(); else advForm(null, k); }); });
     $$('[data-sfemp]', pane).forEach(function (b) { b.addEventListener('click', function () { var e = EMPS.filter(function (x) { return x.id === b.getAttribute('data-sfemp'); })[0]; if (e) empForm(e); }); });

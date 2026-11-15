@@ -13,3 +13,56 @@
 .acx-tax .h{font-size:.78rem;font-weight:600;color:var(--soft)}
 @media (max-width:620px){.acx-tax{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.acx-tax .h.c{display:none}.acx-tax .rl{grid-column:1/-1;font-weight:600;margin-top:6px}}
 .acx-sum{font-weight:600;margin:8px 0 0}
+
+/* Payroll (payroll.js): attendance sheet, calendar, PF and ESI tabs */
+.pr-bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.pr-m{display:inline-flex;gap:8px;align-items:center;font-weight:600}
+.pr-m input,.pr-m select{min-height:40px}
+.pr-tools{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.pr-grid{font-size:.82rem}
+.pr-grid th,.pr-grid td{padding:3px 2px;text-align:center;white-space:nowrap}
+.pr-grid th[scope=row]{text-align:left;position:sticky;left:0;background:var(--surface);padding:3px 8px;z-index:1}
+.pr-dh small{display:block;font-weight:400;opacity:.65;font-size:.7rem}
+.pr-dh.sun{color:var(--bad,#c0392b)}
+.pr-c{min-width:32px;height:32px;padding:0 3px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:.74rem;font-weight:700;cursor:pointer}
+button.pr-c{touch-action:manipulation}
+.pr-c.c-P{background:#d9f2e3;color:#14532d;border-color:#9bd6b2}
+.pr-c.c-A{background:#fadbd8;color:#7b1d14;border-color:#e8a29b}
+.pr-c.c-H{background:#fdebc8;color:#7a4b00;border-color:#efc77a}
+.pr-c.c-PL{background:#d6e8fb;color:#0f3d75;border-color:#9cc3ee}
+.pr-c.c-UL{background:#ead9f5;color:#4b1d6b;border-color:#c9a4e3}
+.pr-c.c-HOL,.pr-c.c-WO{background:#e8e8e8;color:#444;border-color:#c9c9c9}
+.pr-c.c-NA{opacity:.35}
+.pr-c.c-none{border-style:dashed}
+.pr-c.mk{outline:2px solid transparent;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25)}
+html[data-theme=dark] .pr-c.c-P{background:#173d27;color:#b8efcb;border-color:#2f7a4b}
+html[data-theme=dark] .pr-c.c-A{background:#4a1c17;color:#f6c4be;border-color:#9a4038}
+html[data-theme=dark] .pr-c.c-H{background:#4a3410;color:#f5d899;border-color:#946b1c}
+html[data-theme=dark] .pr-c.c-PL{background:#14304f;color:#b7d6f6;border-color:#376aa3}
+html[data-theme=dark] .pr-c.c-UL{background:#34204a;color:#dcc3f0;border-color:#7a4ea3}
+html[data-theme=dark] .pr-c.c-HOL,html[data-theme=dark] .pr-c.c-WO{background:#2f2f2f;color:#ccc;border-color:#555}
+.pr-ot{width:56px;min-height:30px;text-align:right}
+.pr-legend{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;margin:10px 0 2px;font-size:.85rem}
+.pr-legend .pr-c{display:inline-flex;align-items:center;justify-content:center;cursor:default}
+.pr-bulk{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.pr-bulk input,.pr-bulk select{min-height:38px}
+.pr-bulk input{width:84px}
+.pr-cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:10px 0;max-width:520px}
+.pr-cal>b{text-align:center;font-size:.75rem;opacity:.7}
+.pr-cd{display:flex;flex-direction:column;align-items:center;gap:2px}
+.pr-cd span{font-size:.75rem;opacity:.7}
+.pr-cd .pr-c{width:100%;height:40px}
+.pr-set{margin:14px 0}
+.pr-set summary{cursor:pointer;min-height:36px;font-weight:600}
+.pr-wo{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0}
+.pr-warn{padding:8px 10px;border-radius:8px;background:#fdebc8;color:#5a3a00;font-size:.88rem;margin:8px 0}
+html[data-theme=dark] .pr-warn{background:#4a3410;color:#f5d899}
+.pr-note{font-size:.85rem;opacity:.8}
+.pr-t th,.pr-t td{font-size:.86rem}
+.pr-t td.n,.pr-t th.n{white-space:nowrap}
+.pr-bad{background:rgba(192,57,43,.08)}
+.pr-err{display:block;color:var(--bad,#c0392b);font-weight:400}
+.pr-fl label{display:block;white-space:nowrap;font-size:.8rem}
+.pr-ch{margin:14px 0}
+.pr-tot{border-top:2px solid var(--line);font-weight:700}
+@media (max-width:620px){.pr-grid th[scope=row]{max-width:92px;overflow:hidden;text-overflow:ellipsis}.pr-c{min-width:30px;height:34px}}
