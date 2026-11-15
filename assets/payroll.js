@@ -6,6 +6,7 @@
    Maths and file layouts: engine/payrollcore.js (NSPayroll, tested by scripts/test_payroll.js). Screen words: NS.t('pr.*'). Everything stays in the data home. */
 (function () {
   'use strict';
+  var SHEETJS = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'];
   var A = window.NSApp, S = window.NSStaff, P = window.NSPayroll, B = window.NSBooks; if (!A || !A.staffExt || !S || !P || !B) return;
   var $ = NS.$, $$ = NS.$$, esc = NS.esc, num = NS.num, money = NS.money;
   function F(k, v) { return NS.t('pr.' + k, v); }
@@ -217,7 +218,12 @@
     var cfg = ST.cfg.esi, out = [], missing = [];
     active().forEach(function (e) {
       var d = slipFor(e, ST.ym), f = flagsOf(e);
-      if (!d) { missing.push(e.name); return; }
+      if (!d) {
+        var ipn = String(e.esi || '').replace(/\s/g, '');
+        if (!ipn) { missing.push(e.name); return; }
+        var z = P.esiLine({ ip: ipn, name: e.name, gross: 0, paid: 0, days: 0, covered: false, reason: f.reason, lastDay: e.left && e.left.slice(0, 7) <= ST.ym ? e.left : '' }, cfg);
+        z.e = e; z.noslip = true; out.push(z); return;
+      }
       var dy = daysFor(e, d), sp = B.salSplit(d);
       var hist = []; for (var k = 1; k <= 6; k++) { var y = +ST.ym.slice(0, 4), m = +ST.ym.slice(5, 7) - k; while (m < 1) { m += 12; y--; } var ym = y + '-' + String(m).padStart(2, '0'), pd = slipFor(e, ym); if (pd) hist.push({ ym: ym, gross: B.salSplit(pd).gross }); }
       var l = P.esiLine({ ip: e.esi || (d.emp && d.emp.esi) || '', name: e.name, gross: sp.gross, paid: dy.paid, days: dy.days, covered: P.covered(hist, ST.ym, cfg), reason: f.reason, lastDay: e.left && e.left.slice(0, 7) === ST.ym ? e.left : '' }, cfg);
@@ -230,9 +236,9 @@
     var R = esiRows(), L = R.lines, ok = L.filter(function (l) { return l.ok; }), ch = P.esiChallan(L), cfg = Object.assign({}, P.ESI, ST.cfg.esi);
     var tbl = L.length ? '<div class="tbl-wrap"><table class="tbl pr-t"><thead><tr><th>' + esc(F('emp')) + '</th><th>' + esc(F('ipno')) + '</th><th class="n">' + esc(F('daysp')) + '</th><th class="n">' + esc(F('wages')) + '</th><th class="n">' + esc(F('eshare')) + '</th><th class="n">' + esc(F('rshare')) + '</th><th>' + esc(F('status')) + '</th></tr></thead><tbody>' +
       L.map(function (l) {
-        var st = !l.applies ? '<span class="pill">' + esc(F(l.wages ? 'st_over' : 'st_zero')) + '</span>' : !l.ok ? '<span class="pill warn">' + esc(F('e_ip')) + '</span>' : l.exempt ? '<span class="pill">' + esc(F('st_exempt')) + '</span>' : l.over ? '<span class="pill">' + esc(F('st_cov')) + '</span>' : '<span class="pill ok">' + esc(F('st_ok')) + '</span>';
+        var st = !l.applies && l.ok ? '<span class="pill ok">' + esc(F('st_zero')) + '</span>' : !l.applies && !l.errs.length ? '<span class="pill">' + esc(F(l.wages ? 'st_over' : 'st_zero')) + '</span>' : !l.ok ? '<span class="pill warn">' + esc(F(l.errs.indexOf('ip') >= 0 ? 'e_ip' : l.errs.indexOf('lastday') >= 0 ? 'e_lastday' : 'e_name')) + '</span>' : l.exempt ? '<span class="pill">' + esc(F('st_exempt')) + '</span>' : l.over ? '<span class="pill">' + esc(F('st_cov')) + '</span>' : '<span class="pill ok">' + esc(F('st_ok')) + '</span>';
         var zero = l.days === 0 ? '<select data-reason="' + esc(l.e.id) + '" aria-label="' + esc(F('reason')) + '"><option value="">' + esc(F('reason')) + '</option>' + P.ESI_REASONS.map(function (r) { return '<option value="' + r[0] + '"' + (String(flagsOf(l.e).reason) === String(r[0]) ? ' selected' : '') + '>' + r[0] + ' · ' + esc(r[1]) + '</option>'; }).join('') + '</select>' : '';
-        return '<tr' + (l.applies && !l.ok ? ' class="pr-bad"' : '') + '><th scope="row">' + esc(l.e.name) + '</th><td data-l="' + esc(F('ipno')) + '" dir="ltr">' + esc(l.ip) + '</td><td class="n" data-l="' + esc(F('daysp')) + '">' + l.days + '</td><td class="n" data-l="' + esc(F('wages')) + '">' + money(l.wages, false) + '</td><td class="n" data-l="' + esc(F('eshare')) + '">' + money(l.ee, false) + '</td><td class="n" data-l="' + esc(F('rshare')) + '">' + money(l.er, false) + '</td><td data-l="' + esc(F('status')) + '">' + st + zero + '</td></tr>';
+        return '<tr' + (l.errs.length ? ' class="pr-bad"' : '') + '><th scope="row">' + esc(l.e.name) + '</th><td data-l="' + esc(F('ipno')) + '" dir="ltr">' + esc(l.ip) + '</td><td class="n" data-l="' + esc(F('daysp')) + '">' + l.days + '</td><td class="n" data-l="' + esc(F('wages')) + '">' + money(l.wages, false) + '</td><td class="n" data-l="' + esc(F('eshare')) + '">' + money(l.ee, false) + '</td><td class="n" data-l="' + esc(F('rshare')) + '">' + money(l.er, false) + '</td><td data-l="' + esc(F('status')) + '">' + st + zero + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<p class="soft">' + esc(F('noslips')) + '</p>';
     var chh = '<div class="card pr-ch"><h3>' + esc(F('challan_esi')) + ' · ' + esc(monthTitle(ST.ym)) + '</h3><ul class="rows"><li><span>' + esc(F('wages')) + ' (' + ch.members + ')</span><b class="amt">' + money(ch.wages) + '</b></li><li><span>' + esc(F('eshare')) + '</span><b class="amt">' + money(ch.ee) + '</b></li><li><span>' + esc(F('rshare')) + '</span><b class="amt">' + money(ch.er) + '</b></li><li class="pr-tot"><span>' + esc(F('total')) + '</span><b class="amt">' + money(ch.total) + '</b></li></ul><p class="soft">' + esc(F('chnote_esi')) + '</p></div>';
     return '<p class="soft">' + esc(F('esiintro')) + '</p>' + head() + (R.missing.length ? '<p class="pr-warn">' + esc(F('noslip', { n: R.missing.length, l: R.missing.slice(0, 6).join(', ') })) + '</p>' : '') +
@@ -244,7 +250,13 @@
     $$('[data-reason]', pane).forEach(function (s) { s.addEventListener('change', function () { var id = s.getAttribute('data-reason'); (ST.cfg.flags[id] = ST.cfg.flags[id] || {}).reason = s.value; saveCfg().then(A.show); }); });
     function rows() { return P.esiRows(esiRows().lines); }
     var x = $('[data-esixl]', pane); if (x) x.addEventListener('click', function () {
-      NS.loadLazy(['xlsx.js']).then(function () { NS.saveFile(NS.xlsx.write([['Monthly contribution', rows()]]), 'esi-contribution-' + ST.ym + '.xlsx'); NS.toast(F('saved', { f: 'esi-contribution-' + ST.ym + '.xlsx' })); }, function () { NS.toast(F('noxl'), 'bad'); });
+      var fn = 'esi-contribution-' + ST.ym + '.xls';
+      NS.loadJs(SHEETJS[0], SHEETJS[1]).then(function () {
+        var X = window.XLSX, ws = X.utils.aoa_to_sheet(rows()), r = X.utils.decode_range(ws['!ref']);
+        for (var R = r.s.r; R <= r.e.r; R++) for (var C = r.s.c; C <= r.e.c; C++) { var c = ws[X.utils.encode_cell({ r: R, c: C })]; if (c) { c.t = 's'; c.v = String(c.v); c.z = '@'; } }
+        var wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Sheet1');
+        NS.saveFile(new Blob([X.write(wb, { bookType: 'biff8', type: 'array' })], { type: 'application/vnd.ms-excel' }), fn); NS.toast(F('saved', { f: fn }));
+      }, function () { NS.toast(F('noxl'), 'bad'); });
     });
     var c = $('[data-esicsv]', pane); if (c) c.addEventListener('click', function () { dl('﻿' + P.toCsv(rows()), 'esi-contribution-' + ST.ym + '.csv', 'text/csv'); });
   }

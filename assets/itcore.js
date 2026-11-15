@@ -8,8 +8,10 @@
      interest           s.424 (old 234B): 1% a month or part from 1 April after the year, when no advance tax or less than 90% of the assessed tax
                         was paid, on the shortfall; s.425 (old 234C): 3% on the shortfall of each of the first three instalments (a single
                         month's interest counted as 3 months of 1%), 1% on the March shortfall; none when 12% by 15 Jun / 36% by 15 Sep were paid;
-                        capital gains, dividend and first-year business profits are not counted when paid in the remaining instalments (s.425(4))
-     Read from a third-party mirror of the Act (eztax.in) because the official site refuses scripted readers: recheck the printed Act.
+                        capital gains, winnings (s.2(49)(n)), dividend and first-year business profits are not counted when paid in the
+                        remaining instalments (s.425(4)); s.58(2) presumptive cases pay all by 15 Mar and only 1% on its shortfall (s.425(3))
+     Checked word by word on 15 Nov 2026 against the official text on incometaxindia.gov.in (pages /w/section-403-5, 404-5, 405-5,
+     406-5, 408-6, 424-5, 425-5): every rule above matches. First written from a third-party mirror (eztax.in).
    Everything that depends on the person (slabs, ages, surcharge, deductions) is a typed field with the dated default shown on screen. */
 (function (G) {
   'use strict';

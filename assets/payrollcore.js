@@ -11,11 +11,13 @@
      UAN, member name, gross wages, EPF wages, EPS wages, EDLI wages, EPF contribution (employee 12%), EPS contribution (8.33%),
      EPF-EPS difference (employer's own EPF share), NCP days (days not paid), refund of advances.
      EPF wages = basic up to the wage ceiling (or the whole basic when the employer pays on it), EPS and EDLI wages are capped at the ceiling.
-     ***The field list is taken from the descriptions published by payroll vendors, NOT from an EPFO document (EPFO's own PDFs could
-     not be opened on 14 Nov 2026): the screen says so and the rates and the ceiling are typed settings.***
+     ***The field list was first taken from payroll vendors' descriptions; on 15 Nov 2026 it was compared with EPFO's own ECR FAQ
+     (archived copy of epfo.gov.in): 11 fields joined by #~#, matching. The portal's information sheet was not read, so one real
+     upload by the owner is still the final check; the rates and the ceiling are typed settings.***
 
-   ESI (monthly contribution sheet of the ESIC employer portal): IP number, IP name, days for which wages were paid or payable,
-     total monthly wages, reason code (when no days), last working day. Employee 0.75% and employer 3.25% of wages, each rounded UP to the
+   ESI (monthly contribution sheet of the ESIC employer portal; checked 15 Nov 2026 against ESIC's own MC_Template1.xls, archived copy):
+     six text columns IP number (10 digits), IP name (letters and spaces only), days for which wages were paid or payable (whole days),
+     total monthly wages, reason code (0-13, used when no days), last working day (needed for codes 2-6 and 10), saved as .xls. Employee 0.75% and employer 3.25% of wages, each rounded UP to the
      next rupee (Social Security (Central) Rules, 2026, rule 19, published 8 May 2026); no employee share when the average daily wage is
      Rs 176 or less (esic.gov.in/contribution, reviewed 4 Apr 2025); wage limit Rs 21,000 a month (typed setting: not confirmed from an
      official page on 14 Nov 2026); once covered, an employee stays covered to the end of the contribution period (Apr-Sep, Oct-Mar). */
@@ -152,29 +154,47 @@
     cfg = esiCfg(cfg); var from = N.periodStart(ym);
     return (history || []).some(function (h) { return h.ym >= from && h.ym < ym && num(h.gross) > 0 && num(h.gross) <= cfg.ceil; });
   };
+  /* Sheet rules from ESIC's own "Sample MC Excel Template" (MC_Template1.xls, sheet "Instructions & Reason Codes", read 15 Nov 2026 from
+     the Internet Archive copy of esic.in): every employee mapped to the employer must be in the sheet, also those with no wages (days 0 +
+     a reason code); days are a whole number, fractions rounded UP; the IP name has only letters and spaces; the last working day is given
+     only when days are 0 and the reason is 2, 3, 4, 5, 6 or 10 (it then leaves the employer's list); a reason with no last day leaves it
+     blank; dates DD/MM/YYYY; the file is Excel 97-2003 (.xls) with every column as text. */
+  var LASTDAY = { 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 10: 1 };
+  N.ESI_LASTDAY = LASTDAY;
   /* m: { ip, name, gross, paid (days paid), days, covered, lastDay, reason } */
   N.esiLine = function (m, cfg) {
     cfg = esiCfg(cfg);
     var gross = num(m.gross), paid = num(m.paid), errs = [], ip = String(m.ip || '').replace(/\s/g, '');
     var applies = gross > 0 && (gross <= cfg.ceil || !!m.covered);
-    if (applies && !/^\d{10}$/.test(ip)) errs.push('ip');
+    var hasIp = /^\d{10}$/.test(ip), zero = !(gross > 0);
+    if ((applies || (zero && ip)) && !hasIp) errs.push('ip');
     var daily = paid > 0 ? gross / paid : gross / 26, exempt = daily <= cfg.daily;
     var er = applies ? up(gross * cfg.er / 100) : 0, ee = applies && !exempt ? up(gross * cfg.ee / 100) : 0;
-    var days = Math.round(paid + 1e-9);
-    return { ok: applies && !errs.length, applies: applies, errs: errs, ip: ip, name: String(m.name || '').trim(), days: days, wages: rup(gross), ee: ee, er: er, exempt: applies && exempt,
-      reason: days > 0 ? 0 : (num(m.reason) || ''), lastDay: m.lastDay || '', over: gross > cfg.ceil && !!m.covered };
+    var days = zero ? 0 : Math.max(0, Math.ceil(paid - 1e-9));
+    var name = String(m.name || '').replace(/[^A-Za-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    var inSheet = applies || (zero && hasIp);
+    if (inSheet && !name) errs.push('name');
+    var reason = days > 0 ? 0 : (num(m.reason) || 0);
+    var lastDay = days === 0 && LASTDAY[reason] ? (m.lastDay || '') : '';
+    if (days === 0 && LASTDAY[reason] && !lastDay) errs.push('lastday');
+    return { ok: inSheet && !errs.length, applies: applies, errs: errs, ip: ip, name: name, days: days, wages: rup(gross), ee: ee, er: er, exempt: applies && exempt,
+      reason: reason, lastDay: lastDay, over: gross > cfg.ceil && !!m.covered };
   };
+  /* the headings exactly as in ESIC's template */
+  N.ESI_HEAD = ['IP Number \n(10 Digits)', 'IP Name\n( Only alphabets and space )', 'No of Days for which wages paid/payable during the month', 'Total Monthly Wages',
+    ' Reason Code for Zero workings days(numeric only; provide 0 for all other reasons- Click on the link for reference)', ' Last Working Day\n( Format DD/MM/YYYY  or DD-MM-YYYY)'];
   N.esiRows = function (lines) {
-    var head = ['IP Number', 'IP Name', 'No of Days for which wages paid/payable during the month', 'Total Monthly Wages', 'Reason Code for 0 wages (If Wages* is 0 & Days is 0)', 'Last Working Day (Format DD/MM/YYYY or DD-MM-YYYY)'];
-    return [head].concat(lines.filter(function (l) { return l.ok; }).map(function (l) { return [l.ip, l.name, l.days, l.wages, l.days > 0 ? 0 : l.reason, l.lastDay ? l.lastDay.split('-').reverse().join('/') : '']; }));
+    return [N.ESI_HEAD].concat(lines.filter(function (l) { return l.ok; }).map(function (l) {
+      return [l.ip, l.name, String(l.days), String(l.wages), String(l.days > 0 ? 0 : l.reason), l.lastDay ? l.lastDay.split('-').reverse().join('/') : ''];
+    }));
   };
   N.esiChallan = function (lines) {
     var L = lines.filter(function (l) { return l.applies; }), s = function (k) { return L.reduce(function (a, l) { return a + l[k]; }, 0); };
     return { members: L.length, wages: s('wages'), ee: s('ee'), er: s('er'), total: s('ee') + s('er') };
   };
-  /* reason codes for a month with no wages. NOT confirmed from an ESIC document (the portal's own template lists them): check before upload */
-  N.ESI_REASONS = [[1, 'On leave'], [2, 'Left service'], [3, 'Retired'], [4, 'Out of coverage'], [5, 'Expired'], [6, 'Non implemented area'], [7, 'Compliance by immediate employer'],
-    [8, 'Suspension of work'], [9, 'Strike / lockout'], [10, 'Retrenchment'], [11, 'No work'], [12, 'Does not belong to this employer'], [13, 'Other']];
+  /* reason codes for a month with no wages, as in ESIC's template (0 = no particular reason) */
+  N.ESI_REASONS = [[0, 'Without reason'], [1, 'On leave'], [2, 'Left service'], [3, 'Retired'], [4, 'Out of coverage'], [5, 'Expired'], [6, 'Non implemented area'], [7, 'Compliance by immediate employer'],
+    [8, 'Suspension of work'], [9, 'Strike / lockout'], [10, 'Retrenchment'], [11, 'No work'], [12, 'Does not belong to this employer'], [13, 'Duplicate IP']];
 
   /* ---------- store ---------- */
   N.Store = {
