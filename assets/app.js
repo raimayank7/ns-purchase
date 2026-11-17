@@ -144,11 +144,11 @@
      shows from memory at once and is drawn again only when the stamp changed (owner, 2026-11-11: shortcuts felt stuck) */
   var MEM = null, SIG = '', painted = false, readyFns = [];
   function sigOf(r) {
-    return r.slice(0, 4).map(function (L) { var s = 0; L.forEach(function (x) { s = (s + (x.updated || 0)) % 1e15; }); return L.length + ':' + s; }).join('|') + '|' + JSON.stringify([r[4] || 0, r[5] || 0]);
+    return r.slice(0, 4).map(function (L) { var s = 0; L.forEach(function (x) { s = (s + (x.updated || 0)) % 1e15; }); return L.length + ':' + s; }).join('|') + '|' + JSON.stringify([r[4] || 0, r[5] || 0, r[6] || 0]);
   }
   function whenReady(fn) { if (MEM) fn(); else readyFns.push(fn); }
   function load() {
-    return Promise.all(['biz', 'party', 'item', 'doc'].map(function (s) { return NSStore.list(s); }).concat([NSStore.meta('settings'), NSStore.meta('groups')])).then(function (r) {
+    return Promise.all(['biz', 'party', 'item', 'doc'].map(function (s) { return NSStore.list(s); }).concat([NSStore.meta('settings'), NSStore.meta('groups'), NSStore.meta('followups')])).then(function (r) {
       apply(r);
       var s = sigOf(r), ch = s !== SIG; MEM = r; SIG = s;   /* stamped after apply: its one-time settings copy is part of it */
       readyFns.splice(0).forEach(function (f) { try { f(); } catch (e) {} });
@@ -156,7 +156,7 @@
     });
   }
   function apply(r) {
-      C = { biz: r[0], party: r[1], item: r[2], doc: r[3] }; CFG = r[4] || {}; GRP = r[5] || {};
+      C = { biz: r[0], party: r[1], item: r[2], doc: r[3] }; CFG = r[4] || {}; GRP = r[5] || {}; FU = r[6] || {};
       NS.bizCache = C.biz;
       if (NS.cfgSplit(CFG, C.biz)) NSStore.meta('settings', CFG).catch(function () {});   /* settings per business: one-time copy */
       var RAW = CFG;
@@ -293,6 +293,7 @@
     var tiles = [['today', sales(function (x) { return x === today; }), '#sales'], ['month', sales(function (x) { return x.slice(0, 7) === mon; }), '#sales'],
       ['recv', r2(recv), '#dues'], ['pay', r2(pay), '#dues/pay'], ['cashin', A.cash || 0, '#cash'], ['bank', A.bank || 0, '#cash/bank']];
     var recent = D.filter(function (d) { return B.role(d); }).sort(function (a, b) { return (b.date || '').localeCompare(a.date || '') || (b.updated || 0) - (a.updated || 0); }).slice(0, 8);
+    var cf = cashFlow(D, mon), owe = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return p.bal > 0.004; }).sort(function (a, b) { return b.bal - a.bal; }).slice(0, 5);
     return '<h2>' + esc(T('home')) + ' <small class="soft">' + esc(bizName()) + '</small></h2>' +
       '<div class="tiles">' + tiles.map(function (x) { return '<a href="' + x[2] + '" class="tile' + (x[1] < 0 ? ' neg' : '') + '"><span>' + esc(T(x[0])) + '</span><b>' + money(x[1]) + '</b></a>'; }).join('') + '</div>' +
       /* cash below zero: money went out that never came in, usually the opening cash is missing (round C) */
@@ -303,6 +304,8 @@
       '<div class="card"><h3>' + esc(T('overdue')) + '</h3>' + (bw.length ? '<ul class="rows">' + bw.map(function (b) {
         return '<li><a href="#st/' + encodeURIComponent(key(b.party)) + '"><b>' + esc(b.party) + '</b><span class="soft">' + esc(docName(b)) + ' ' + esc(b.no) + ' · ' + ldate(b.date) + ' · ' + esc(T('days', { n: B.daysBetween(b.date, today) })) + '</span></a><b class="amt">' + money(b.left) + '</b></li>'; }).join('') + '</ul>'
         : '<p class="soft">' + esc(T('nodues')) + '</p>') + '</div>' +
+      '<div class="card"><h3>' + esc(T('d_cf')) + ' <small class="soft">' + esc(bizName()) + '</small></h3><div class="tiles">' + [['d_in', cf.inn], ['d_out', cf.out], ['d_net', cf.net]].map(function (x) { return '<div class="tile' + (x[1] < 0 ? ' neg' : '') + '"><span>' + esc(T(x[0])) + '</span><b>' + money(x[1]) + '</b></div>'; }).join('') + '</div></div>' +
+      '<div class="card"><h3>' + esc(T('d_top')) + '</h3>' + (owe.length ? '<ul class="rows">' + owe.map(function (p) { return '<li><a href="#st/' + encodeURIComponent(p.key) + '"><b>' + esc(p.name) + '</b></a><b class="amt">' + money(p.bal) + '</b></li>'; }).join('') + '</ul><p><a class="link" href="#dues">' + esc(T('dues')) + ' ›</a></p>' : '<p class="soft">' + esc(T('nodues')) + '</p>') + '</div>' +
       HOME.map(function (f) { try { return f() || ''; } catch (e) { return ''; } }).join('') +
       '<div class="card"><h3>' + esc(T('recent')) + '</h3>' + rowsHtml(recent) + '</div>' +
       '<details class="card"><summary><b>' + esc(T('help')) + '</b></summary><p>' + esc(T('helpp')) + '</p><p class="soft">' + esc(T('invfix')) + '</p></details>';
@@ -330,6 +333,7 @@
         CONVERT[ty].map(function (x) { return '<option value="' + x + '">' + esc(T(x === 'invoice' ? 'makeinv' : x === 'so' ? 'makeso' : 'makedc')) + '</option>'; }).join('') + '</select>');
       if (window.NSReuse && ty === 'pbill' && d.kind !== 'return' && d.items && d.items.length) acts.push('<button type="button" class="btn sm" data-reorder="' + d.id + '">' + esc(NS.t('cap.again_order')) + '</button>');
       if (window.NSReuse && /^(invoice|cashmemo)$/.test(ty) && docUrl(d) && d.items && d.items.length) acts.push('<a class="btn sm" href="' + docUrl(d).replace('open=', 'copy=') + '">' + esc(NS.t('cap.again_sale')) + '</a>');
+      if ((ty === 'invoice' || ty === 'cashmemo') && B.partyName(d)) acts.push('<button type="button" class="btn sm wa" data-rowwa="' + d.id + '">' + esc(T('rwa')) + '</button>');
       if (ty === 'exp') acts.push('<button type="button" class="btn sm" data-vprint="' + d.id + '">' + esc(T('print')) + '</button>');
       if (appMade) acts.push('<button type="button" class="btn sm danger" data-del="' + d.id + '">' + esc(T('del')) + '</button>');
       return '<li><div class="ln"><span><b>' + esc(docName(d)) + ' ' + esc(d.no || d.billNo || (ty === 'exp' && d.vno) || '') + '</b> ' + pills + '<span class="soft"> · <span class="nw">' + ldate(d.date) + '</span>' + (B.partyName(d) ? ' · ' + esc(B.partyName(d)) : d.cat ? ' · ' + esc(catName(d.cat)) : '') + '</span></span>' +
@@ -364,6 +368,64 @@
   }
 
   var stFrom = '', stTo = '';
+  /* follow-ups on dues: when a party was last reminded and the date it promised to pay (data home meta 'followups', per business) */
+  var FU = {};
+  function fuKey(k) { return (BIZ && BIZ.id || '') + '|' + k; }
+  function fuGet(k) { return FU[fuKey(k)] || {}; }
+  function fuSet(k, patch) {
+    var o = Object.assign({}, fuGet(k), patch);
+    if (!o.last && !o.promise) delete FU[fuKey(k)]; else FU[fuKey(k)] = o;
+    NSStore.meta('followups', FU).catch(function () {});
+  }
+  function fuLine(k) {
+    var f = fuGet(k), t = NS.today();
+    return (f.last ? '<br><span class="soft fu-l">' + esc(T('fu_last', { d: ldate(f.last) })) + '</span>' : '') +
+      '<br><label class="fu-p"><span class="soft">' + esc(T('fu_promise')) + '</span> <input type="date" data-promise="' + esc(k) + '" value="' + esc(f.promise || '') + '"></label>' +
+      (f.promise && f.promise < t ? ' <span class="b1-warn">' + esc(T('fu_broken')) + '</span>' : '');
+  }
+  function fuBulk(rows) {
+    var sel = $$('[data-fupick]:checked').map(function (c) { return c.getAttribute('data-fupick'); });
+    if (!sel.length) { NS.toast(T('fu_none')); return; }
+    var P = B.parties(mine(), bizName()), dlg = $('#fu-dlg');
+    if (!dlg) { dlg = NS.el('dialog', { id: 'fu-dlg', class: 'bz-dlg', 'aria-label': T('fu_bulk') }); document.body.appendChild(dlg); }
+    dlg.innerHTML = '<h3>' + esc(T('fu_bulk')) + '</h3><p class="soft">' + esc(T('fu_bulkh')) + '</p><ul class="rows">' + sel.map(function (k) {
+      var p = P[k] || { name: k, bal: 0 }, has = phoneOf(k, P);
+      return '<li><div class="ln"><span><b>' + esc(p.name) + '</b></span><b class="amt">' + money(p.bal) + '</b></div><div class="acts">' +
+        (has ? '<button type="button" class="btn sm wa" data-fusend="' + esc(k) + '">' + esc(T('fu_send')) + '</button>' : '<span class="soft">' + esc(T('fu_nophone')) + '</span>') + '</div></li>'; }).join('') +
+      '</ul><div class="btns"><button type="button" class="btn" data-fuclose>' + esc(T('fu_close')) + '</button></div>';
+    dlg.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-fuclose')) { dlg.close(); show(false, true); }
+      else if (b.hasAttribute('data-fusend')) { whatsapp(b.getAttribute('data-fusend')); b.disabled = true; b.textContent = T('fu_sent'); }
+    });
+    if (!dlg.open) dlg.showModal();
+  }
+  function fuWire(pane) {
+    $$('[data-promise]', pane).forEach(function (i) { i.addEventListener('change', function () { fuSet(i.getAttribute('data-promise'), { promise: i.value }); show(false, true); }); });
+    var all = $('[data-fuall]', pane);
+    if (all) all.addEventListener('click', function () {
+      var boxes = $$('[data-fupick]', pane), on = boxes.some(function (c) { return !c.checked; });
+      boxes.forEach(function (c) { c.checked = on && c.hasAttribute('data-late'); });
+    });
+  }
+  /* WhatsApp text for one bill (the bill itself is opened with Open, where Share PDF is) */
+  function rowWa(id) {
+    var d = C.doc.filter(function (x) { return x.id === id; })[0]; if (!d) return;
+    var k = key(B.partyName(d)), P = B.parties(mine(), bizName()), left = leftMap(mine())[id], ph = phoneOf(k, P);
+    var msg = T('rwa_msg', { p: B.partyName(d), n: d.no || docName(d), d: ldate(d.date), b: bizName(), a: money(amountOf(d)), l: left > 0.004 ? T('rwa_left', { l: money(left) }) : '' }) + (BIZ && BIZ.upi && left > 0.004 ? ' ' + NS.t('uf.waupi', { u: BIZ.upi, a: money(left) }) : '');
+    if (ph.length === 10) ph = '91' + ph;
+    if (!ph) NS.toast(T('nophone', { p: B.partyName(d) }));
+    window.open('https://wa.me/' + (ph.length >= 11 ? ph : '') + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');
+  }
+  /* cash and bank movement of a month, contra transfers and opening balances left out */
+  function cashFlow(D, mon) {
+    var o = { inn: 0, out: 0 };
+    B.inBooks(D, bizName()).forEach(function (d) {
+      if (d.type === 'contra' || d.type === 'ob' || (d.date || '').slice(0, 7) !== mon) return;
+      B.postings(d).forEach(function (l) { if (l.a === 'cash' || l.a === 'bank') { o.inn += l.dr; o.out += l.cr; } });
+    });
+    return { inn: r2(o.inn), out: r2(o.out), net: r2(o.inn - o.out) };
+  }
   /* ---------- dues with ageing ---------- */
   function duesHtml() {
     var side = arg === 'pay' ? 'pay' : 'recv', D = mine(), today = NS.today(), R = B.bills(D, bizName());
@@ -380,10 +442,10 @@
     var advs = Object.keys(R.advances).filter(function (k) { return R.advances[k][side] > 0.004; });
     return '<div class="pane-hd"><h2>' + esc(T('dues')) + '</h2><div class="seg" role="group"><a class="btn sm" href="#dues" aria-pressed="' + (side === 'recv') + '">' + esc(T('recv')) + '</a><a class="btn sm" href="#dues/pay" aria-pressed="' + (side === 'pay') + '">' + esc(T('pay')) + '</a></div></div>' +
       '<div class="tiles">' + ['a0', 'a1', 'a2', 'a3'].map(function (x, i) { return '<div class="tile' + (i === 3 && tot[3] ? ' warn' : '') + '"><span>' + rng(esc(T(x))) + '</span><b>' + money(tot[i]) + '</b></div>'; }).join('') + '</div>' +
-      searchBar() + '<div class="tools-row">' + grpSel() + '</div>' +
+      searchBar() + '<div class="tools-row">' + grpSel() + (side === 'recv' && rows.length ? '<button type="button" class="btn sm" data-fuall>' + esc(T('fu_pickall')) + '</button><button type="button" class="btn sm wa" data-fubulk>' + esc(T('fu_bulk')) + '</button>' : '') + '</div>' +
       (rows.length ? '<div class="tbl-wrap"><table class="tbl dues-t"><thead><tr><th>' + esc(T('party')) + '</th>' + ['a0', 'a1', 'a2', 'a3'].map(function (x) { return '<th class="n">' + rng(esc(T(x))) + '</th>'; }).join('') + '<th class="n">' + esc(T('totaldue')) + '</th><th class="n">' + esc(NS.t('b1.late')) + '</th><th></th></tr></thead><tbody>' +
         rows.map(function (r) {
-          return '<tr><th scope="row"><a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v, i) { return '<td class="n' + (v ? '' : ' nil') + '" data-l="' + rng(esc(T('a' + i))) + '">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
+          return '<tr><th scope="row">' + (side === 'recv' && r.phone ? '<input type="checkbox" class="fu-pick" data-fupick="' + esc(r.k) + '"' + (r.late ? ' data-late' : '') + ' aria-label="' + esc(T('fu_pick', { p: r.name })) + '"> ' : '') + '<a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (side === 'recv' ? fuLine(r.k) : '') + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v, i) { return '<td class="n' + (v ? '' : ' nil') + '" data-l="' + rng(esc(T('a' + i))) + '">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
             '<td class="n" data-l="' + esc(T('totaldue')) + '"><b>' + money(r.tot, false) + '</b></td><td class="n' + (r.late ? ' b1-warn' : ' nil') + '" data-l="' + esc(NS.t('b1.late')) + '">' + (r.late ? money(r.late, false) : '—') + '</td><td class="acts">' + (side === 'recv' ? '<button type="button" class="btn sm wa" data-wa="' + esc(r.k) + '">' + esc(T('remind')) + '</button>' : '') +
             '<button type="button" class="btn sm" data-form="' + (side === 'recv' ? 'min' : 'mout') + '" data-party="' + esc(r.name) + '">' + esc(T('recpay')) + '</button></td></tr>'; }).join('') +
         '</tbody></table></div>' : '<p class="soft">' + esc(T('nodues')) + '</p>') +
@@ -467,6 +529,7 @@
       if (src && src.nextNo) { s.value = ''; (NS.ask ? NS.ask(T('convagain', { x: src.nextNo })) : Promise.resolve(confirm(T('convagain', { x: src.nextNo })))).then(function (ok) { if (ok) go(); }); return; }
       go();
     }); });
+    fuWire(pane);
   }
   function onClick(e) {
     var b = e.target.closest('button'); if (!b) return;
@@ -477,6 +540,8 @@
     else if (b.hasAttribute('data-edit')) { var d = C.doc.filter(function (x) { return x.id === b.getAttribute('data-edit'); })[0]; if (d && !(window.NSApp.editX && NSApp.editX(d))) openForm(formOf(d), { rec: d }); }
     else if (b.hasAttribute('data-del')) delRec(b.getAttribute('data-del'));
     else if (b.hasAttribute('data-wa')) whatsapp(b.getAttribute('data-wa'));
+    else if (b.hasAttribute('data-rowwa')) rowWa(b.getAttribute('data-rowwa'));
+    else if (b.hasAttribute('data-fubulk')) fuBulk();
     else if (b.hasAttribute('data-print')) window.print();
     else if (b.hasAttribute('data-vprint')) { var v = C.doc.filter(function (x) { return x.id === b.getAttribute('data-vprint'); })[0]; if (v) printVoucher(v); }
   }
@@ -619,7 +684,9 @@
     var ph = phoneOf(k, P);
     if (ph.length === 10) ph = '91' + ph;
     if (!ph) NS.toast(T('nophone', { p: p.name }));
+    else if (fuGet(k).last === NS.today()) NS.toast(T('fu_again'));
     window.open('https://wa.me/' + (ph.length >= 11 ? ph : '') + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');
+    if (ph) fuSet(k, { last: NS.today() });
   }
 
   /* ---------- forms ---------- */
@@ -1018,6 +1085,16 @@
       var a = e.target.closest && e.target.closest('a[href]');
       if (!a || a.target === '_blank' || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       if (openUrl(a.href)) e.preventDefault();
+    });
+    /* a page shown in the App's frame asks for another page (core.js): open it on an App screen */
+    window.addEventListener('message', function (e) {
+      var u, d = e.data; if (!d || typeof d.nsOpen !== 'string') return;
+      try { u = new URL(d.nsOpen); } catch (er) { return; }
+      var from; try { from = new URL(e.origin); } catch (er) { return; }
+      if (!/(^|\.)niveshsahayak\.in$/.test(from.hostname) && !/^(localhost|127\.0\.0\.1)$/.test(from.hostname)) return;
+      if (!/(^|\.)niveshsahayak\.in$/.test(u.hostname) && !/^(localhost|127\.0\.0\.1)$/.test(u.hostname)) return;
+      if (openUrl(u.href)) return;
+      if (u.origin === location.origin) location.href = u.href; else window.open(u.href, '_blank', 'noopener');   /* an App page with no screen (Help, About...) / another site of ours */
     });
     NSStore.ready().then(route).then(function () { NSStore.persist().catch(function () {}); });
     window.addEventListener('focus', function () { if (cur !== 'do' && !$('dialog[open]')) show(false, true); });

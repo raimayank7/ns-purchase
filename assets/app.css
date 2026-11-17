@@ -447,3 +447,15 @@ html.vch-on body>*:not(.vch-print){display:none!important}
 html.vch-on .vch-print{display:block}
 html.vch-on .vch-print .stsheet{position:static;width:auto;max-width:720px;margin:0 auto;font-size:11.5pt}
 }
+
+/* Party ledger: party switcher and the closed preview */
+.lg-switch{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.lg-switch label{display:flex;align-items:center;gap:6px;flex:1 1 260px;min-width:0}
+.lg-switch input{flex:1;min-width:0}
+.lg-hint{margin:6px 0 14px}
+
+/* Follow-ups on dues, dashboard */
+.fu-p{display:inline-flex;align-items:center;gap:6px;font-size:.85em}
+.fu-p input{max-width:9.5em;padding:2px 4px}
+.fu-pick{width:18px;height:18px;vertical-align:middle;margin-inline-end:4px}
+#fu-dlg{max-width:min(520px,94vw)}

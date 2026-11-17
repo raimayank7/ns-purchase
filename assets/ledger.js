@@ -13,7 +13,7 @@
   var A = window.NSApp; if (!A) return;
   var $ = NS.$, $$ = NS.$$, esc = NS.esc, num = NS.num, money = NS.money, B = NSBooks, key = B.key, T = A.T;
   var VT = ['sales', 'receipts', 'notes', 'purchases', 'payments', 'journal', 'opening'];
-  var view = 'all', types = [], withStmt = true, gtab = 'sum', gside = 'recv', topBy = 'sales';
+  var view = 'all', types = [], shown = false, lastK = null, withStmt = true, gtab = 'sum', gside = 'recv', topBy = 'sales';
 
   /* ---------- shared bits ---------- */
   function presets(today) {
@@ -65,10 +65,16 @@
 
   /* ---------- the party ledger ---------- */
   A.addSection('st', function (k) {
+    if (k !== lastK) { shown = false; lastK = k; restoreView(k); }   /* a different party starts with the preview closed and its own last view */
     var p = partyOf(k), r = A.range(), today = NS.today(), G = A.groups(), g = B.groupTree(G).filter(function (x) { return x.id === A.gidOf(k); })[0];
     var line = p.bal > 0.004 ? T('theyowe', { p: p.name, a: money(p.bal) }) : p.bal < -0.004 ? T('weowe', { p: p.name, a: money(-p.bal) }) : T('settled', { p: p.name });
-    var body = view === 'bills' ? billsSheet(k, p, r) : view === 'letter' ? letterSheets(k, p, r) : ledgerSheet(k, p, r, types);
-    return '<p><a href="#parties" class="link">' + esc(T('back')) + '</a></p><div class="pane-hd"><h2>' + esc(p.name) + (g ? ' <small class="pill">' + esc(A.gname(g)) + '</small>' : '') + '</h2><div class="quick">' +
+    var body = !shown ? '' : view === 'bills' ? billsSheet(k, p, r) : view === 'letter' ? letterSheets(k, p, r) : ledgerSheet(k, p, r, types);
+    var names = partyNames(), ents = A.mine().filter(function (d) { return B.partiesOf(d)[k] && B.role(d) && (d.date || '') >= r[0] && (d.date || '') <= r[1]; }).sort(A.byDate);
+    return '<p><a href="#parties" class="link">' + esc(T('back')) + '</a></p>' +
+      '<div class="tools-row lg-switch"><label><span>' + esc(T('lg_switch')) + '</span> <input type="search" list="lg-parties" data-pswitch placeholder="' + esc(T('lg_switchph')) + '" autocomplete="off" value=""></label>' +
+        '<datalist id="lg-parties">' + names.map(function (x) { return '<option value="' + esc(x.name) + '" label="' + esc(enBal(x.bal)) + '"></option>'; }).join('') + '</datalist>' +
+        '<button type="button" class="btn sm" data-pnext="-1" aria-label="' + esc(T('lg_prev')) + '">&lsaquo;</button><button type="button" class="btn sm" data-pnext="1" aria-label="' + esc(T('lg_next')) + '">&rsaquo;</button></div>' +
+      '<div class="pane-hd"><h2>' + esc(p.name) + (g ? ' <small class="pill">' + esc(A.gname(g)) + '</small>' : '') + '</h2><div class="quick">' +
         (p.bal > 0.004 ? '<button type="button" class="btn wa" data-wa="' + esc(k) + '">' + esc(T('remind')) + '</button>' : '') +
         (p.bal > 0.004 && shareUrl(k) ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(shareUrl(k)) + '">' + esc(NS.t('sh.app.link')) + '</a>' : '') +
         '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button></div></div>' +
@@ -80,12 +86,28 @@
         (types.length ? '<p class="soft">' + esc(T('lg_filtered')) + '</p>' : '') : '') +
       (view === 'bills' ? '<p class="soft">' + esc(T('lg_billsh', { d: A.ldate(r[1]) })) + '</p>' : '') +
       (view === 'letter' ? '<p class="soft">' + esc(T('lg_letterh', { p: p.name, d: A.ldate(r[1]) })) + '</p><label class="chk"><input type="checkbox" data-withst' + (withStmt ? ' checked' : '') + '> ' + esc(T('lg_stmt')) + '</label>' : '') +
-      '<div class="quick lg-acts"><button type="button" class="btn" data-print>' + esc(T('print')) + '</button><button type="button" class="btn" data-lgpdf>' + esc(T('pdf')) + '</button>' +
+      '<h3>' + esc(T('lg_entries')) + ' <small class="soft">(' + ents.length + ')</small></h3>' + A.rowsHtml(ents.slice(0, 100), { left: A.leftMap(A.mine()) }) +
+        (ents.length > 100 ? '<p class="soft">' + esc(T('lg_more', { n: ents.length - 100 })) + '</p>' : '') +
+      '<div class="quick lg-acts"><button type="button" class="btn' + (shown ? '' : ' primary') + '" data-lgprev aria-pressed="' + shown + '">' + esc(T(shown ? 'lg_hideprev' : 'lg_prev_btn')) + '</button>' +
+        (shown ? '<button type="button" class="btn" data-print>' + esc(T('print')) + '</button><button type="button" class="btn" data-lgpdf>' + esc(T('pdf')) + '</button>' : '') +
         (view !== 'letter' ? '<button type="button" class="btn" data-lgxl>' + esc(T('lg_xl')) + '</button><button type="button" class="btn wa" data-lgwa>' + esc(T('lg_wa')) + '</button>' : '') + '</div>' +
-      '<div class="tbl-wrap"><div class="lg-print">' + body + '</div></div>' +
-      '<h3>' + esc(T('recent')) + '</h3>' + A.rowsHtml(A.mine().filter(function (d) { return B.partiesOf(d)[k] && B.role(d); }).sort(A.byDate).slice(0, 30), { left: A.leftMap(A.mine()) });
+      (shown ? '<div class="tbl-wrap"><div class="lg-print">' + body + '</div></div>' : '<p class="soft lg-hint">' + esc(T('lg_prevh')) + '</p>');
   }, function (pane, k) {
-    wirePeriod(pane);
+    wirePeriod(pane); saveView(k);
+    var ps = $('[data-pswitch]', pane), names = partyNames();
+    function goParty(v) {
+      v = String(v || '').trim(); if (!v) return;
+      var hit = names.filter(function (x) { return x.name === v; })[0] || names.filter(function (x) { return key(x.name) === key(v); })[0];
+      if (hit) location.hash = '#st/' + encodeURIComponent(hit.key);
+    }
+    if (ps) { ps.addEventListener('change', function () { goParty(ps.value); }); ps.addEventListener('keydown', function (e) { if (e.key === 'Enter') goParty(ps.value); }); }
+    $$('[data-pnext]', pane).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var i = names.map(function (x) { return x.key; }).indexOf(k), n = +b.getAttribute('data-pnext'); if (!names.length) return;
+        location.hash = '#st/' + encodeURIComponent(names[(i + n + names.length) % names.length].key);
+      });
+    });
+    var pv = $('[data-lgprev]', pane); if (pv) pv.addEventListener('click', function () { shown = !shown; A.show(); });
     $$('[data-lgview]', pane).forEach(function (b) { b.addEventListener('click', function () { view = b.getAttribute('data-lgview'); A.show(); }); });
     $$('[data-vt]', pane).forEach(function (b) {
       b.addEventListener('click', function () {
@@ -103,6 +125,34 @@
     var xb = $('[data-lgxl]', pane); if (xb) xb.addEventListener('click', function () { excel(k, p, r); });
     var wb = $('[data-lgwa]', pane); if (wb) wb.addEventListener('click', function () { waLedger(k, p, r); });
   });
+
+  /* each party remembers the tab and the dates last used on it (this browser only) */
+  function viewStore(k, v) {
+    try {
+      var o = JSON.parse(localStorage.getItem('ns-lg-view') || '{}');
+      if (!v) return o[k] || null;
+      o[k] = v; var ks = Object.keys(o); if (ks.length > 300) delete o[ks[0]];
+      localStorage.setItem('ns-lg-view', JSON.stringify(o));
+    } catch (e) { return null; }
+  }
+  function saveView(k) {
+    var r = A.range(), P = presets(NS.today()), on = Object.keys(P).filter(function (x) { return P[x][0] === r[0] && P[x][1] === r[1]; })[0] || '';
+    viewStore(k, { view: view, preset: on, range: r });
+  }
+  function restoreView(k) {
+    var o = viewStore(k); if (!o) return;
+    if (/^(all|bills|letter)$/.test(o.view)) view = o.view;
+    var p = o.preset && presets(NS.today())[o.preset];
+    if (p) A.range(p[0], p[1]); else if (o.range) A.range(o.range[0], o.range[1]);
+  }
+
+  /* every party of this business, A to Z, for the switcher */
+  function partyNames() {
+    var P = B.parties(A.mine(), A.bizName()), seen = {}, out = [];
+    A.data().party.forEach(function (x) { var k = key(x.name); if (k && !seen[k]) { seen[k] = 1; out.push({ key: k, name: x.name, bal: (P[k] || {}).bal || 0 }); } });
+    Object.keys(P).forEach(function (k) { if (!seen[k]) { seen[k] = 1; out.push({ key: k, name: P[k].name || k, bal: P[k].bal || 0 }); } });
+    return out.sort(function (a, b) { return a.name.localeCompare(b.name); });
+  }
 
   function ledgerSheet(k, p, r, vt) {
     var S = B.ledger(A.mine(), A.bizName(), k, r[0], r[1], vt);
