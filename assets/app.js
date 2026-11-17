@@ -598,7 +598,10 @@
   }
 
   /* ---------- a printed voucher for an expense or a staff advance: the hard copy the receiver signs (owner, 2026-11-11) ---------- */
+  /* shared folder mode, one common series: the number of the document being saved was reserved in the folder just before (see submit) */
+  var PRE = null;
   function vnoNext(date) {
+    if (PRE && PRE.k === 'vno') return PRE.no;
     var fy = NS.fy(date), short = fy.slice(2, 4) + '-' + fy.slice(5), c = CFG.exp || {}, digits = Math.min(6, Math.max(1, +((CFG.invoice || {}).digits) || 3)), max = 0;
     var pre = String(c.prefix != null && c.prefix !== '' ? c.prefix : 'EXP').replace(/[^A-Za-z0-9\/\-]/g, '');
     mine().forEach(function (d) { if (d.type !== 'exp' || NS.fy(d.date) !== fy) return; var m = String(d.vno || '').match(/(\d+)\s*$/); if (m) max = Math.max(max, +m[1]); });
@@ -702,6 +705,7 @@
     return '<datalist id="dl-party">' + out.sort().map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>';
   }
   function nextNo(type, pre, date) {
+    if (PRE && PRE.k === type) return PRE.no;
     var fy = NS.fy(date), short = fy.slice(2, 4) + '-' + fy.slice(5), c = CFG[type] || {}, digits = Math.min(6, Math.max(1, +((CFG.invoice || {}).digits) || 3)), max = 0;
     pre = String(c.prefix != null && c.prefix !== '' ? c.prefix : pre).replace(/[^A-Za-z0-9\/\-]/g, '');
     mine().forEach(function (d) { if (d.type !== type || NS.fy(d.date) !== fy) return; var m = String(d.no || '').match(/(\d+)\s*$/); if (m) max = Math.max(max, +m[1]); });
@@ -711,7 +715,7 @@
   var andPrint = false;
   function openForm(kind, o) {
     o = o || {};
-    if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); andPrint = !!(e.submitter && e.submitter.hasAttribute('data-andprint')); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); }
+    if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); andPrint = !!(e.submitter && e.submitter.hasAttribute('data-andprint')); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); dlg.addEventListener('close', function () { PRE = null; NSStore.sfRelease(); }); }
     var rec = o.rec || null, today = NS.today(), h = '';
     F = { kind: kind, rec: rec, forId: o.forId, biz: bizName() };
     var forDoc = o.forId && C.doc.filter(function (d) { return d.id === o.forId; })[0];
@@ -935,7 +939,32 @@
     $('[data-advleft]', form).textContent = x > 0.004 && $('#f-party', form).value.trim() ? T('advleft', { a: money(x) }) : '';
   }
 
+  function reserveNo(type, pre, date) {
+    var fy = NS.fy(date), short = fy.slice(2, 4) + '-' + fy.slice(5), isV = type === 'vno', c = isV ? (CFG.exp || {}) : (CFG[type] || {}), nos = [];
+    var digits = Math.min(6, Math.max(1, +((CFG.invoice || {}).digits) || 3));
+    pre = String(c.prefix != null && c.prefix !== '' ? c.prefix : pre).replace(/[^A-Za-z0-9\/\-]/g, '');
+    mine().forEach(function (d) {
+      if ((isV ? d.type !== 'exp' : d.type !== type) || NS.fy(d.date) !== fy) return;
+      var n = isV ? d.vno : d.no, m = String(n || '').match(/(\d+)\s*$/); if (m) nos.push(n);
+    });
+    /* the scope is written like the makers' (slip.js, docs.js), so the App and the maker share one series */
+    var scope = type === 'cashmemo' ? key(bizName()) : (isV ? 'exp' : type) + '|' + key(bizName()) + '|';
+    return NSStore.sfClaim({ scope: scope, prefix: (pre ? pre + '/' : '') + short + '/', digits: digits, nos: nos });
+  }
   function submit() {
+    var k = F.kind, plan = null, date = $('#f-date', form) ? $('#f-date', form).value : '', md = $('#f-mode', form);
+    if (date && F.biz === bizName()) {
+      if (k === 'mout' && !F.rec) plan = ['voucher', 'PV'];
+      else if (k === 'min' && !F.rec) plan = ['receipt', 'RCT'];
+      else if (k === 'pbill' && !F.rec && !(md && md.value === 'credit')) plan = ['voucher', 'PV'];
+      else if (k === 'csale' && !F.rec) plan = ['cashmemo', 'CM'];
+      else if (k === 'exp' && !(F.rec && F.rec.vno)) plan = ['vno', 'EXP'];
+    }
+    PRE = null;
+    if (!plan) return submitNow();
+    return reserveNo(plan[0], plan[1], date).then(function (no) { PRE = no ? { k: plan[0], no: no } : null; submitNow(); });
+  }
+  function submitNow() {
     if (F.biz !== bizName()) { NS.toast(NS.t('ux.bizmoved', { b: bizName() }), 'bad'); dlg.close(); show(); return; }   /* never save under a business the form did not show */
     var k = F.kind, miss = $$('[required]', form).filter(function (i) { return !String(i.value).trim(); });
     if (miss.length) { NS.toast(T('need', { f: miss.map(function (i) { return $('label[for="' + i.id + '"]', form).textContent; }).join(', ') }), 'bad'); miss[0].focus(); return; }
@@ -1019,7 +1048,7 @@
       return savePartyRole(party, d.side === 'pay' ? 'supplier' : 'customer').then(function () { return NSStore.put('doc', d); }).then(done);
     }
   }
-  function done() { dlg.close(); NS.toast(T('saved')); NS.checkReminder && NS.checkReminder(); show(); }
+  function done() { PRE = null; dlg.close(); NS.toast(T('saved')); NS.checkReminder && NS.checkReminder(); show(); }
   function savePartyRole(name, want, extra) {
     if (!name) return Promise.resolve();
     var hit = C.party.filter(function (x) { return key(x.name) === key(name); })[0];
