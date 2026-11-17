@@ -51,9 +51,9 @@
     return '<div class="seg" role="group">' + list.map(function (x) { return '<button type="button" class="btn sm" data-' + name + '="' + x[0] + '" aria-pressed="' + (x[0] === on) + '">' + esc(x[1]) + '</button>'; }).join('') + '</div>';
   }
   /* PDF of the printable pages: a copy in paper colours, so a dark screen still gives a white page */
-  function pdf(pane, name, title) {
+  function pdf(pane, name, title, phone) {
     var nodes = $$('.lg-print > .stsheet', pane).map(function (n) { var c = n.cloneNode(true); c.classList.add('lg-paper'); return c; });
-    NS.sharePdf(nodes, name, 'a4', title, '');
+    NS.sharePdf(nodes, name, 'a4', title, '', { phone: phone });
   }
 
   /* link to the Share maker (share.niveshsahayak.in) with this party chosen: a snapshot link or file for the customer (platform group P3) */
@@ -120,7 +120,7 @@
     var ws = $('[data-withst]', pane); if (ws) ws.addEventListener('change', function () { withStmt = ws.checked; A.show(); });
     var p = partyOf(k), r = A.range();
     var pb = $('[data-lgpdf]', pane); if (pb) pb.addEventListener('click', function () {
-      pdf(pane, (view === 'letter' ? 'Balance confirmation ' : view === 'bills' ? 'Bill-wise ' : 'Ledger ') + p.name + ' ' + r[1], view === 'letter' ? 'Balance confirmation' : 'Party ledger');
+      pdf(pane, (view === 'letter' ? 'Balance confirmation ' : view === 'bills' ? 'Bill-wise ' : 'Ledger ') + p.name + ' ' + r[1], view === 'letter' ? 'Balance confirmation' : 'Party ledger', A.phoneOf(k));
     });
     var xb = $('[data-lgxl]', pane); if (xb) xb.addEventListener('click', function () { excel(k, p, r); });
     var wb = $('[data-lgwa]', pane); if (wb) wb.addEventListener('click', function () { waLedger(k, p, r); });
@@ -243,11 +243,11 @@
   A.addSection('grp', function () {
     var G = A.groups(), sel = A.grp(), r = A.range(), today = NS.today(), D = A.mine(), biz = A.bizName(), P = B.parties(D, biz);
     var gid = function (k) { return A.gidOf(k, P); }, own = B.groupsOf(G, 'party').length;
-    var hd = '<div class="pane-hd"><h2>' + esc(T('grp')) + '</h2>' + seg('gtab', [['sum', T('lg_sum')], ['out', T('lg_out')], ['top', T('lg_top')]], gtab) + '</div>' +
-      '<div class="tools-row">' + A.grpSel() + (gtab === 'out' ? seg('gside', [['recv', T('recv')], ['pay', T('pay')]], gside) : gtab === 'top' ? '<label><span>' + esc(T('lg_by')) + '</span> <select data-topby>' +
+    var hd = '<div class="pane-hd"><h2>' + esc(T('grp')) + '</h2>' + seg('gtab', [['sum', T('lg_sum')], ['out', T('lg_out')], ['top', T('lg_top')]].concat(A.routeBody ? [['route', NS.t('rtb.tab')]] : []), gtab) + '</div>' +
+      '<div class="tools-row">' + A.grpSel() + (A.routeSel ? A.routeSel() : '') + ((gtab === 'out' || gtab === 'route') ? seg('gside', [['recv', T('recv')], ['pay', T('pay')]], gside) : gtab === 'top' ? '<label><span>' + esc(T('lg_by')) + '</span> <select data-topby>' +
         ['sales', 'buys', 'recv', 'pay'].map(function (x) { return '<option value="' + x + '"' + (x === topBy ? ' selected' : '') + '>' + esc(T('lg_by_' + x)) + '</option>'; }).join('') + '</select></label>' : '') + '</div>' +
-      (gtab !== 'out' ? period() : '') +
-      '<p class="soft">' + esc(T('lg_' + gtab + 'h')) + '</p>' +
+      (gtab !== 'out' && gtab !== 'route' ? period() : '') +
+      '<p class="soft">' + esc(gtab === 'route' ? NS.t('rtb.h_tab') : T('lg_' + gtab + 'h')) + '</p>' +
       '<div class="quick lg-acts"><button type="button" class="btn" data-print>' + esc(T('print')) + '</button><button type="button" class="btn" data-lgpdf>' + esc(T('pdf')) + '</button><button type="button" class="btn" data-gxl>' + esc(T('lg_xl')) + '</button></div>';
     var bal = function (v) { return money(Math.abs(v), false) + (v > 0.004 ? ' ' + T('dr') : v < -0.004 ? ' ' + T('cr') : ''); }, body = '';
     if (gtab === 'sum') {
@@ -269,6 +269,8 @@
           return '<tr' + (g.depth ? '' : ' class="lg-gt"') + '><th scope="row"' + pad(g.depth) + '><a href="#dues' + (gside === 'pay' ? '/pay' : '') + '" data-gopen="' + esc(g.id) + '">' + esc(A.gname(g)) + '</a></th>' +
             a.map(function (v) { return '<td class="n">' + (v ? money(v, false) : '—') + '</td>'; }).join('') + '<td class="n"><b>' + money(gside === 'pay' ? g.pt : g.rt, false) + '</b></td></tr>';
         }, function () { return ''; }) + '</tbody></table><p class="soft">' + esc(T('lg_outsub')) + '</p>' : '<p class="soft">' + esc(T('nodues')) + '</p>';
+    } else if (gtab === 'route') {
+      body = A.routeBody(gside, dueBills(D, biz), today, P);
     } else {
       var M = B.partyMoves(D, biz, topBy === 'recv' || topBy === 'pay' ? '' : r[0], r[1]), gm = {}; B.groupTree(G).forEach(function (g) { gm[g.id] = g; });
       var top = B.topParties(M, topBy, 20, function (k) { return A.grpKeep(k, P); });
@@ -276,16 +278,16 @@
         top.map(function (x, i) { var g = gm[gid(x.key)]; return '<tr><td class="n">' + (i + 1) + '</td><td><a href="#st/' + encodeURIComponent(x.key) + '">' + esc(x.name) + '</a></td><td>' + (g ? esc(A.gname(g)) : '') + '</td><td class="n">' + money(x.value, false) + '</td></tr>'; }).join('') +
         '</tbody></table>' : '<p class="soft">' + esc(T('none')) + '</p>';
     }
-    var sub = gtab === 'out' ? T(gside) + ' · ' + A.ldate(today) : A.ldate(r[0]) + ' – ' + A.ldate(r[1]);
+    var sub = gtab === 'out' || gtab === 'route' ? T(gside) + ' · ' + A.ldate(today) : A.ldate(r[0]) + ' – ' + A.ldate(r[1]);
     return hd + (own ? '' : '<p class="note">' + esc(T('lg_nogroups')) + ' <a href="' + A.myUrl('#party') + '">' + esc(NS.t('my.t.party')) + ' ›</a></p>') +
-      '<div class="tbl-wrap"><div class="lg-print"><div class="stsheet sh lg-rep" data-sheet>' + bizHead(T('lg_' + gtab), '<br>' + esc(sub) + (sel ? '<br>' + esc(T('lg_group')) + ': ' + esc(A.gname(B.groupTree(G).filter(function (g) { return g.id === sel; })[0] || { id: sel, name: sel })) : '')) + body + '</div></div></div>';
+      '<div class="tbl-wrap"><div class="lg-print"><div class="stsheet sh lg-rep" data-sheet>' + bizHead(gtab === 'route' ? NS.t('rtb.tab') : T('lg_' + gtab), '<br>' + esc(sub) + (sel ? '<br>' + esc(T('lg_group')) + ': ' + esc(A.gname(B.groupTree(G).filter(function (g) { return g.id === sel; })[0] || { id: sel, name: sel })) : '')) + body + '</div></div></div>';
   }, function (pane) {
     wirePeriod(pane);
     $$('[data-gtab]', pane).forEach(function (b) { b.addEventListener('click', function () { gtab = b.getAttribute('data-gtab'); A.show(); }); });
     $$('[data-gside]', pane).forEach(function (b) { b.addEventListener('click', function () { gside = b.getAttribute('data-gside'); A.show(); }); });
     var tb = $('[data-topby]', pane); if (tb) tb.addEventListener('change', function () { topBy = tb.value; A.show(); });
     $$('[data-gopen]', pane).forEach(function (a) { a.addEventListener('click', function () { A.grp(a.getAttribute('data-gopen')); }); });
-    var pb = $('[data-lgpdf]', pane); if (pb) pb.addEventListener('click', function () { pdf(pane, T('lg_' + gtab) + ' ' + A.range()[1], T('lg_' + gtab)); });
+    var pb = $('[data-lgpdf]', pane); if (pb) pb.addEventListener('click', function () { pdf(pane, (gtab === 'route' ? NS.t('rtb.tab') : T('lg_' + gtab)) + ' ' + A.range()[1], gtab === 'route' ? NS.t('rtb.tab') : T('lg_' + gtab)); });
     var xb = $('[data-gxl]', pane); if (xb) xb.addEventListener('click', groupExcel);
   });
   /* open bills with the party's credit days applied (as on the Dues screen), so ageing counts from the due date */
@@ -317,7 +319,7 @@
         top.push([{ sales: 'Sales', buys: 'Purchases', recv: 'They owe us', pay: 'We owe them' }[by], x.name, en(gm[gid(x.key)] || { id: 'debtors' }), x.value]);
       });
     });
-    NS.xlsx(fileName(biz) + '-group-reports-' + r[0] + '-to-' + r[1] + '.xlsx', [{ name: 'Group summary', rows: sum }, { name: 'Outstanding receivable', rows: out('recv') }, { name: 'Outstanding payable', rows: out('pay') }, { name: 'Top parties', rows: top }]);
+    NS.xlsx(fileName(biz) + '-group-reports-' + r[0] + '-to-' + r[1] + '.xlsx', [{ name: 'Group summary', rows: sum }, { name: 'Outstanding receivable', rows: out('recv') }, { name: 'Outstanding payable', rows: out('pay') }, { name: 'Top parties', rows: top }].concat(A.routeRows ? [{ name: 'Route-wise receivable', rows: A.routeRows('recv', dueBills(D, biz), today, P) }, { name: 'Route-wise payable', rows: A.routeRows('pay', dueBills(D, biz), today, P) }] : []));
   }
 
   /* the menu link (the full App only; door sites keep their own short menu) */

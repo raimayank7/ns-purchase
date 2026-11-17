@@ -28,6 +28,8 @@
   NEWDOCS.push(['clinic', 'visit', 'nav.clinic'], ['salon', 'svc', 'nav.salon']);
   NEWDOCS.push(['jewellery', 'jewel', 'nav.jewellery'], ['garment', 'garment', 'nav.garment']);
   NEWDOCS.push(['mandi', 'mandi', 'nav.mandi'], ['petrol', 'pump', 'nav.petrol']); KITSITE.mandi = 'mandi'; KITSITE.pump = 'petrol';
+  NEWDOCS.push(['dairy', 'dairy', 'nav.dairy'], ['subscribers', 'subs', 'nav.subs']); KITSITE.dairy = 'dairy'; KITSITE.subs = 'subscribers';   /* India plan B */
+  NEWDOCS.push(['tripsheet', 'tsh', 'nav.tripsheet']); KITSITE.tsh = 'tripsheet';   /* India plan C */
   /* every Nivesh Sahayak site the App knows (build.py INAPP_MAP): [host, local port, how it opens, name key].
      'twin' = the App's own copy of the maker (or My data) at /do/<site>/, same engine and data home, shown on an App screen;
      '#<section>' = a door site whose screens the App has itself; 'frame' = any other site, only its content, in the App's frame */
@@ -187,7 +189,8 @@
   }
   var KITNAME = { pos: 'nav.pos', pharma: 'nav.pharmacy', resto: 'nav.restaurant', lr: 'nav.bilty', rabill: 'nav.contractorbill' };
   KITNAME.jewel = 'nav.jewellery'; KITNAME.garment = 'nav.garment';
-  KITNAME.mandi = 'nav.mandi'; KITNAME.pump = 'nav.petrol';
+  KITNAME.dairy = 'nav.dairy'; KITNAME.subs = 'nav.subs';   /* India plan B */
+  KITNAME.mandi = 'nav.mandi'; KITNAME.pump = 'nav.petrol'; KITNAME.tsh = 'nav.tripsheet';
   function ldate(iso) { return NS.fmtDate(iso); }
   /* expense heads: a head picked from the list is saved as its code (rent) or English name, never as the words of the screen
      language, so one head is one ledger whatever language it was typed in; shown in the screen language (round C) */
@@ -442,10 +445,10 @@
     var advs = Object.keys(R.advances).filter(function (k) { return R.advances[k][side] > 0.004; });
     return '<div class="pane-hd"><h2>' + esc(T('dues')) + '</h2><div class="seg" role="group"><a class="btn sm" href="#dues" aria-pressed="' + (side === 'recv') + '">' + esc(T('recv')) + '</a><a class="btn sm" href="#dues/pay" aria-pressed="' + (side === 'pay') + '">' + esc(T('pay')) + '</a></div></div>' +
       '<div class="tiles">' + ['a0', 'a1', 'a2', 'a3'].map(function (x, i) { return '<div class="tile' + (i === 3 && tot[3] ? ' warn' : '') + '"><span>' + rng(esc(T(x))) + '</span><b>' + money(tot[i]) + '</b></div>'; }).join('') + '</div>' +
-      (window.NSApp && NSApp.duesExtra ? NSApp.duesExtra(side) : '') + searchBar() + '<div class="tools-row">' + grpSel() + (side === 'recv' && rows.length ? '<button type="button" class="btn sm" data-fuall>' + esc(T('fu_pickall')) + '</button><button type="button" class="btn sm wa" data-fubulk>' + esc(T('fu_bulk')) + '</button>' : '') + '</div>' +
+      (window.NSApp && NSApp.duesExtra ? NSApp.duesExtra(side) : '') + searchBar() + '<div class="tools-row">' + grpSel() + (window.NSApp && NSApp.routeSel ? NSApp.routeSel() : '') + (side === 'recv' && rows.length ? '<button type="button" class="btn sm" data-fuall>' + esc(T('fu_pickall')) + '</button><button type="button" class="btn sm wa" data-fubulk>' + esc(T('fu_bulk')) + '</button>' : '') + '</div>' +
       (rows.length ? '<div class="tbl-wrap"><table class="tbl dues-t"><thead><tr><th>' + esc(T('party')) + '</th>' + ['a0', 'a1', 'a2', 'a3'].map(function (x) { return '<th class="n">' + rng(esc(T(x))) + '</th>'; }).join('') + '<th class="n">' + esc(T('totaldue')) + '</th><th class="n">' + esc(NS.t('b1.late')) + '</th><th></th></tr></thead><tbody>' +
         rows.map(function (r) {
-          return '<tr><th scope="row">' + (side === 'recv' && r.phone ? '<input type="checkbox" class="fu-pick" data-fupick="' + esc(r.k) + '"' + (r.late ? ' data-late' : '') + ' aria-label="' + esc(T('fu_pick', { p: r.name })) + '"> ' : '') + '<a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (side === 'recv' ? fuLine(r.k) : '') + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v, i) { return '<td class="n' + (v ? '' : ' nil') + '" data-l="' + rng(esc(T('a' + i))) + '">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
+          return '<tr><th scope="row">' + (side === 'recv' && r.phone ? '<input type="checkbox" class="fu-pick" data-fupick="' + esc(r.k) + '"' + (r.late ? ' data-late' : '') + ' aria-label="' + esc(T('fu_pick', { p: r.name })) + '"> ' : '') + '<a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (window.NSApp && NSApp.routeTag ? NSApp.routeTag(r.k) : '') + (side === 'recv' ? fuLine(r.k) : '') + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v, i) { return '<td class="n' + (v ? '' : ' nil') + '" data-l="' + rng(esc(T('a' + i))) + '">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
             '<td class="n" data-l="' + esc(T('totaldue')) + '"><b>' + money(r.tot, false) + '</b></td><td class="n' + (r.late ? ' b1-warn' : ' nil') + '" data-l="' + esc(NS.t('b1.late')) + '">' + (r.late ? money(r.late, false) : '—') + '</td><td class="acts">' + (side === 'recv' ? '<button type="button" class="btn sm wa" data-wa="' + esc(r.k) + '">' + esc(T('remind')) + '</button>' : '') +
             '<button type="button" class="btn sm" data-form="' + (side === 'recv' ? 'min' : 'mout') + '" data-party="' + esc(r.name) + '">' + esc(T('recpay')) + '</button></td></tr>'; }).join('') +
         '</tbody></table></div>' : '<p class="soft">' + esc(T('nodues')) + '</p>') +
@@ -465,7 +468,7 @@
       .sort(function (a, b) { return Math.abs(b.bal) - Math.abs(a.bal); });
     var gmap = {}; B.groupTree(GRP).forEach(function (g) { gmap[g.id] = g; });
     return '<div class="pane-hd"><h2>' + esc(T('parties')) + '</h2><div class="quick">' + (DOOR ? '' : '<a class="btn" href="#grp">' + esc(T('grp')) + '</a>') + '<a class="btn" href="' + myUrl('#party') + '">' + esc(NS.t('my.t.party')) + ' ›</a></div></div>' + searchBar() +
-      '<div class="tools-row">' + grpSel() + '</div>' +
+      '<div class="tools-row">' + grpSel() + (window.NSApp && NSApp.routeSel ? NSApp.routeSel() : '') + '</div>' +
       (list.length ? '<ul class="rows">' + list.map(function (p) {
         var g = gmap[gidOf(p.key, P)];
         return '<li><a href="#st/' + encodeURIComponent(p.key) + '"><b>' + esc(p.name) + '</b><span class="soft">' + (g ? esc(gname(g)) + ' · ' : '') + esc(NS.t(p.bal > 0.004 ? 'ux.p.recv' : p.bal < -0.004 ? 'ux.p.pay' : 'ux.p.nil')) + '</span></a>' +
@@ -482,14 +485,14 @@
   }
   /* built-in names: My data's words (grp.debtors / grp.creditors from ns-groups) when that pack has them, else the App's own */
   function gname(g) { if (!(g.builtin || B.BUILTIN[g.id])) return g.name; var k = 'grp.' + g.id, w = NS.t(k); return w !== k ? w : T('lg_g_' + g.id); }
-  function grpKeep(k, P) { return !grp || B.inGroup(gidOf(k, P), grp, GRP); }
+  function grpKeep(k, P) { return (!grp || B.inGroup(gidOf(k, P), grp, GRP)) && (!window.NSApp || !NSApp.routeKeep || NSApp.routeKeep(k)); }   /* route filter: route.js */
   /* group filter: All, Customers and its groups, Suppliers and its groups (sub-groups indented) */
   function grpSel() {
     return '<label class="lg-gsel"><span>' + esc(T('lg_group')) + '</span> <select data-grp><option value="">' + esc(T('all')) + '</option>' + B.groupTree(GRP).map(function (g) {
       return '<option value="' + esc(g.id) + '"' + (g.id === grp ? ' selected' : '') + '>' + new Array(g.depth + 1).join('\u2003') + esc(gname(g)) + '</option>'; }).join('') + '</select></label>';
   }
   /* the statement is printed in English like every document */
-  var ENDOC = { advadj: 'GST on advance adjusted', jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice', oinc: 'Other income', taxpay: 'Tax paid', gstset: 'GST set-off', wo: 'Write-off', pdd: 'Provision for doubtful debts' };
+  var ENDOC = { advadj: 'GST on advance adjusted', jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice', oinc: 'Other income', don: 'Donation or subscription received', taxpay: 'Tax paid', gstset: 'GST set-off', wo: 'Write-off', pdd: 'Provision for doubtful debts' };
   function enName(d) {
     var ty = d.type || 'invoice';
     return ENDOC[ty === 'note' ? d.kind : ty === 'receipt' && d.kind !== 'pay' ? d.kind : ty === 'pbill' && d.kind === 'return' ? 'pret' : ty] || ty;
@@ -896,7 +899,7 @@
   function billFromForm() {
     var d = { type: 'pbill', kind: F.kind === 'pret' ? 'return' : 'bill', seller: sellerCopy(), buyer: { name: $('#f-party', form).value.trim(), gstin: $('#f-gstin', form).value.trim().toUpperCase(), state: $('#f-state', form).value },
       no: $('#f-no', form).value.trim(), date: $('#f-date', form).value, noGst: $('#f-nogst', form).checked, round: $('#f-round', form).checked, photo: F.photo || '',
-      items: F.lines.filter(function (L) { return String(L.desc).trim() || num(L.rate); }).map(function (L) { var it = { desc: String(L.desc).trim(), hsn: String(L.hsn || '').trim(), qty: L.qty === '' ? 1 : num(L.qty), unit: 'Nos', rate: num(L.rate), gst: num(L.gst) }; return window.NSApp.lineCopy ? NSApp.lineCopy(L, it) : it; }) };
+      items: F.lines.filter(function (L) { return String(L.desc).trim() || num(L.rate); }).map(function (L) { var it = { desc: String(L.desc).trim(), hsn: String(L.hsn || '').trim(), qty: L.qty === '' ? 1 : num(L.qty), unit: L.unit || 'Nos', rate: num(L.rate), gst: num(L.gst) };   /* L.unit: set by weigh.js when a weight was typed */ return window.NSApp.lineCopy ? NSApp.lineCopy(L, it) : it; }) };
     if ($('#f-gd', form)) d.gd = $('#f-gd', form).value;
     if ($('#f-due', form)) d.due = $('#f-due', form).value; else d.orig = { no: $('#f-orig', form).value.trim() };
     var t = B.itemTotals(d), total = r2(t.taxable + t.cgst + t.sgst + t.igst);   /* IGST when the supplier's state differs from ours */

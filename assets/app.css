@@ -459,3 +459,7 @@ html.vch-on .vch-print .stsheet{position:static;width:auto;max-width:720px;margi
 .fu-p input{max-width:9.5em;padding:2px 4px}
 .fu-pick{width:18px;height:18px;vertical-align:middle;margin-inline-end:4px}
 #fu-dlg{max-width:min(520px,94vw)}
+/* India plan E: switch-over import */
+.sw-how{font-size:.88rem}.sw-list{margin:10px 0;padding:10px 12px}.sw-list summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.sw-ctl{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:10px 0}.sw-ctl input[type=number]{width:5em}
+.sw-map{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}.sw-f{display:flex;flex-direction:column;gap:2px;font-size:.85rem;min-width:0}.sw-f select{min-width:0;max-width:100%}.sw-f.req span{font-weight:700}
+.sw-opts{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin:10px 0;padding:10px 12px}.sw-tiles{margin:10px 0}.sw-last{margin:10px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
