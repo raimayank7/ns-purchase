@@ -249,7 +249,7 @@
       wire(pane); wireSample(pane);
       if (EXT[cur] && EXT[cur].wire) EXT[cur].wire(pane, arg);
       /* no sponsored card where a document is made or printed (statement, ledger, books, reports): the Support page promise */
-      document.documentElement.classList.toggle('no-sponsor', !!$('[data-print], [data-b2print], [data-m-print], [data-lgpdf], [data-sheet], .stsheet', pane));
+      document.documentElement.classList.toggle('no-sponsor', !!$('[data-nosp], [data-print], [data-b2print], [data-m-print], [data-lgpdf], [data-sheet], .stsheet', pane));
       if (focus) { var h2 = $('h2', pane); if (h2) { h2.tabIndex = -1; h2.focus({ preventScroll: true }); } }
   }
   function labels() {
@@ -442,7 +442,7 @@
     var advs = Object.keys(R.advances).filter(function (k) { return R.advances[k][side] > 0.004; });
     return '<div class="pane-hd"><h2>' + esc(T('dues')) + '</h2><div class="seg" role="group"><a class="btn sm" href="#dues" aria-pressed="' + (side === 'recv') + '">' + esc(T('recv')) + '</a><a class="btn sm" href="#dues/pay" aria-pressed="' + (side === 'pay') + '">' + esc(T('pay')) + '</a></div></div>' +
       '<div class="tiles">' + ['a0', 'a1', 'a2', 'a3'].map(function (x, i) { return '<div class="tile' + (i === 3 && tot[3] ? ' warn' : '') + '"><span>' + rng(esc(T(x))) + '</span><b>' + money(tot[i]) + '</b></div>'; }).join('') + '</div>' +
-      searchBar() + '<div class="tools-row">' + grpSel() + (side === 'recv' && rows.length ? '<button type="button" class="btn sm" data-fuall>' + esc(T('fu_pickall')) + '</button><button type="button" class="btn sm wa" data-fubulk>' + esc(T('fu_bulk')) + '</button>' : '') + '</div>' +
+      (window.NSApp && NSApp.duesExtra ? NSApp.duesExtra(side) : '') + searchBar() + '<div class="tools-row">' + grpSel() + (side === 'recv' && rows.length ? '<button type="button" class="btn sm" data-fuall>' + esc(T('fu_pickall')) + '</button><button type="button" class="btn sm wa" data-fubulk>' + esc(T('fu_bulk')) + '</button>' : '') + '</div>' +
       (rows.length ? '<div class="tbl-wrap"><table class="tbl dues-t"><thead><tr><th>' + esc(T('party')) + '</th>' + ['a0', 'a1', 'a2', 'a3'].map(function (x) { return '<th class="n">' + rng(esc(T(x))) + '</th>'; }).join('') + '<th class="n">' + esc(T('totaldue')) + '</th><th class="n">' + esc(NS.t('b1.late')) + '</th><th></th></tr></thead><tbody>' +
         rows.map(function (r) {
           return '<tr><th scope="row">' + (side === 'recv' && r.phone ? '<input type="checkbox" class="fu-pick" data-fupick="' + esc(r.k) + '"' + (r.late ? ' data-late' : '') + ' aria-label="' + esc(T('fu_pick', { p: r.name })) + '"> ' : '') + '<a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (side === 'recv' ? fuLine(r.k) : '') + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v, i) { return '<td class="n' + (v ? '' : ' nil') + '" data-l="' + rng(esc(T('a' + i))) + '">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
@@ -602,7 +602,7 @@
     var fy = NS.fy(date), short = fy.slice(2, 4) + '-' + fy.slice(5), c = CFG.exp || {}, digits = Math.min(6, Math.max(1, +((CFG.invoice || {}).digits) || 3)), max = 0;
     var pre = String(c.prefix != null && c.prefix !== '' ? c.prefix : 'EXP').replace(/[^A-Za-z0-9\/\-]/g, '');
     mine().forEach(function (d) { if (d.type !== 'exp' || NS.fy(d.date) !== fy) return; var m = String(d.vno || '').match(/(\d+)\s*$/); if (m) max = Math.max(max, +m[1]); });
-    return (pre ? pre + '/' : '') + short + '/' + String(max + 1).padStart(digits, '0');
+    return (pre ? pre + '/' : '') + short + '/' + (function () { try { return localStorage.getItem('ns-sf-tag') || ''; } catch (e) { return ''; } })() + String(max + 1).padStart(digits, '0');
   }
   var ENMODE = { cash: 'Cash', upi: 'UPI', cheque: 'Cheque', bank: 'Bank transfer', card: 'Card', dd: 'Demand draft', other: 'Other', credit: 'On credit (not paid yet)' };
   function voucherSheet(d) {
@@ -705,7 +705,7 @@
     var fy = NS.fy(date), short = fy.slice(2, 4) + '-' + fy.slice(5), c = CFG[type] || {}, digits = Math.min(6, Math.max(1, +((CFG.invoice || {}).digits) || 3)), max = 0;
     pre = String(c.prefix != null && c.prefix !== '' ? c.prefix : pre).replace(/[^A-Za-z0-9\/\-]/g, '');
     mine().forEach(function (d) { if (d.type !== type || NS.fy(d.date) !== fy) return; var m = String(d.no || '').match(/(\d+)\s*$/); if (m) max = Math.max(max, +m[1]); });
-    return (pre ? pre + '/' : '') + short + '/' + String(max + 1).padStart(digits, '0');
+    return (pre ? pre + '/' : '') + short + '/' + (function () { try { return localStorage.getItem('ns-sf-tag') || ''; } catch (e) { return ''; } })() + String(max + 1).padStart(digits, '0');
   }
 
   var andPrint = false;
