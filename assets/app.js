@@ -260,7 +260,7 @@
       if (!BIZ) { pane.innerHTML = noBiz(); wireSample(pane); return; }
       /* a remembered party screen whose party was deleted (sample data removed): go to the dashboard */
       if (cur === 'st' && arg && !C.party.some(function (p) { return key(p.name) === arg; }) && !B.parties(mine(), bizName())[arg]) { location.replace('#home'); return; }
-      pane.innerHTML = sampleNote() + bizBar() + (EXT[cur] ? EXT[cur].html(arg) : ({ home: homeHtml, sales: salesHtml, buy: buyHtml, money: moneyHtml, dues: duesHtml, parties: partiesHtml, cash: cashHtml })[cur]());
+      pane.innerHTML = (NS.crumbs ? NS.crumbs(cur, arg) : '') + sampleNote() + bizBar() + (EXT[cur] ? EXT[cur].html(arg) : ({ home: homeHtml, sales: salesHtml, buy: buyHtml, money: moneyHtml, dues: duesHtml, parties: partiesHtml, cash: cashHtml })[cur]());
       wire(pane); wireSample(pane);
       if (EXT[cur] && EXT[cur].wire) EXT[cur].wire(pane, arg);
       /* no sponsored card where a document is made or printed (statement, ledger, books, reports): the Support page promise */
@@ -654,7 +654,7 @@
       '<p class="vch-rcv">' + (back ? 'Received the above amount.' : d.mode === 'credit' ? 'The above amount is payable.' : 'Received the above amount' + (sadv ? ' as advance. It may be adjusted against my salary / wages.' : '.')) + '</p>' +
       '<div class="vch-sign"><div>Prepared by</div><div>Approved by</div><div>' + (!back && d.mode === 'cash' && amt > 5000 ? '<span class="vch-stamp">Revenue stamp</span>' : '') +
         (back ? 'Signature of receiver (for ' + esc(b.name || '') + ')' : 'Signature of receiver' + (who ? '<small>' + esc(who) + '</small>' : '')) + '</div></div>' +
-      '<p class="st-ft">Made with Nivesh Sahayak on ' + ldate(NS.today()) + '.</p></div>';
+      NS.creditLine('st-ft') + '</div>';
   }
   function printVoucher(d) {
     var go = function (rec) {
@@ -815,7 +815,7 @@
         fld('f-disc', NS.t(out ? 'wo.discr' : 'wo.disca'), inp('f-disc', rec ? rec.disc || '' : '', { mode: 'decimal', ltr: 1 }), { hint: NS.t(out ? 'wo.discrh' : 'wo.discah') }) +   /* cash discount (WP-3) */
         fld('f-note', T('note'), inp('f-note', rec ? (out ? (rec.lines && rec.lines[0] || {}).desc : rec.purpose) : ''), { wide: 1 }) + '</div></details>';
     } else if (kind === 'pbill' || kind === 'pret' || kind === 'sale') {
-      var r = rec || o.draft || { date: today, items: [{ desc: '', hsn: '', qty: 1, rate: '', gst: 18 }], round: true, buyer: { name: party } };   /* o.draft: a purchase bill read from a photo (billscan.js), not saved until confirmed */
+      var r = rec || o.draft || { date: today, items: [{ desc: '', hsn: '', qty: 1, rate: '', gst: o.quick ? qeGst() : 18 }], round: !(o.quick && qeP().round === false), buyer: { name: party } };   /* o.draft: a purchase bill read from a photo (billscan.js), not saved until confirmed */
       var pm = C.party.filter(function (p) { return key(p.name) === key(party); })[0] || {}, sale = kind === 'sale';
       if (sale && !rec) { r.no = NS.nextInvNo(C.doc, bizName(), today, CFG); r.noGst = /^(comp|unreg)$/.test(BIZ.reg || ''); r.round = (CFG.invoice || {}).round !== false; }
       h = '<div class="fg">' + fld('f-party', T(sale ? 'cust' : 'supp'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList(sale ? 'customer' : 'supplier')) +
@@ -828,8 +828,8 @@
         '<fieldset><legend>' + esc(T('items')) + '</legend><div data-lines></div><button type="button" class="btn sm" data-addline>' + esc(T('addline')) + '</button>' +
         '<label class="chk"><input type="checkbox" id="f-nogst"' + (r.noGst ? ' checked' : '') + '> ' + esc(T(sale ? 'qe_nogst' : 'nogst')) + '</label><label class="chk"><input type="checkbox" id="f-round"' + (r.round !== false ? ' checked' : '') + '> ' + esc(T('round')) + '</label>' +
         '<div class="sum" data-sum></div></fieldset>' +
-        (kind === 'pbill' && !rec ? '<div class="fg">' + fld('f-mode', T('paidnow'), sel('f-mode', 'credit', modeOpts(true)), { hint: T('paidnowh') }) + '</div>' : '') +
-        (sale && !rec ? '<div class="fg">' + fld('f-mode', T('qe_recv'), sel('f-mode', /^(shop|resto|pharma)$/.test(BIZ.kind || '') ? 'cash' : 'credit', modeOpts(true)), { hint: T('qe_recvh') }) + '</div>' : '') +
+        (kind === 'pbill' && !rec ? '<div class="fg">' + fld('f-mode', T('paidnow'), sel('f-mode', (o.quick && qeMode('pbill')) || 'credit', modeOpts(true)), { hint: T('paidnowh') }) + '</div>' : '') +
+        (sale && !rec ? '<div class="fg">' + fld('f-mode', T('qe_recv'), sel('f-mode', (o.quick && qeMode('sale')) || (/^(shop|resto|pharma)$/.test(BIZ.kind || '') ? 'cash' : 'credit'), modeOpts(true)), { hint: T('qe_recvh') }) + '</div>' : '') +
         (sale ? '' : '<div class="fg"><div class="f wide"><label for="f-photo">' + esc(T('photo')) + '</label><input type="file" id="f-photo" accept="image/*"><small class="soft">' + esc(T('photoh')) + '</small><div class="photo-pv" data-photo-pv></div></div></div>');
       F.lines = JSON.parse(JSON.stringify(r.items)); F.photo = r.photo || '';
       if (sale && !party && BIZ.state) h = h.replace('<option value="' + BIZ.state + '">', '<option value="' + BIZ.state + '" selected>');
@@ -865,18 +865,19 @@
     }
     $('[data-form-title]', dlg).textContent = (o.quick ? T('qe_title') + ' · ' : '') + T(kind === 'sale' ? 'qe_sale' : kind) + (rec && rec.no ? ' ' + rec.no : '') + (C.biz.length > 1 && bizName() ? ' · ' + bizName() : '');
     F.quick = !!o.quick; dlg.classList.toggle('qe-on', F.quick);
-    if (F.quick) h = '<div class="qe-tabs" role="tablist">' + QE.map(function (q, i) { return '<button type="button" role="tab" class="btn sm' + (q === kind ? ' primary' : '') + '" aria-selected="' + (q === kind) + '" data-qe="' + q + '" aria-keyshortcuts="Alt+' + (i + 1) + '">' + esc(T(q === 'sale' ? 'qe_sale' : q)) + ' <kbd>Alt ' + (i + 1) + '</kbd></button>'; }).join('') + '</div><p class="soft qe-keys">' + esc(T('qe_keys')) + '</p>' + h;   /* two businesses: the form names the one it saves to */
+    if (F.quick) h = '<div class="qe-tabs" role="tablist">' + QE.map(function (q, i) { return '<button type="button" role="tab" class="btn sm' + (q === kind ? ' primary' : '') + '" aria-selected="' + (q === kind) + '" data-qe="' + q + '" aria-keyshortcuts="Alt+' + (i + 1) + '">' + esc(T(q === 'sale' ? 'qe_sale' : q)) + (i < 5 ? ' <kbd>Alt ' + (i + 1) + '</kbd>' : '') + '</button>'; }).join('') + '<button type="button" class="btn sm qe-cus-btn" data-qecus data-ic="gear">' + esc(T('qe_cus')) + '</button></div><p class="soft qe-keys">' + esc(T('qe_keys')) + '</p>' + h;   /* two businesses: the form names the one it saves to */
     form.innerHTML = '<span data-of hidden></span>' + h + '<div class="dlg-foot"><button type="submit" class="btn primary">' + esc(T('save')) + '</button>' +
       (kind === 'exp' ? '<button type="submit" class="btn" data-andprint data-ic="print">' + esc(T('save')) + ' + ' + esc(T('print')) + '</button>' : '') + '<button type="button" class="btn" data-close>' + esc(T('cancel')) + '</button></div>';
     $('[data-close]', form).addEventListener('click', function () { NS.vsLeave(); });
     var al = $('[data-addline]', form);
-    if (al) al.addEventListener('click', function () { F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form).checked ? 0 : 18 }); drawLines(); });
+    if (al) al.addEventListener('click', function () { F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form).checked ? 0 : F.quick ? qeGst() : 18 }); drawLines(); });
     if (F.lines) drawLines();
     if (kind === 'min' || kind === 'mout') { tdsPair('f-tds'); drawAlloc(true); chqShow(); }
     if (kind === 'ob') obShow();
     if (F.lines) drawPhoto();
     if (o.after) o.after(form, F);   /* billscan.js marks the fields it was unsure about */
     $$('[data-qe]', form).forEach(function (b) { b.addEventListener('click', function () { openForm(b.getAttribute('data-qe'), { quick: 1 }); }); });
+    var qc = $('[data-qecus]', form); if (qc) qc.addEventListener('click', qeCustomize);
     dlg.showModal();
     var first = F.quick ? $('#f-party,#f-cat', form) : $('input:not([type=date]),select', form); if (first && (F.quick || !first.value)) first.focus();
   }
@@ -1175,7 +1176,48 @@
     if (again) load().then(function () { openForm(again, { quick: 1 }); });   /* quick entry: the next one, blank (after the saved one is in the list, so the next number is right) */
   }
   /* ---------- quick entry: the five everyday entries, keyboard first ---------- */
-  var QE = ['sale', 'pbill', 'min', 'mout', 'exp'];
+  /* Quick entry's tabs and defaults, chosen by the user with Customize (owner 2026-11-18); kept in localStorage ns-qe (a tool
+     setting: core.js carries it to the data home). Alt+1..5 stay on the first five tabs shown. */
+  var QEALL = ['sale', 'pbill', 'min', 'mout', 'exp', 'contra', 'pret'];
+  function qeP() { try { return JSON.parse(localStorage.getItem('ns-qe') || '{}') || {}; } catch (e) { return {}; } }
+  function qeTabs() { var t = (qeP().tabs || []).filter(function (x) { return QEALL.indexOf(x) >= 0; }); return t.length ? t : ['sale', 'pbill', 'min', 'mout', 'exp']; }
+  function qeGst() { var g = qeP().gst; return g != null && g !== '' && !isNaN(+g) ? +g : 18; }
+  function qeMode(k) { var m = (qeP().mode || {})[k]; return m || ''; }
+  var QE = qeTabs();
+  function qeCustomize() {
+    var P = qeP(), tabs = qeTabs().slice(), off = QEALL.filter(function (x) { return tabs.indexOf(x) < 0; });
+    var d = $('#qe-cus'); if (!d) { d = document.createElement('dialog'); d.id = 'qe-cus'; d.className = 'hub-dlg qe-cus'; document.body.appendChild(d); }
+    var nm = function (q) { return T(q === 'sale' ? 'qe_sale' : q); };
+    function list() {
+      return tabs.concat(off).map(function (q) { var on = tabs.indexOf(q) >= 0, i = tabs.indexOf(q);
+        return '<li><label class="chk"><input type="checkbox" data-qt="' + q + '"' + (on ? ' checked' : '') + '> ' + esc(nm(q)) + (on && i < 5 ? ' <kbd>Alt ' + (i + 1) + '</kbd>' : '') + '</label>' +
+          (on ? '<span><button type="button" class="btn sm ib" data-qup="' + q + '" title="' + esc(T('qe_cus_up')) + '" aria-label="' + esc(T('qe_cus_up')) + '"' + (i ? '' : ' disabled') + '>↑</button><button type="button" class="btn sm ib" data-qdn="' + q + '" title="' + esc(T('qe_cus_down')) + '" aria-label="' + esc(T('qe_cus_down')) + '"' + (i < tabs.length - 1 ? '' : ' disabled') + '>↓</button></span>' : '') + '</li>'; }).join('');
+    }
+    function draw() {
+      d.innerHTML = '<div class="dlg-h"><h2>' + esc(T('qe_cus_t')) + '</h2></div><div class="dlg-b"><h3>' + esc(T('qe_cus_tabs')) + '</h3><ul class="qe-cl">' + list() + '</ul>' +
+        '<div class="fg">' + fld('qc-gst', T('qe_cus_gst'), sel('qc-gst', String(qeGst()), ['0', '0.1', '0.25', '3', '5', '12', '18', '28', '40'].map(function (r) { return [r, r + '%']; }))) +
+        fld('qc-sale', T('qe_cus_sale'), sel('qc-sale', qeMode('sale') || '', [['', T('qe_cus_std')]].concat(modeOpts(true)))) +
+        fld('qc-pbill', T('qe_cus_pur'), sel('qc-pbill', qeMode('pbill') || '', [['', T('qe_cus_std')]].concat(modeOpts(true)))) + '</div>' +
+        '<label class="chk"><input type="checkbox" id="qc-round"' + (P.round === false ? '' : ' checked') + '> ' + esc(T('qe_cus_round')) + '</label>' +
+        '<p class="qa-msg" role="alert" hidden></p></div><div class="dlg-foot"><button type="button" class="btn primary" data-qsave>' + esc(T('save')) + '</button><button type="button" class="btn" data-qreset>' + esc(T('qe_cus_reset')) + '</button><button type="button" class="btn" data-qx>' + esc(T('cancel')) + '</button></div>';
+    }
+    draw();
+    d.onclick = function (e) {
+      var b = e.target.closest('button,input'); if (!b) return;
+      if (b.hasAttribute('data-qt')) { var q = b.getAttribute('data-qt'); if (b.checked) { off.splice(off.indexOf(q), 1); tabs.push(q); } else { tabs.splice(tabs.indexOf(q), 1); off.push(q); } draw(); return; }
+      if (b.hasAttribute('data-qup') || b.hasAttribute('data-qdn')) { var k = b.getAttribute('data-qup') || b.getAttribute('data-qdn'), i = tabs.indexOf(k), j = b.hasAttribute('data-qup') ? i - 1 : i + 1; tabs.splice(i, 1); tabs.splice(j, 0, k); draw(); return; }
+      if (b.hasAttribute('data-qx')) { d.close(); return; }
+      if (b.hasAttribute('data-qreset')) { try { localStorage.removeItem('ns-qe'); } catch (er) {} QE = qeTabs(); d.close(); reopen(); return; }
+      if (b.hasAttribute('data-qsave')) {
+        if (!tabs.length) { var m = $('.qa-msg', d); m.textContent = T('qe_cus_need'); m.hidden = false; return; }
+        var np = { tabs: tabs, gst: $('#qc-gst', d).value, mode: { sale: $('#qc-sale', d).value, pbill: $('#qc-pbill', d).value }, round: $('#qc-round', d).checked };
+        try { localStorage.setItem('ns-qe', JSON.stringify(np)); } catch (er) {}
+        QE = qeTabs(); d.close(); NS.toast(T('qe_cus_ok')); reopen();
+      }
+    };
+    function reopen() { if (dlg && dlg.open && F && F.quick && !dlg.getAttribute('data-dirty')) openForm(QE.indexOf(F.kind) >= 0 ? F.kind : QE[0], { quick: 1 }); }
+    d.showModal();
+  }
   function quickEntry(kind) {
     whenReady(function () {
       if (!BIZ) { NS.toast(T('qe_nobiz'), 'bad'); return; }
@@ -1187,12 +1229,12 @@
   document.addEventListener('keydown', function (e) {
     if (!dlg || !dlg.open || !F || !$('[data-of]', form)) return;
     var k = (e.key || '').toLowerCase(), t = e.target;
-    if (e.altKey && !e.ctrlKey && F.quick) { var n = /^Digit([1-5])$/.exec(e.code || ''); if (n) { e.preventDefault(); openForm(QE[+n[1] - 1], { quick: 1 }); } return; }
+    if (e.altKey && !e.ctrlKey && F.quick) { var n = /^Digit([1-5])$/.exec(e.code || ''); if (n && QE[+n[1] - 1]) { e.preventDefault(); openForm(QE[+n[1] - 1], { quick: 1 }); } return; }
     if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'enter')) { e.preventDefault(); if (form.requestSubmit) form.requestSubmit(); else submit(); return; }
     if (k !== 'enter' || e.shiftKey || !t || !form.contains(t) || !/^(INPUT|SELECT)$/.test(t.tagName) || /^(checkbox|file|submit|button)$/.test(t.type)) return;
     e.preventDefault();
     if (t.getAttribute('data-lk') === 'gst' && +t.getAttribute('data-li') === F.lines.length - 1 && (String(F.lines[F.lines.length - 1].desc).trim() || num(F.lines[F.lines.length - 1].rate))) {
-      F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form) && $('#f-nogst', form).checked ? 0 : 18 }); drawLines();
+      F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form) && $('#f-nogst', form).checked ? 0 : F.quick ? qeGst() : 18 }); drawLines();
       var nd = $$('[data-lk=desc]', form); nd[nd.length - 1].focus(); return;
     }
     var all = $$('input,select', form).filter(function (x) { return !x.disabled && x.type !== 'hidden' && x.type !== 'file' && x.type !== 'checkbox' && x.offsetParent !== null && !x.closest('details:not([open])'); });
@@ -1229,7 +1271,7 @@
     T: T, B: B, addSection: function (name, html, wire) { EXT[name] = { html: html, wire: wire }; }, addHome: function (f) { HOME.push(f); }, cfg: function () { return CFG; }, show: show, openForm: openForm,
     newDoc: function (v) { var u = toolUrl(v) === '#' ? siteHome(v) : toolUrl(v); if (!openUrl(u)) location.href = u; },
     newDocs: function () { return NEWDOCS.filter(function (n) { return TOOLS.some(function (x) { return x[0] === n[0]; }) || INAPP[n[0]]; }).map(function (n) { return [n[0], NS.t(n[2] || 'Doc.' + n[1])]; }); },
-    mine: mine, biz: function () { return BIZ; }, bizName: bizName, data: function () { return C; }, docName: docName, enName: enName, amountOf: amountOf,
+    mine: mine, biz: function () { return BIZ; }, bizName: bizName, data: function () { return C; }, docName: docName, catName: catName, enName: enName, amountOf: amountOf,
     rowsHtml: rowsHtml, leftMap: leftMap, searchBar: searchBar, match: match, byDate: byDate, fyStart: fyStart, toolUrl: toolUrl, myUrl: myUrl, ldate: ldate,
     range: function (f, t) { if (f) stFrom = f; if (t) stTo = t; if (!stTo) stTo = NS.today(); if (!stFrom) stFrom = fyStart(stTo); return [stFrom, stTo]; },
     markPaid: markPaid, openUrl: openUrl, siteHome: siteHome, frameAt: frameAt, docUrl: docUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },

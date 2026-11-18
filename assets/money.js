@@ -22,7 +22,7 @@
     return '<div class="st-hd"><div><b>' + esc(b.name) + '</b>' + (b.addr ? '<br>' + esc(b.addr).replace(/\n/g, '<br>') : '') + (b.gstin ? '<br>GSTIN ' + esc(b.gstin) : '') + '</div>' +
       '<div class="r"><b>' + esc(title) + '</b><br>' + esc(sub) + '</div></div>';
   }
-  function foot() { return '<p class="st-ft">Made with Nivesh Sahayak on ' + A.ldate(NS.today()) + '.</p>'; }
+  function foot() { return NS.creditLine('st-ft'); }
   function dates() {
     var r = A.range();
     return '<div class="tools-row"><label>' + esc(T('from')) + ' <input type="date" data-stfrom value="' + r[0] + '"></label><label>' + esc(T('to')) + ' <input type="date" data-stto value="' + r[1] + '"></label></div>';
@@ -116,7 +116,7 @@
       (t.round ? '<tr><th colspan="6">Round off</th><th class="n">' + money(t.round, false) + '</th></tr>' : '') +
       '<tr><th colspan="6">Total</th><th class="n">' + money(t.total, false) + '</th></tr></tfoot></table><p>' + esc(NS.inWords(t.total)) + '</p>' +
       '<p class="ft">Please send us your credit note for this return under section 34 of the CGST Act, so the GST can be adjusted on both sides.</p>' +
-      '<div class="sign">For ' + esc(b.name) + '<br><br><br>Authorised signatory</div><p class="ft">Made with Nivesh Sahayak.</p><script>onload=function(){print()}<\/script></body></html>');
+      '<div class="sign">For ' + esc(b.name) + '<br><br><br>Authorised signatory</div><p class="ft">' + NS.creditText + '</p><script>onload=function(){print()}<\/script></body></html>');
     w.document.close();
   }
 
