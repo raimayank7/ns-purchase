@@ -49,6 +49,7 @@
     if (u.origin === location.origin) {   /* the App's own addresses, asked for by a maker copy or My data */
       if (/^\/do\/[a-z0-9-]+\//.test(u.pathname)) { go(u.pathname.slice(1) + u.search + u.hash); return true; }
       var h = u.hash.slice(1).split('/')[0];
+      if (u.pathname === '/' && !h) { go('home'); return true; }   /* the App itself (NSBiz card in My data): its Dashboard, here */
       if (u.pathname === '/' && h && !DOOR && (SECS.indexOf(h) >= 0 || EXT[h])) { go(u.hash.slice(1)); return true; }
       /* any other page of the App (Help, What's new, Windows program, About, privacy...) opens on an App screen with Back, so the
          side menu, the business and the way back to the Dashboard stay (owner 2026-11-18: nothing may keep the user away); files are left alone */
@@ -138,7 +139,7 @@
         /* a page of the App: its own heading names the screen */
         if (site === 'page') try { var hh = fr.contentDocument.querySelector('h1'), t2 = $('.fr-hd h2'); if (hh && t2 && box.classList.contains('cur')) t2.textContent = hh.textContent.trim(); } catch (er) {}
       });
-    } else $('iframe.app-frame', box).title = title;
+    } else { var fr0 = $('iframe.app-frame', box); fr0.title = title; try { fr0.contentDocument.dispatchEvent(new CustomEvent('ns-shown')); } catch (er) {} }   /* P5-4: it brings in what changed meanwhile */
     box.classList.add('cur'); box.setAttribute('data-used', String(Date.now())); sh.hidden = false;
     sizeFrame(); requestAnimationFrame(sizeFrame);
     var h2 = $('h2', pane); h2.tabIndex = -1; h2.focus({ preventScroll: true });
@@ -716,7 +717,7 @@
       document.body.appendChild(dlg);
       dlg.addEventListener('click', function (e) { var x = e.target.closest('[data-close-box],[data-vwclose]'); if (x) dlg.close(); if (e.target.closest('button')) onClick(e); });
     }
-    dlg.innerHTML = '<div class="dlg-hd"><h2>' + esc(T('open')) + ': ' + esc(docName(d)) + '</h2></div>' +
+    dlg.innerHTML = '<div class="dlg-hd"><h2>' + esc(T('open')) + ': ' + esc(docName(d)) + '</h2><button type="button" class="icon-btn" data-vwclose aria-label="' + esc(T('back')) + '" title="' + esc(T('back')) + '">&#10005;</button></div>' +
       '<div class="vw-body">' + h + '</div><div class="quick vw-acts">' + acts + '</div>';
     dlg.showModal();
   }
@@ -795,7 +796,7 @@
     if (dlg && NS.vsParked && NS.vsParked(dlg)) { NS.ask(NS.t('desk.parkq'), { ok: NS.t('desk.parkback'), no: NS.t('desk.parkdrop') }).then(function (y) { if (y) NS.vsResume(dlg); else { NS.vsDrop(dlg); openForm(kind, o); } }); return; }
     if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); andPrint = !!(e.submitter && e.submitter.hasAttribute('data-andprint')); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); dlg.addEventListener('close', function () { if (dlg._parking) return; PRE = null; NSStore.sfRelease(); }); }
     var rec = o.rec || null, today = NS.today(), h = '';
-    F = { kind: kind, rec: rec, forId: o.forId, biz: bizName() }; if (dlg) dlg.setAttribute('data-kind', kind);
+    F = { kind: kind, rec: rec, forId: o.forId, biz: bizName() }; if (dlg) { dlg.setAttribute('data-kind', kind); dlg.removeAttribute('data-dirty'); }
     var forDoc = o.forId && C.doc.filter(function (d) { return d.id === o.forId; })[0];
     var party = rec ? B.partyName(rec) : o.party || (o.draft && o.draft.buyer ? o.draft.buyer.name : '') || (forDoc ? B.partyName(forDoc) : '');
     if (kind === 'min' || kind === 'mout') {
@@ -817,7 +818,7 @@
     } else if (kind === 'pbill' || kind === 'pret' || kind === 'sale') {
       var r = rec || o.draft || { date: today, items: [{ desc: '', hsn: '', qty: 1, rate: '', gst: o.quick ? qeGst() : 18 }], round: !(o.quick && qeP().round === false), buyer: { name: party } };   /* o.draft: a purchase bill read from a photo (billscan.js), not saved until confirmed */
       var pm = C.party.filter(function (p) { return key(p.name) === key(party); })[0] || {}, sale = kind === 'sale';
-      if (sale && !rec) { r.no = NS.nextInvNo(C.doc, bizName(), today, CFG); r.noGst = /^(comp|unreg)$/.test(BIZ.reg || ''); r.round = (CFG.invoice || {}).round !== false; }
+      if (sale && !rec) { r.no = F.autoNo = NS.nextInvNo(C.doc, bizName(), today, CFG); r.noGst = /^(comp|unreg)$/.test(BIZ.reg || ''); r.round = (CFG.invoice || {}).round !== false; }
       h = '<div class="fg">' + fld('f-party', T(sale ? 'cust' : 'supp'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList(sale ? 'customer' : 'supplier')) +
         fld('f-gstin', sale ? T('qe_gstin') : T('gstin'), inp('f-gstin', (r.buyer && r.buyer.gstin) || pm.gstin || '', { ltr: 1 })) +
         fld('f-state', sale ? T('qe_state') : T('state'), sel('f-state', (r.buyer && r.buyer.state) || pm.state || (BIZ.state || ''), [['', '—']].concat(NS.STATES.map(function (s) { return [s[0], s[0] + ' · ' + NS.stateLoc(s[0])]; })))) +
@@ -829,6 +830,7 @@
         '<label class="chk"><input type="checkbox" id="f-nogst"' + (r.noGst ? ' checked' : '') + '> ' + esc(T(sale ? 'qe_nogst' : 'nogst')) + '</label><label class="chk"><input type="checkbox" id="f-round"' + (r.round !== false ? ' checked' : '') + '> ' + esc(T('round')) + '</label>' +
         '<div class="sum" data-sum></div></fieldset>' +
         (kind === 'pbill' && !rec ? '<div class="fg">' + fld('f-mode', T('paidnow'), sel('f-mode', (o.quick && qeMode('pbill')) || 'credit', modeOpts(true)), { hint: T('paidnowh') }) + '</div>' : '') +
+        (sale && !rec ? shipDisp() : '') +
         (sale && !rec ? '<div class="fg">' + fld('f-mode', T('qe_recv'), sel('f-mode', (o.quick && qeMode('sale')) || (/^(shop|resto|pharma)$/.test(BIZ.kind || '') ? 'cash' : 'credit'), modeOpts(true)), { hint: T('qe_recvh') }) + '</div>' : '') +
         (sale ? '' : '<div class="fg"><div class="f wide"><label for="f-photo">' + esc(T('photo')) + '</label><input type="file" id="f-photo" accept="image/*"><small class="soft">' + esc(T('photoh')) + '</small><div class="photo-pv" data-photo-pv></div></div></div>');
       F.lines = JSON.parse(JSON.stringify(r.items)); F.photo = r.photo || '';
@@ -878,8 +880,9 @@
     if (o.after) o.after(form, F);   /* billscan.js marks the fields it was unsure about */
     $$('[data-qe]', form).forEach(function (b) { b.addEventListener('click', function () { openForm(b.getAttribute('data-qe'), { quick: 1 }); }); });
     var qc = $('[data-qecus]', form); if (qc) qc.addEventListener('click', qeCustomize);
+    var so = $('#f-shipon', form); if (so) so.addEventListener('change', function () { $('#f-shipbox', form).hidden = !so.checked; if (so.checked) $('#f-shname', form).focus(); });
     dlg.showModal();
-    var first = F.quick ? $('#f-party,#f-cat', form) : $('input:not([type=date]),select', form); if (first && (F.quick || !first.value)) first.focus();
+    var first = F.quick ? $('#f-party,#f-cat', form) : $('input:not([type=date]),select', form); if (first && (F.quick || !first.value)) first.focus(); else { var any = $('input:not([type=hidden]):not([type=checkbox]),select', form); if (any) any.focus(); }   /* never leave the cursor on Back (P2-14: Contra) */
   }
   function chqFields(out, c) {
     c = c || {};
@@ -918,7 +921,7 @@
     if (F.lines && /f-(nogst|round|state)/.test(id)) drawSum();
     /* the first two digits of a GSTIN are the supplier's state code */
     if (id === 'f-gstin') { var st = e.target.value.trim().slice(0, 2); if (/^\d\d$/.test(st) && NS.stateName(st)) { $('#f-state', form).value = st; drawSum(); } }
-    if (id === 'f-party' && F.lines) { var pm = C.party.filter(function (p) { return key(p.name) === key(e.target.value); })[0]; if (pm) { if (pm.gstin && !$('#f-gstin', form).value) $('#f-gstin', form).value = pm.gstin; if (pm.state) $('#f-state', form).value = pm.state; drawSum(); } }
+    if (id === 'f-party' && F.lines) { var pm = C.party.filter(function (p) { return key(p.name) === key(e.target.value); })[0]; if (pm) { $('#f-gstin', form).value = pm.gstin || ''; if (pm.state) $('#f-state', form).value = pm.state; drawSum(); } }
     if ((F.kind === 'min' || F.kind === 'mout') && (id === 'f-tdsx' || id === 'f-tds' || id === 'f-amt')) tdsPair(id);
     if ((F.kind === 'min' || F.kind === 'mout') && (id === 'f-party' || id === 'f-amt' || id === 'f-tds' || id === 'f-tdsx' || id === 'f-disc')) drawAlloc();
     if (e.target.hasAttribute && e.target.hasAttribute('data-al')) advLeft();
@@ -959,20 +962,34 @@
     openRecv().forEach(function (b) { if (left <= 0.004) return; var c = Math.min(b.left, left); base += c * taxPart(b); left -= c; });
     return r2(base + Math.max(0, left));
   }
+  /* a party or item made in the quick add box while an entry is open: known to this form at once (P1-6, P2-1, P4-2) */
+  document.addEventListener('ns-qa', function (e) {
+    var x = e.detail || {}, r = x.rec; if (!r) return;
+    var list = x.kind === 'item' ? C.item : C.party, nm = key(x.kind === 'item' ? r.desc : r.name);
+    for (var i = list.length - 1; i >= 0; i--) if (key(x.kind === 'item' ? list[i].desc : list[i].name) === nm) list.splice(i, 1);
+    list.push(r);
+  });
+  var LFROM = new WeakMap();
   function fillItem(i) {
     var m = C.item.filter(function (x) { return key(x.desc) === key(F.lines[i].desc); })[0];
     var sp = window.NSReuse && $('#f-party', form) ? NSReuse.partyRate(C.party.filter(function (p) { return key(p.name) === key($('#f-party', form).value); })[0], F.lines[i].desc) : null;   /* this supplier's own price list (My data) */
     if (!m && sp == null) return; m = m || {};
-    var L = F.lines[i], sr = F.kind === 'sale' ? m.rate || m.prate : m.prate || m.rate; if (!L.hsn) L.hsn = m.hsn || ''; if (!num(L.rate) && (sp != null || sr)) L.rate = sp != null ? sp : sr; if (m.gst !== '' && m.gst != null) L.gst = m.gst;
-    var row = $$('[data-row]', form)[i]; if (row) { $('[data-lk=hsn]', row).value = L.hsn; $('[data-lk=rate]', row).value = L.rate; $('[data-lk=gst]', row).value = L.gst; }
+    /* a line switched to another saved item takes that item's HSN, rate and unit (P1-6: the old item's values stayed); edits to the same item are kept */
+    var L = F.lines[i], sr = F.kind === 'sale' ? m.rate || m.prate : m.prate || m.rate, fresh = !!m.desc && LFROM.get(L) !== key(m.desc); if (fresh) LFROM.set(L, key(m.desc));
+    if (fresh || !L.hsn) L.hsn = m.hsn || ''; if ((fresh || !num(L.rate)) && (sp != null || sr)) L.rate = sp != null ? sp : sr; if (m.gst !== '' && m.gst != null) L.gst = m.gst; if (m.unit && (fresh || !L.unit)) L.unit = m.unit;
+    var row = $$('[data-row]', form)[i]; if (row) { if ($('[data-lk=unit]', row)) $('[data-lk=unit]', row).value = L.unit || ''; $('[data-lk=hsn]', row).value = L.hsn; $('[data-lk=rate]', row).value = L.rate; $('[data-lk=gst]', row).value = L.gst; }
     if (row && m.track && !$('[data-lk=batch],[data-lk=serial]', row)) { drawLines(); var di = $$('[data-lk=desc]', form)[i]; if (di) { di.focus(); di.setSelectionRange(di.value.length, di.value.length); } }   /* batch / serial item (more.js) */
   }
   function drawLines() {
     var box = $('[data-lines]', form);
-    box.innerHTML = '<datalist id="dl-item">' + C.item.map(function (x) { return '<option value="' + esc(x.desc) + '">'; }).join('') + '</datalist>' + F.lines.map(function (L, i) {
+    var plain = !(window.NSApp.lineX && F.lines.some(function (L, i) { return NSApp.lineX(L, i, function () { return 'x'; }); }));   /* batch/serial columns: keep the labelled lines */
+    box.classList.toggle('vg', plain);
+    box.innerHTML = '<datalist id="dl-item">' + C.item.map(function (x) { return '<option value="' + esc(x.desc) + '">'; }).join('') + '</datalist>' +
+      (plain ? '<div class="line line-hd" aria-hidden="true"><span class="lc-no">#</span><span>' + esc(T('item')) + '</span><span>' + esc(T('hsn')) + '</span><span class="n">' + esc(T('qty')) + '</span><span>' + esc(NS.t('dp.uom')) + '</span><span class="n">' + esc(T('rate')) + '</span><span class="n">' + esc(NS.t('app.ldisc')) + '</span><span class="n">' + esc(T('gst')) + '</span><span class="n">' + esc(T('amount')) + '</span><span></span></div>' : '') + F.lines.map(function (L, i) {
       function c(k, lbl, o) { o = o || {}; return '<label class="lc lc-' + k + '"><span>' + esc(lbl) + '</span><input data-li="' + i + '" data-lk="' + k + '" value="' + esc(L[k] == null ? '' : L[k]) + '"' + (o.mode ? ' inputmode="' + o.mode + '" dir="ltr"' : ' dir="auto"') + (o.list ? ' list="' + o.list + '"' : '') + ' autocomplete="off"></label>'; }
-      return '<div class="line" data-row>' + c('desc', T('item'), { list: 'dl-item' }) + c('hsn', T('hsn'), { mode: 'numeric' }) + c('qty', T('qty'), { mode: 'decimal' }) + c('rate', T('rate'), { mode: 'decimal' }) + c('gst', T('gst'), { mode: 'decimal' }) +
+      return '<div class="line" data-row>' + (plain ? '<span class="lc-no" aria-hidden="true">' + (i + 1) + '</span>' : '') + c('desc', T('item'), { list: 'dl-item' }) + c('hsn', T('hsn'), { mode: 'numeric' }) + c('qty', T('qty'), { mode: 'decimal' }) + c('unit', NS.t('dp.uom')) + c('rate', T('rate'), { mode: 'decimal' }) + c('disc', NS.t('app.ldisc'), { mode: 'decimal' }) + c('gst', T('gst'), { mode: 'decimal' }) +
         (window.NSApp.lineX ? NSApp.lineX(L, i, c) : '') +   /* batch, expiry, serial (more.js) */
+        (plain ? '<span class="lc-amt" data-lamt="' + i + '"></span>' : '') +
         (F.lines.length > 1 ? '<button type="button" class="icon-btn rm" data-rm="' + i + '" aria-label="' + esc(T('rmline')) + '">✕</button>' : '') + '</div>';
     }).join('');
     $$('[data-rm]', box).forEach(function (b) { b.addEventListener('click', function () { F.lines.splice(+b.getAttribute('data-rm'), 1); drawLines(); }); });
@@ -981,7 +998,7 @@
   function billFromForm() {
     var d = { type: 'pbill', kind: F.kind === 'pret' ? 'return' : 'bill', seller: sellerCopy(), buyer: { name: $('#f-party', form).value.trim(), gstin: $('#f-gstin', form).value.trim().toUpperCase(), state: $('#f-state', form).value },
       no: $('#f-no', form).value.trim(), date: $('#f-date', form).value, noGst: $('#f-nogst', form).checked, round: $('#f-round', form).checked, photo: F.photo || '',
-      items: F.lines.filter(function (L) { return String(L.desc).trim() || num(L.rate); }).map(function (L) { var it = { desc: String(L.desc).trim(), hsn: String(L.hsn || '').trim(), qty: L.qty === '' ? 1 : num(L.qty), unit: L.unit || 'Nos', rate: num(L.rate), gst: num(L.gst) };   /* L.unit: set by weigh.js when a weight was typed */ return window.NSApp.lineCopy ? NSApp.lineCopy(L, it) : it; }) };
+      items: F.lines.filter(function (L) { return String(L.desc).trim() || num(L.rate); }).map(function (L) { var it = { desc: String(L.desc).trim(), hsn: String(L.hsn || '').trim(), qty: L.qty === '' ? 1 : num(L.qty), unit: L.unit || 'Nos', rate: num(L.rate), disc: num(L.disc) || '', gst: num(L.gst) };   /* L.unit: set by weigh.js when a weight was typed */ return window.NSApp.lineCopy ? NSApp.lineCopy(L, it) : it; }) };
     if ($('#f-gd', form)) d.gd = $('#f-gd', form).value;
     if ($('#f-due', form)) d.due = $('#f-due', form).value; else d.orig = { no: $('#f-orig', form).value.trim() };
     var t = B.itemTotals(d), total = r2(t.taxable + t.cgst + t.sgst + t.igst);   /* IGST when the supplier's state differs from ours */
@@ -990,22 +1007,41 @@
     return d;
   }
   /* a sale bill made here is the same record the billing maker saves (docs.js blank() + totals), numbered by its rule */
+  /* Bill to / Ship to and Dispatch details of a sale bill (owner 2026-11-18): folded until opened; saved as the billing maker saves them */
+  function shipDisp() {
+    var f = function (id, k, o) { o = o || {}; return '<label class="f" for="' + id + '"><span>' + esc(NS.t(k)) + '</span>' + (o.sel ? '<select id="' + id + '">' + o.sel + '</select>' : '<input id="' + id + '"' + (o.type ? ' type="' + o.type + '"' : '') + (o.ltr ? ' dir="ltr"' : '') + '>') + '</label>'; };
+    var st = '<option value=""></option>' + NS.STATES.map(function (s) { return '<option value="' + s[0] + '">' + esc(s[1]) + '</option>'; }).join('');
+    return '<details class="qe-sd"><summary>' + esc(NS.t('dp.sum')) + '</summary>' +
+      '<label class="chk"><input type="checkbox" id="f-shipon"> ' + esc(NS.t('dp.shipon')) + '</label><div class="fg" id="f-shipbox" hidden>' +
+      f('f-shname', 'dp.shname') + f('f-shaddr', 'dp.shaddr') + f('f-shcity', 'dp.shcity') + f('f-shpin', 'dp.shpin', { ltr: 1 }) + f('f-shstate', 'dp.shstate', { sel: st }) + f('f-shgstin', 'dp.shgstin', { ltr: 1 }) + '</div>' +
+      '<h4>' + esc(NS.t('dp.t')) + '</h4><div class="fg">' + f('f-dpthrough', 'dp.through') + f('f-dpdest', 'dp.dest') +
+      f('f-dpmode', 'dp.mode', { sel: ['', 'Road', 'Rail', 'Air', 'Ship', 'Courier', 'By hand'].map(function (x) { return '<option>' + x + '</option>'; }).join('') }) +
+      f('f-dpveh', 'dp.veh', { ltr: 1 }) + f('f-dptname', 'dp.tname') + f('f-dplr', 'dp.lr', { ltr: 1 }) + f('f-dplrdate', 'dp.lrdate', { type: 'date' }) + f('f-dpewb', 'dp.ewb', { ltr: 1 }) + '</div></details>';
+  }
+  function shipDispOf(d) {
+    var v = function (id) { var e = $('#' + id, form); return e ? String(e.value || '').trim() : ''; };
+    if ($('#f-shipon', form) && $('#f-shipon', form).checked && (v('f-shname') || v('f-shaddr'))) d.ship = { name: v('f-shname') || d.buyer.name, addr: v('f-shaddr'), city: v('f-shcity'), pin: v('f-shpin'), state: v('f-shstate') || d.buyer.state, gstin: v('f-shgstin').toUpperCase() };
+    var dp = { through: v('f-dpthrough'), dest: v('f-dpdest'), mode: v('f-dpmode'), veh: v('f-dpveh').toUpperCase(), tname: v('f-dptname'), lr: v('f-dplr'), lrdate: v('f-dplrdate'), ewb: v('f-dpewb') };
+    if (Object.keys(dp).some(function (k) { return dp[k]; })) { d.disp = dp; d.tr = { veh: dp.veh, tname: dp.tname, lr: dp.lr }; }
+    return d;
+  }
   function saleFromForm() {
     var b = billFromForm(), inv = CFG.invoice || {}, ship = /^(comp|unreg)$/.test(BIZ.reg || '') || b.noGst;
     var d = { type: 'invoice', app: 1, kind: ship ? 'supply' : 'tax', no: b.no, deliv: '', orig: { no: '', date: '' }, reason: 'ret', tr: { veh: '', tname: '', lr: '' },
       paper: inv.paper || 'a4', design: inv.design || 'classic', copies: 1, date: b.date, due: b.due || '', pos: '', rc: false, recv: '', ref: '',
       seller: sellerCopy(), buyer: { name: b.buyer.name, addr: '', city: '', pin: '', state: b.buyer.state, gstin: b.buyer.gstin, phone: '' }, ship: null, einv: null, irn: null,
-      items: b.items.map(function (it) { return Object.assign({}, it, { disc: '' }); }), round: b.round, comp: true, notes: inv.notes || '', terms: inv.terms || '',
+      items: b.items.map(function (it) { return Object.assign({}, it, { disc: it.disc || '' }); }), round: b.round, comp: true, notes: inv.notes || '', terms: inv.terms || '',
       status: 'unpaid', copyLabel: 'orig', valid: '', charges: [], tcs: { on: false, rate: '', base: 'total', sec: '' }, rec: null };
     var pm = C.party.filter(function (p) { return key(p.name) === key(d.buyer.name); })[0];
     if (pm) ['addr', 'city', 'pin', 'phone'].forEach(function (k) { if (pm[k]) d.buyer[k] = pm[k]; });
     var t = B.itemTotals(d), total = r2(t.taxable + t.cgst + t.sgst + t.igst);
     d.total = d.round ? Math.round(total) : total;
     d.tax = { taxable: t.taxable, cgst: t.cgst, sgst: t.sgst, igst: t.igst };
-    return d;
+    return shipDispOf(d);
   }
   function drawSum() {
     var d = F.kind === 'sale' ? saleFromForm() : billFromForm(), t = d.tax;
+    $$('[data-lamt]', form).forEach(function (s) { var L = F.lines[+s.getAttribute('data-lamt')] || {}, a = (L.qty === '' || L.qty == null ? 1 : num(L.qty)) * num(L.rate); a = a - a * num(L.disc) / 100; s.textContent = a ? money(a, false) : ''; });
     $('[data-sum]', form).innerHTML = '<span>' + esc(T('taxable')) + ' <b>' + money(t.taxable) + '</b></span><span>' + esc(T('tax')) + ' <b>' + money(t.cgst + t.sgst + t.igst) + '</b>' + (t.igst ? ' (IGST)' : t.cgst ? ' (CGST + SGST)' : '') + '</span><span>' + esc(T('total')) + ' <b>' + money(d.total) + '</b></span>';
   }
   /* open bills of the party on the right side, ticked oldest first up to the amount */
@@ -1119,8 +1155,14 @@
     if (k === 'sale') {
       d = saleFromForm(); delete d.tax;
       if (!d.items.length) { NS.toast(T('need', { f: T('items') }), 'bad'); return; }
-      var sdup = C.doc.filter(function (x) { return (x.type || 'invoice') === 'invoice' && key(x.no) === key(d.no) && NS.fy(x.date) === NS.fy(d.date) && key(x.seller && x.seller.name) === key(bizName()); })[0];
-      if (sdup) { NS.toast(T('qe_dup', { no: d.no }), 'bad'); $('#f-no', form).focus(); return; }
+      /* the number is checked against the saved bills NOW, not the list read when the form opened: another tab or a second person
+         may have used it meanwhile (P3-6). A number the App suggested moves on to the next free one; a typed one is refused. */
+      return NSStore.list('doc').then(function (all) {
+      var dupOf = function (no) { return all.filter(function (x) { return (x.type || 'invoice') === 'invoice' && key(x.no) === key(no) && NS.fy(x.date) === NS.fy(d.date) && key(x.seller && x.seller.name) === key(bizName()); })[0]; };
+      if (dupOf(d.no)) {
+        if (F.autoNo && d.no === F.autoNo) { var was = d.no; d.no = F.autoNo = NS.nextInvNo(all, bizName(), d.date, CFG); $('#f-no', form).value = d.no; F.renumMsg = NS.t('c.renum', { a: was, b: d.no }); }
+        else { NS.toast(T('qe_dup', { no: d.no }), 'bad'); $('#f-no', form).focus(); throw 'dup'; }
+      }
       var smode = $('#f-mode', form) ? $('#f-mode', form).value : 'credit';
       jobs.push(savePartyRole(party, 'customer', { gstin: d.buyer.gstin, state: d.buyer.state }));
       d.items.forEach(function (it) {
@@ -1137,6 +1179,7 @@
         rv.total = saved.total;
         return NSStore.put('doc', rv).then(markPaid);
       }).then(done);
+      }).catch(function (e) { if (e !== 'dup') throw e; });
     }
     if (k === 'exp') {
       d = Object.assign(rec || { type: 'exp', app: 1 }, { date: $('#f-date', form).value, seller: sellerCopy(), cat: catCode($('#f-cat', form).value.trim()), amount: r2(num($('#f-amt', form).value)), mode: $('#f-mode', form).value,
@@ -1172,7 +1215,7 @@
   }
   function done() {
     var again = F && F.quick && !F.rec ? F.kind : '', no = F && F.savedNo;
-    PRE = null; dlg.close(); NS.toast(again ? T('qe_saved', { no: no || '' }) : T('saved')); NS.checkReminder && NS.checkReminder(); show();
+    var rm = F && F.renumMsg; PRE = null; dlg.close(); NS.toast(rm || (again ? T('qe_saved', { no: no || '' }) : T('saved')), rm ? 'warn' : ''); NS.checkReminder && NS.checkReminder(); show();
     if (again) load().then(function () { openForm(again, { quick: 1 }); });   /* quick entry: the next one, blank (after the saved one is in the list, so the next number is right) */
   }
   /* ---------- quick entry: the five everyday entries, keyboard first ---------- */
@@ -1230,6 +1273,7 @@
     if (!dlg || !dlg.open || !F || !$('[data-of]', form)) return;
     var k = (e.key || '').toLowerCase(), t = e.target;
     if (e.altKey && !e.ctrlKey && F.quick) { var n = /^Digit([1-5])$/.exec(e.code || ''); if (n && QE[+n[1] - 1]) { e.preventDefault(); openForm(QE[+n[1] - 1], { quick: 1 }); } return; }
+    if ($('dialog[open]:not(#app-form)') && !(t && dlg.contains(t))) return;   /* a box on top (quick add) has its own keys (P4-4) */
     if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'enter')) { e.preventDefault(); if (form.requestSubmit) form.requestSubmit(); else submit(); return; }
     if (k !== 'enter' || e.shiftKey || !t || !form.contains(t) || !/^(INPUT|SELECT)$/.test(t.tagName) || /^(checkbox|file|submit|button)$/.test(t.type)) return;
     e.preventDefault();
@@ -1290,6 +1334,25 @@
       });
     });
   }
+  /* printing an App screen (Print button or Ctrl+P): its printable sheets are copied to a clean area at the top of the page and
+     only that area prints, in paper colours; the page margin is 0 so the browser adds no date, title or web address: the
+     credit line inside the sheet is the only line at the bottom (owner 2026-11-18: reports printed blank) */
+  (function printArea() {
+    var de = document.documentElement, st = null;
+    window.addEventListener('beforeprint', function () {
+      if (!de.classList.contains('has-hub')) return;
+      st = st || document.head.appendChild(Object.assign(document.createElement('style'), { id: 'ap-page' }));
+      st.textContent = '@page{size:A4;margin:0}';
+      if (de.classList.contains('dk-print') || de.classList.contains('vch-on')) return;
+      var pane = $('[data-pane]'); if (!pane || $('#app-printarea')) return;
+      var src = $$('.lg-print .stsheet', pane); if (!src.length) src = $$('.stsheet', pane).filter(function (n) { return !n.closest('dialog'); });
+      if (!src.length) return;
+      var box = document.createElement('div'); box.id = 'app-printarea';
+      src.forEach(function (n) { var c = n.cloneNode(true); c.classList.add('lg-paper'); box.appendChild(c); });
+      document.body.appendChild(box); de.classList.add('ap-print');
+    });
+    window.addEventListener('afterprint', function () { var b = $('#app-printarea'); if (b) b.remove(); de.classList.remove('ap-print'); if (st) st.textContent = ''; });
+  })();
   function init() {
     if (!$('#app')) return;
     var ds = $('#app').getAttribute('data-secs'); if (ds) DOOR = ds.split(/\s+/);
@@ -1308,7 +1371,7 @@
     document.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('a[href]');
       if (!a || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-      if (a.hasAttribute('data-close-box')) { var bx = a.closest('dialog'); if (bx && bx.open) bx.close(); return; }   /* My data box: "Open full data manager" = the App's own screen (#do/my/) */
+      if (a.hasAttribute('data-close-box')) { var bx = a.closest('dialog'); if (bx && bx.open) bx.close(); if (openUrl(a.href)) e.preventDefault(); return; }   /* My data box: "Open full data manager" = the App's own screen (#do/my/) */
       /* a link to one of our own sites opens inside the App even when it was made for a new tab (the My data box's "Open My data",
          promotion links...); other websites (sponsors, WhatsApp, the GST portal) still open on their own */
       if (a.target === '_blank' && !/(^|\.)niveshsahayak\.in$/.test(a.hostname) && a.hostname !== location.hostname) return;

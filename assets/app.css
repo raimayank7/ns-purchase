@@ -269,6 +269,7 @@ dialog.qk{width:min(640px,calc(100vw - 24px));margin-top:10vh;padding:0;overflow
 .lg-gsel span,.lg-period label>span{margin-inline-end:4px}
 .lg-vt{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0}
 .lg-acts{margin:10px 0}
+.lg-acts.lg-top{margin:2px 0 8px;justify-content:flex-end}
 .lg-print{display:grid;gap:16px}
 .stsheet .lg-h{margin:14px 0 6px;font-size:.95rem}
 .stsheet .lg-by{font-size:.82rem;line-height:1.35}
@@ -531,3 +532,95 @@ html.vch-on .vch-print .stsheet{position:static;width:auto;max-width:720px;margi
 .coa-tbl td.sub{padding-inline-start:22px}
 @media print{.noprint{display:none}}
 .pa-doc{break-after:page}
+
+/* printing an App screen (app.js printArea): only the copied sheets print, with their own margins */
+#app-printarea{display:none}
+@media print{
+html.ap-print body>*:not(#app-printarea){display:none!important}
+html.ap-print body *{visibility:visible!important}
+html.ap-print #app-printarea{display:block}
+html.ap-print #app-printarea .stsheet{position:static!important;width:auto!important;max-width:none!important;padding:12mm 12mm 8mm;box-sizing:border-box;break-after:page;border:0!important;box-shadow:none!important}
+html.ap-print #app-printarea .noprint,html.ap-print #app-printarea .no-print,html.ap-print #app-printarea .acts{display:none!important}
+html.ap-print #app-printarea a{color:#111!important;text-decoration:none!important}
+html.vch-on .vch-print .stsheet{padding:12mm}
+}
+@media print{html.ap-print,html.ap-print body{background:#fff!important}}
+
+/* ---------- inner screens like desktop software (owner 2026-11-18), computers only ---------- */
+@media (min-width:1100px) and (pointer:fine){
+  /* what the menu bar already offers is not repeated on each screen */
+  html.mb-on .bizbar .newdoc,html.mb-on .bizbar>a.btn{display:none}
+  html.mb-on .bizbar:not(:has(.bz-tabs,.bz-btn)){display:none}
+  html.mb-on [data-pane] .pane-hd a[href="#grp"],html.mb-on [data-pane] .pane-hd a[href*="#party"]{display:none}
+  /* compact: a thin sample note, a title bar, small toolbar buttons */
+  .sample-note{padding:4px 12px!important;font-size:.8rem;margin:0 0 8px!important;min-height:0}.sample-note .btn.sm{min-height:26px;padding:2px 8px}
+  [data-pane] .pane-hd{margin:0 0 10px;padding:0 0 8px;border-bottom:1px solid var(--line);align-items:center}
+  [data-pane] .pane-hd h2{font-size:1.15rem;margin:0}
+  [data-pane] .pane-hd .btn,[data-pane] .lg-acts .btn,[data-pane] .quick .btn:not(.primary){min-height:30px;padding:3px 10px;font-size:.84rem}
+  [data-pane] .lg-bar{padding:6px 10px;margin:6px 0 10px}
+  [data-pane] h3{font-size:1rem;margin:14px 0 6px}
+  [data-pane] .soft{font-size:.84rem}
+  /* voucher grid: the item lines of sale, purchase and return entries */
+  .vg{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:8px}
+  .vg .line{grid-template-columns:34px minmax(0,3fr) minmax(0,1.1fr) minmax(0,.8fr) minmax(0,1.1fr) minmax(0,.7fr) minmax(0,1.2fr) 34px;gap:0;margin:0;align-items:stretch;border-top:1px solid var(--line)}
+  .vg .line-hd{border-top:0;background:var(--surface2);font:700 .72rem var(--font);letter-spacing:.04em;text-transform:uppercase;color:var(--soft)}
+  .vg .line-hd>span{padding:7px 8px}.vg .line-hd .n{text-align:end}
+  .vg .lc{position:relative}.vg .lc>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .vg .lc input{border:0;border-inline-start:1px solid var(--line);border-radius:0;min-height:34px;background:transparent}
+  .vg .lc input:focus{outline:2px solid var(--accent);outline-offset:-2px;background:var(--field)}
+  .vg .lc-qty input,.vg .lc-rate input,.vg .lc-gst input{text-align:end}
+  .vg .lc-no{display:grid;place-items:center;color:var(--soft);font-size:.8rem}
+  .vg .lc-amt{display:flex;align-items:center;justify-content:flex-end;padding:0 10px;border-inline-start:1px solid var(--line);font-variant-numeric:tabular-nums;font-weight:600}
+  .vg .line .rm{height:auto;border-radius:0;border-inline-start:1px solid var(--line)}
+  [data-sum]{display:flex;justify-content:flex-end;gap:22px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface2)}
+}
+
+/* sale bill: Ship to and Dispatch details (app.js shipDisp); the UOM column of the voucher grid */
+.qe-sd{margin:10px 0;border:1px solid var(--line);border-radius:10px;padding:8px 12px}.qe-sd summary{cursor:pointer;font-weight:600}.qe-sd h4{margin:12px 0 6px;font-size:.9rem}.qe-sd .fg{margin-top:8px}
+@media (min-width:1100px) and (pointer:fine){.vg .line{grid-template-columns:34px minmax(0,3fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,.7fr) minmax(0,1fr) minmax(0,.7fr) minmax(0,.7fr) minmax(0,1.2fr) 34px}}
+/* journal entry as a ledger grid (more.js jvForm) */
+.jg{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:6px 0 12px;background:var(--surface)}
+.jg-h,.jg-r,.jg-f{display:grid;grid-template-columns:36px minmax(150px,1fr) minmax(170px,1.4fr) 140px 140px 36px;align-items:center}
+.jg-h{background:var(--surface2);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--soft)}
+.jg-h span{padding:7px 8px}.jg-h span:nth-child(4),.jg-h span:nth-child(5){text-align:end}
+.jg-r{border-top:1px solid var(--line)}
+.jg-r>*{border-inline-start:1px solid var(--line);min-height:38px;display:flex;align-items:center}.jg-r>:first-child{border-inline-start:0}
+.jg-no{justify-content:center;color:var(--soft);font-size:.8rem}
+.jg-c{margin:0}.jg-c select,.jg-c input{width:100%;border:0;border-radius:0;background:transparent;min-height:38px;padding:4px 8px;box-shadow:none}
+.jg-c select:focus,.jg-c input:focus{outline:2px solid var(--accent,#0E746A);outline-offset:-2px;background:var(--surface2)}
+.jg-r .jg-c:nth-child(4) input,.jg-r .jg-c:nth-child(5) input{text-align:end;font-variant-numeric:tabular-nums}
+.jg-na{color:var(--soft);padding:0 8px}
+.jg-r .rm{justify-content:center;border-radius:0;width:100%;height:100%}
+.jg-add{border-top:1px solid var(--line);padding:6px 8px}
+.jg-f{border-top:2px solid var(--line);background:var(--surface2);font-variant-numeric:tabular-nums}
+.jg-f>*{padding:8px}.jg-f b{text-align:end}.jg-tl{font-weight:700}.jg-df{font-size:.85rem;color:var(--soft)}.jg-df.bad{color:#C0392B}
+.jv-top{grid-template-columns:repeat(auto-fill,minmax(180px,240px))}
+@media (max-width:700px){.jg-h{display:none}.jg-r,.jg-f{grid-template-columns:28px 1fr 1fr 32px}
+  .jg-r .jg-c:nth-child(2){grid-column:2/4}.jg-r>:nth-child(3){grid-column:2/4;border-top:1px solid var(--line);border-inline-start:0}
+  .jg-r .jg-c:nth-child(4){grid-column:2/3;border-top:1px solid var(--line)}.jg-r .jg-c:nth-child(5){grid-column:3/4;border-top:1px solid var(--line)}
+  .jg-r .rm{grid-row:1;grid-column:4}
+  .jg-r .jg-c:nth-child(4) input::placeholder,.jg-r .jg-c:nth-child(5) input::placeholder{color:var(--soft)}
+  .jg-f span:first-child,.jg-f span:last-child{display:none}.jg-f{grid-template-columns:1fr 1fr}.jg-tl,.jg-df{grid-column:1/3}}
+/* voucher grid on every screen size (P4-1, 18 Nov 2026: at 768 px the grid rules only existed for computers, so the header showed twice and boxes wrapped).
+   640 px and up: one row per line with all 9 columns. Phones: each line is a small card with labels, no header row. */
+@media (min-width:640px){
+  .vg{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:8px}
+  .vg .line{display:grid;grid-template-columns:30px minmax(0,2.4fr) minmax(0,.9fr) minmax(0,.7fr) minmax(0,.65fr) minmax(0,.9fr) minmax(0,.6fr) minmax(0,.6fr) minmax(0,1.1fr) 32px;gap:0;margin:0;align-items:stretch;border-top:1px solid var(--line)}
+  .vg .line-hd{border-top:0;background:var(--surface2);font:700 .7rem var(--font);letter-spacing:.03em;text-transform:uppercase;color:var(--soft)}
+  .vg .line-hd>span{padding:7px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vg .line-hd .n{text-align:end}
+  .vg .lc{position:relative;margin:0}.vg .lc>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .vg .lc input{width:100%;border:0;border-inline-start:1px solid var(--line);border-radius:0;min-height:36px;padding:4px 6px;background:transparent}
+  .vg .lc input:focus{outline:2px solid var(--accent);outline-offset:-2px;background:var(--field)}
+  .vg .lc-qty input,.vg .lc-rate input,.vg .lc-gst input,.vg .lc-disc input{text-align:end}
+  .vg .lc-no{display:grid;place-items:center;color:var(--soft);font-size:.8rem}
+  .vg .lc-amt{display:flex;align-items:center;justify-content:flex-end;padding:0 8px;border-inline-start:1px solid var(--line);font-variant-numeric:tabular-nums;font-weight:600}
+  .vg .line .rm{height:auto;width:100%;border-radius:0;border-inline-start:1px solid var(--line)}
+  .vg .line .lc-desc{grid-column:auto}
+}
+@media (max-width:639.98px){
+  .vg .line-hd,.vg .lc-no{display:none}
+  .vg .line{grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--line);padding-bottom:8px}
+  .vg .line .lc-desc{grid-column:1/-1}
+  .vg .line>button{justify-self:end;width:40px} .vg .line .lc-gst{grid-column:auto}
+  .vg .lc-amt{display:flex;align-items:center;justify-content:flex-end;font-weight:600;font-variant-numeric:tabular-nums}
+}

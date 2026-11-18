@@ -107,7 +107,10 @@
       '<div class="pane-hd"><h2>' + esc(p.name) + (g ? ' <small class="pill">' + esc(A.gname(g)) + '</small>' : '') + '</h2><div class="quick">' +
         (p.bal > 0.004 ? '<button type="button" class="btn wa" data-wa="' + esc(k) + '">' + esc(T('remind')) + '</button>' : '') +
         (p.bal > 0.004 && shareUrl(k) ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(shareUrl(k)) + '">' + esc(NS.t('sh.app.link')) + '</a>' : '') +
-        '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button></div></div>' +
+        '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button>' + (view === 'items' ? '<button type="button" class="btn" data-lgixl>' + esc(T('lg_xl')) + '</button>' :
+        '<button type="button" class="btn' + (shown ? '' : ' primary') + '" data-lgprev aria-pressed="' + shown + '">' + esc(T(shown ? 'lg_hideprev' : 'lg_prev_btn')) + '</button>' +
+        '<button type="button" class="btn" data-lgprint>' + esc(T('print')) + '</button><button type="button" class="btn" data-lgpdf>' + esc(T('pdf')) + '</button>' +
+        (view !== 'letter' ? '<button type="button" class="btn" data-lgxl>' + esc(T('lg_xl')) + '</button><button type="button" class="btn wa" data-lgwa>' + esc(T('lg_wa')) + '</button>' : '')) + '</div></div>' +
       '<p class="big">' + esc(line) + '</p>' +
       '<div class="lg-bar">' + seg('lgview', [['all', T('lg_all')], ['items', T('lg_items')], ['bills', T('lg_bills')], ['letter', T('lg_letter')]], view) +
       period() +
@@ -116,12 +119,9 @@
         (types.length ? '<p class="soft">' + esc(T('lg_filtered')) + '</p>' : '') : '') + '</div>' +
       (view === 'bills' ? '<p class="soft">' + esc(T('lg_billsh', { d: A.ldate(r[1]) })) + '</p>' : '') +
       (view === 'letter' ? '<p class="soft">' + esc(T('lg_letterh', { p: p.name, d: A.ldate(r[1]) })) + '</p><label class="chk"><input type="checkbox" data-withst' + (withStmt ? ' checked' : '') + '> ' + esc(T('lg_stmt')) + '</label>' : '') +
-      (view === 'items' ? (function () { var S = itemSums(ents); return (itemsTable(S.sale, T('lg_sold', { p: p.name })) + itemsTable(S.buy, T('lg_bought', { p: p.name }))) || '<p class="soft">' + esc(T('lg_noitems')) + '</p>'; })() + '<div class="quick lg-acts"><button type="button" class="btn" data-lgixl>' + esc(T('lg_xl')) + '</button></div>' :
+      (view === 'items' ? (function () { var S = itemSums(ents); return (itemsTable(S.sale, T('lg_sold', { p: p.name })) + itemsTable(S.buy, T('lg_bought', { p: p.name }))) || '<p class="soft">' + esc(T('lg_noitems')) + '</p>'; })() :
       '<h3>' + esc(T('lg_entries')) + ' <small class="soft">(' + ents.length + ')</small></h3>' + A.rowsHtml(ents.slice(0, 100), { left: A.leftMap(A.mine()) }) +
         (ents.length > 100 ? '<p class="soft">' + esc(T('lg_more', { n: ents.length - 100 })) + '</p>' : '') +
-      '<div class="quick lg-acts"><button type="button" class="btn' + (shown ? '' : ' primary') + '" data-lgprev aria-pressed="' + shown + '">' + esc(T(shown ? 'lg_hideprev' : 'lg_prev_btn')) + '</button>' +
-        (shown ? '<button type="button" class="btn" data-print>' + esc(T('print')) + '</button><button type="button" class="btn" data-lgpdf>' + esc(T('pdf')) + '</button>' : '') +
-        (view !== 'letter' ? '<button type="button" class="btn" data-lgxl>' + esc(T('lg_xl')) + '</button><button type="button" class="btn wa" data-lgwa>' + esc(T('lg_wa')) + '</button>' : '') + '</div>' +
       (shown ? '<div class="tbl-wrap"><div class="lg-print">' + body + '</div></div>' : '<p class="soft lg-hint">' + esc(T('lg_prevh')) + '</p>'));
   }, function (pane, k) {
     var ix = $('[data-lgixl]', pane); if (ix) ix.addEventListener('click', function () { var r = A.range(); itemsXl(partyOf(k), k, r, A.mine().filter(function (d) { return B.partiesOf(d)[k] && B.role(d) && (d.date || '') >= r[0] && (d.date || '') <= r[1]; })); });
@@ -140,6 +140,9 @@
       });
     });
     var pv = $('[data-lgprev]', pane); if (pv) pv.addEventListener('click', function () { shown = !shown; A.show(); });
+    /* Print / PDF pressed before the preview: open the ledger page first, then print or make the PDF */
+    var lp = $('[data-lgprint]', pane); if (lp) lp.addEventListener('click', function () { if (shown) { window.print(); return; } shown = true; A.show(); setTimeout(function () { window.print(); }, 350); });
+    var lf = $('[data-lgpdf]', pane); if (lf && !shown) lf.addEventListener('click', function (e) { e.stopImmediatePropagation(); shown = true; A.show(); setTimeout(function () { var b = $('[data-pane] [data-lgpdf]'); if (b) b.click(); }, 350); }, true);
     $$('[data-lgview]', pane).forEach(function (b) { b.addEventListener('click', function () { view = b.getAttribute('data-lgview'); A.show(); }); });
     $$('[data-vt]', pane).forEach(function (b) {
       b.addEventListener('click', function () {
