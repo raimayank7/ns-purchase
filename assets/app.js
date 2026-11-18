@@ -805,9 +805,9 @@
     $('[data-form-title]', dlg).textContent = (o.quick ? T('qe_title') + ' · ' : '') + T(kind === 'sale' ? 'qe_sale' : kind) + (rec && rec.no ? ' ' + rec.no : '') + (C.biz.length > 1 && bizName() ? ' · ' + bizName() : '');
     F.quick = !!o.quick; dlg.classList.toggle('qe-on', F.quick);
     if (F.quick) h = '<div class="qe-tabs" role="tablist">' + QE.map(function (q, i) { return '<button type="button" role="tab" class="btn sm' + (q === kind ? ' primary' : '') + '" aria-selected="' + (q === kind) + '" data-qe="' + q + '" aria-keyshortcuts="Alt+' + (i + 1) + '">' + esc(T(q === 'sale' ? 'qe_sale' : q)) + ' <kbd>Alt ' + (i + 1) + '</kbd></button>'; }).join('') + '</div><p class="soft qe-keys">' + esc(T('qe_keys')) + '</p>' + h;   /* two businesses: the form names the one it saves to */
-    form.innerHTML = h + '<div class="dlg-foot"><button type="submit" class="btn primary">' + esc(T('save')) + '</button>' +
+    form.innerHTML = '<span data-of hidden></span>' + h + '<div class="dlg-foot"><button type="submit" class="btn primary">' + esc(T('save')) + '</button>' +
       (kind === 'exp' ? '<button type="submit" class="btn" data-andprint data-ic="print">' + esc(T('save')) + ' + ' + esc(T('print')) + '</button>' : '') + '<button type="button" class="btn" data-close>' + esc(T('cancel')) + '</button></div>';
-    $('[data-close]', form).addEventListener('click', function () { dlg.close(); });
+    $('[data-close]', form).addEventListener('click', function () { NS.vsLeave(); });
     var al = $('[data-addline]', form);
     if (al) al.addEventListener('click', function () { F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form).checked ? 0 : 18 }); drawLines(); });
     if (F.lines) drawLines();
@@ -1114,6 +1114,66 @@
     if (again) load().then(function () { openForm(again, { quick: 1 }); });   /* quick entry: the next one, blank (after the saved one is in the list, so the next number is right) */
   }
   /* ---------- quick entry: the five everyday entries, keyboard first ---------- */
+  /* ---------- the voucher screen: every entry form (#app-form) is a full screen beside the side menu, not a box over the page
+     (owner 2026-11-18). Title bar with Back, the form, a Save bar that stays at the bottom. Leaving with unsaved typing asks first
+     (Esc, Back, Cancel, an F key for another entry). Small questions stay small boxes. ---------- */
+  function voucherScreen(d) {
+    if (!d) {
+      /* the App's own entry form, and every entry box another part of the App makes (other income and taxes, journal, fixed assets,
+         capital and loans, production...: class b2-dlg), now and when they are made later */
+      voucherScreen($('#app-form')); $$('dialog.b2-dlg').forEach(voucherScreen);
+      new MutationObserver(function (ms) { ms.forEach(function (m) { [].forEach.call(m.addedNodes, function (n) { if (n.nodeType === 1 && n.matches('dialog.b2-dlg')) voucherScreen(n); }); }); }).observe(document.body, { childList: true });
+      /* any other box with an entry form (a Save button and a title bar) becomes a voucher screen when it opens; questions, search,
+         help, the setup and other small boxes stay small. Some boxes draw their whole inside again at every opening: dressed each time */
+      var SMALL = '#desk-ask,#desk-cmd,#desk-keys,#ns-help,.nsf-dlg,.pk-dlg,.bz-dlg,#ns-mydata,.cap-dlg,#ns-tell,#ns-series,.sf-gate,.help-pnl';
+      var open0 = HTMLDialogElement.prototype.showModal;
+      HTMLDialogElement.prototype.showModal = function () {
+        try { if (this.classList.contains('vs')) vsDress(this); else if (!this.matches(SMALL) && $('button[type=submit]', this) && $('.dlg-hd,.dlg-h', this)) voucherScreen(this); } catch (e) {}
+        return open0.apply(this, arguments);
+      };
+      return;
+    }
+    if (d.classList.contains('vs')) return;
+    d.classList.add('vs', 'hub-dlg');
+    /* Back asks first when something is typed (before the box's own close listener runs) */
+    d.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('.vs-back')) { e.preventDefault(); e.stopPropagation(); NS.vsLeave(null, d); } }, true);
+    d.addEventListener('input', function (e) { if (e.target.closest && e.target.closest('form')) d.setAttribute('data-dirty', '1'); });
+    d.addEventListener('change', function (e) { if (e.target.closest && e.target.closest('form')) d.setAttribute('data-dirty', '1'); });
+    /* the other parts' boxes get the same keys as the App's own entry form: Ctrl+S saves, Enter goes to the next box */
+    if (d.id !== 'app-form') d.addEventListener('keydown', function (e) {
+      var k = (e.key || '').toLowerCase(), t = e.target, sb = $('button[type=submit]', d), f = sb && sb.closest('form');
+      if (!f) return;
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && k === 's') { e.preventDefault(); if (f.requestSubmit) f.requestSubmit(sb); else sb.click(); return; }
+      if (k !== 'enter' || e.shiftKey || e.ctrlKey || !t || t.tagName !== 'INPUT' || /^(checkbox|radio|file|submit|button)$/.test(t.type)) return;
+      var all = $$('input,select', f).filter(function (x) { return !x.disabled && x.type !== 'hidden' && x.type !== 'file' && x.type !== 'checkbox' && x.offsetParent !== null && !x.closest('details:not([open])'); });
+      var i = all.indexOf(t); if (i >= 0 && i < all.length - 1) { e.preventDefault(); all[i + 1].focus(); }
+    });
+    d.addEventListener('cancel', function (e) { if (d.getAttribute('data-dirty')) { e.preventDefault(); NS.vsLeave(null, d); } });
+    d.addEventListener('close', function () { d.removeAttribute('data-dirty'); });
+    /* a form drawn again inside the box (the App's entry form, the b2 boxes) is dressed again */
+    new MutationObserver(function () { vsDress(d); }).observe(d, { childList: true, subtree: false });
+    $$('form', d).forEach(function (f) { new MutationObserver(function () { vsDress(d); }).observe(f, { childList: true }); });
+    vsDress(d);
+  }
+  /* the title bar's close button becomes Back; the Save bar gets the keys to remember; a new form starts clean at the top */
+  function vsDress(d) {
+    var back = $('.vs-back', d) || $('.dlg-hd .icon-btn', d) || $('.dlg-hd [data-x]', d) || $('.dlg-h form[method=dialog] button', d) || $('.dlg-h > button:last-child', d);
+    if (back && !back.classList.contains('vs-back')) {
+      back.removeAttribute('onclick'); back.type = 'button'; back.className = 'btn sm vs-back'; back.setAttribute('aria-keyshortcuts', 'Escape');
+      back.innerHTML = '<span data-i18n="app.back">' + esc(T('back')) + '</span>';
+    }
+    var sb = $('button[type=submit]', d), ft = sb && (sb.closest('.dlg-foot,.btns,.dlg-f') || sb.parentNode);
+    if (ft) ft.classList.add('vs-foot');
+    if (ft && !$('.vs-keys', ft)) ft.insertAdjacentHTML('beforeend', '<span class="vs-keys" aria-hidden="true">' + esc(T('vs_keys')) + '</span>');
+    d.removeAttribute('data-dirty'); d.scrollTop = 0;
+  }
+  /* leave the voucher screen; with typing in it, ask first. then = what to open next (an F key) */
+  NS.vsLeave = function (then, d) {
+    d = d || $('dialog.vs[open]');
+    var go = function () { if (d) { d.removeAttribute('data-dirty'); if (d.open) d.close(); } if (then) setTimeout(then, 0); };
+    if (!d || !d.open || !d.getAttribute('data-dirty')) { go(); return; }
+    NS.ask(T('vs_leave'), { ok: T('vs_discard'), no: T('vs_stay'), danger: 1 }).then(function (y) { if (y) go(); else { var x = $('input,select', d); if (x) x.focus(); } });
+  };
   var QE = ['sale', 'pbill', 'min', 'mout', 'exp'];
   function quickEntry(kind) {
     whenReady(function () {
@@ -1124,9 +1184,9 @@
   }
   /* Enter moves to the next box (the last box of the last item line starts a new line); Ctrl+S or Ctrl+Enter saves; Alt+1..5 switch */
   document.addEventListener('keydown', function (e) {
-    if (!dlg || !dlg.open || !F || !F.quick) return;
+    if (!dlg || !dlg.open || !F || !$('[data-of]', form)) return;
     var k = (e.key || '').toLowerCase(), t = e.target;
-    if (e.altKey && !e.ctrlKey) { var n = /^Digit([1-5])$/.exec(e.code || ''); if (n) { e.preventDefault(); openForm(QE[+n[1] - 1], { quick: 1 }); } return; }
+    if (e.altKey && !e.ctrlKey && F.quick) { var n = /^Digit([1-5])$/.exec(e.code || ''); if (n) { e.preventDefault(); openForm(QE[+n[1] - 1], { quick: 1 }); } return; }
     if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'enter')) { e.preventDefault(); if (form.requestSubmit) form.requestSubmit(); else submit(); return; }
     if (k !== 'enter' || e.shiftKey || !t || !form.contains(t) || !/^(INPUT|SELECT)$/.test(t.tagName) || /^(checkbox|file|submit|button)$/.test(t.type)) return;
     e.preventDefault();
@@ -1201,18 +1261,19 @@
        printable sheets (.stsheet) and the dues table keep their own layout */
     var pn = $('[data-pane]');
     if (pn) new MutationObserver(function () { cardTables(pn); }).observe(pn, { childList: true, subtree: true });
-    /* My data (the button at the top, the status bar's backup line, the search box): the whole data manager on an App screen,
-       not a small box with links out (owner 2026-11-18) */
-    if (!DOOR) window.addEventListener('click', function (e) {
-      var b = e.target.closest && e.target.closest('[data-act="my-data"]');
-      if (!b || b.closest('dialog')) return;
-      e.preventDefault(); e.stopImmediatePropagation(); openUrl(myUrl());
-    }, true);
+    voucherScreen();
     /* links to a document maker or My data open inside the app (new-tab and modified clicks are left alone) */
     document.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('a[href]');
-      if (!a || a.target === '_blank' || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-      if (openUrl(a.href)) e.preventDefault();
+      if (!a || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      if (a.hasAttribute('data-close-box')) { var bx = a.closest('dialog'); if (bx && bx.open) bx.close(); return; }   /* My data box: "Open full data manager" = the App's own screen (#do/my/) */
+      /* a link to one of our own sites opens inside the App even when it was made for a new tab (the My data box's "Open My data",
+         promotion links...); other websites (sponsors, WhatsApp, the GST portal) still open on their own */
+      if (a.target === '_blank' && !/(^|\.)niveshsahayak\.in$/.test(a.hostname) && a.hostname !== location.hostname) return;
+      if (openUrl(a.href)) {
+        e.preventDefault();
+        var box = a.closest('dialog'); if (box && box.open && !box.classList.contains('vs')) box.close();   /* the small box closes, the page opens behind it */
+      }
     });
     /* a page shown in the App's frame asks for another page (core.js): open it on an App screen */
     window.addEventListener('message', function (e) {

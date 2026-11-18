@@ -11,6 +11,7 @@
   var $ = NS.$, $$ = NS.$$, esc = NS.esc, num = NS.num, r2 = NS.r2, money = NS.money, B = NSBooks, key = B.key;
   function BI(k, v) { return NS.t('bi.' + k, v); }
   var XL = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'];
+  var WANT = '';   /* where the cursor goes after the table is drawn again (see the keys below) */
   var COLS = ['date', 'desc', 'ref', 'dr', 'cr', 'amt', 'type', 'bal'];
   var BS = null, RULES = null, filt = 'todo', busy = false;
   /* BS = { name, rows, map, header, lines, keys, edits: { key: { kind, name, billId, from, post } }, sug: suggestions } */
@@ -134,11 +135,26 @@
     var fi = $('#bi-file', pane); if (fi) fi.addEventListener('change', function () { if (fi.files[0]) readFile(fi.files[0]); fi.value = ''; });
     $$('[data-bicol]', pane).forEach(function (s) { s.addEventListener('change', function () { var m = Object.assign({}, BS.map); m[s.getAttribute('data-bicol')] = s.value === '' ? null : +s.value; setRows(BS.rows, BS.name, m); }); });
     var ft = $('[data-bifilt]', pane); if (ft) ft.addEventListener('change', function () { filt = ft.value; A.show(); });
+    function rowOf(el) { return el.getAttribute('data-bikind') || el.getAttribute('data-biname') || el.getAttribute('data-bifrom') || el.getAttribute('data-bibill'); }
+    function nextKind(el) { var ks = $$('[data-bikind]', pane), i = rowOf(el), at = ks.map(function (k) { return k.getAttribute('data-bikind'); }).indexOf(i); var nx = ks[at + 1]; return nx ? '[data-bikind="' + nx.getAttribute('data-bikind') + '"]' : ''; }
+    function after(i) { return '[data-biname="' + i + '"],[data-bifrom="' + i + '"]'; }
+    if (WANT) { var w = $(WANT, pane); WANT = ''; if (w) { w.focus(); if (w.select && w.tagName === 'INPUT') try { w.select(); } catch (er) {} w.scrollIntoView({ block: 'nearest' }); } }
+    /* Enter on a line's box goes on like Tab: from the choice to the name, from the name to the next line */
+    $$('[data-bikind],[data-biname],[data-bifrom],[data-bibill]', pane).forEach(function (el) {
+      el.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.altKey) return;
+        e.preventDefault();
+        var i = rowOf(el), to = el.hasAttribute('data-bikind') ? after(i) : el.hasAttribute('data-biname') && $('[data-bibill="' + i + '"]', pane) ? '[data-bibill="' + i + '"]' : nextKind(el);
+        var t = to && $(to, pane);
+        if (el.hasAttribute('data-biname') && el.value.trim() !== (el.getAttribute('value') || '')) { WANT = to; el.dispatchEvent(new Event('change', { bubbles: true })); return; }
+        if (t) { t.focus(); if (t.select && t.tagName === 'INPUT') try { t.select(); } catch (er) {} t.scrollIntoView({ block: 'nearest' }); }
+      });
+    });
     function ed(i) { var e = BS.lines[+i], k = I.lineKeys(BS.lines)[+i]; BS.edits[k] = BS.edits[k] || {}; return BS.edits[k]; }
-    $$('[data-bikind]', pane).forEach(function (s) { s.addEventListener('change', function () { var o = ed(s.getAttribute('data-bikind')); o.kind = s.value; o.billId = ''; o.name = ''; o.post = null; if (s.value === 'exp') o.name = 'Bank charges'; if (s.value === 'oinc') o.name = 'Interest received'; A.show(); }); });
-    $$('[data-biname]', pane).forEach(function (s) { s.addEventListener('change', function () { var o = ed(s.getAttribute('data-biname')); o.name = s.value.trim(); o.billId = ''; o.post = null; A.show(); }); });
-    $$('[data-bibill]', pane).forEach(function (s) { s.addEventListener('change', function () { ed(s.getAttribute('data-bibill')).billId = s.value; A.show(); }); });
-    $$('[data-bifrom]', pane).forEach(function (s) { s.addEventListener('change', function () { var o = ed(s.getAttribute('data-bifrom')); o.from = s.value; o.post = null; A.show(); }); });
+    $$('[data-bikind]', pane).forEach(function (s) { s.addEventListener('change', function () { var o = ed(s.getAttribute('data-bikind')); o.kind = s.value; o.billId = ''; o.name = ''; o.post = null; if (s.value === 'exp') o.name = 'Bank charges'; if (s.value === 'oinc') o.name = 'Interest received'; WANT = WANT || after(s.getAttribute('data-bikind')); A.show(); }); });
+    $$('[data-biname]', pane).forEach(function (s) { s.addEventListener('change', function () { var o = ed(s.getAttribute('data-biname')); o.name = s.value.trim(); o.billId = ''; o.post = null; WANT = WANT || nextKind(s); A.show(); }); });
+    $$('[data-bibill]', pane).forEach(function (s) { s.addEventListener('change', function () { ed(s.getAttribute('data-bibill')).billId = s.value; WANT = WANT || nextKind(s); A.show(); }); });
+    $$('[data-bifrom]', pane).forEach(function (s) { s.addEventListener('change', function () { var o = ed(s.getAttribute('data-bifrom')); o.from = s.value; o.post = null; WANT = WANT || nextKind(s); A.show(); }); });
     $$('[data-bipost]', pane).forEach(function (c) { c.addEventListener('change', function () { ed(c.getAttribute('data-bipost')).post = c.checked; A.show(); }); });
     var pa = $('[data-bipostall]', pane); if (pa) pa.addEventListener('click', function () {
       var list = entries().filter(function (e) { return e.post && !e.problem; });

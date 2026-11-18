@@ -60,6 +60,29 @@
 .xi-t{border-collapse:collapse;width:100%;font-size:.88rem}.xi-t th,.xi-t td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}.xi-t th{background:var(--surface2);position:sticky;top:0}
 .xi-t .n{text-align:end;font-variant-numeric:tabular-nums;width:3.5em}.xi-t tr.bad td{color:var(--bad,#b42318)}
 .hub-dlg::backdrop{background:rgba(5,15,25,.55)}
+/* ---------- the voucher screen (dialog.hub-dlg.vs, app.js voucherScreen): a full screen beside the side menu ---------- */
+dialog.hub-dlg.vs{width:auto;max-width:none;max-height:none;margin:0;border-radius:0;box-shadow:none;padding:0;position:fixed;
+  inset-block:var(--hd-h,var(--tb,64px)) var(--sbh,30px);inset-inline:var(--sw,260px) 0;height:auto;overflow:auto;border-inline-start:1px solid var(--line);background:var(--bg)}
+dialog.hub-dlg.vs::backdrop{background:transparent}
+#app-form.vs.qe-on{width:auto}
+dialog.hub-dlg.vs[open]{animation:vs-in .16s ease-out}
+@keyframes vs-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+dialog.hub-dlg.vs .dlg-hd{justify-content:flex-start;gap:14px;padding:12px 24px;background:var(--surface);box-shadow:0 1px 0 var(--line);border-bottom:0}
+dialog.hub-dlg.vs .dlg-hd h2{font-size:1.25rem;order:2}
+dialog.hub-dlg.vs .dlg-h{display:flex;align-items:center;gap:14px;padding:12px 24px;background:var(--surface);box-shadow:0 1px 0 var(--line);position:sticky;top:0;z-index:2;margin:0}
+dialog.hub-dlg.vs .dlg-h{justify-content:flex-start}dialog.hub-dlg.vs .dlg-h h2{order:2;margin:0;font-size:1.25rem}dialog.hub-dlg.vs .dlg-h .vs-back,dialog.hub-dlg.vs .dlg-h>form{order:1;margin:0}
+dialog.hub-dlg.vs .dlg-h::before{content:"";order:0;width:4px;align-self:stretch;border-radius:4px;background:var(--accent)}
+/* the row with the Save button stays at the bottom of every voucher screen */
+dialog.hub-dlg.vs .vs-foot{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--bg);box-shadow:0 -1px 0 var(--line);padding:12px 0 14px;margin-top:20px}
+dialog.hub-dlg.vs>form,dialog.hub-dlg.vs>div:not(.dlg-hd):not(.dlg-h){padding-inline:24px}dialog.hub-dlg.vs .vs-back{order:1;flex:none}
+dialog.hub-dlg.vs .dlg-hd::before{content:"";order:1;width:4px;align-self:stretch;border-radius:4px;background:var(--accent)}
+dialog.hub-dlg.vs form{padding:20px 24px 0;max-width:1180px}
+dialog.hub-dlg.vs .dlg-foot{padding:12px 0 14px;margin-top:20px;align-items:center;background:var(--bg);box-shadow:0 -1px 0 var(--line)}
+dialog.hub-dlg.vs .dlg-foot .btn{min-height:42px;padding-inline:20px}
+.vs-keys{margin-inline-start:auto;font-size:.8rem;color:var(--soft)}
+html.side-mini dialog.hub-dlg.vs{inset-inline-start:var(--swm,64px)}
+@media (max-width:860px){dialog.hub-dlg.vs{inset:0;border:0}.vs-keys{display:none}dialog.hub-dlg.vs .dlg-hd{padding:10px 14px}dialog.hub-dlg.vs form{padding:14px 14px 0}}
+@media print{dialog.hub-dlg.vs{position:static}}
 html.no-sponsor .sponsor-slot{display:none!important}
 .hub-dlg .dlg-hd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:1}
 .hub-dlg .dlg-hd h2{margin:0;font-size:1.15rem;flex:1;min-width:0;overflow-wrap:anywhere}.hub-dlg .dlg-hd .icon-btn{flex:none}
