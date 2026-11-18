@@ -63,6 +63,36 @@
     return (local && x[1] ? 'http://localhost:' + x[1] + '/' : 'https://' + x[0] + '/') + '#stmt/' + encodeURIComponent(k);
   }
 
+  /* ---------- Items: what was sold to the party and bought from them (owner 2026-11-18: "what did we sell to this party?") ---------- */
+  function lineAmt(it) { var a = num(it.qty || 0) * num(it.rate || 0); if (num(it.disc)) a = a * (1 - num(it.disc) / 100); return NS.r2 ? NS.r2(a) : Math.round(a * 100) / 100; }
+  function itemSums(ents) {
+    var out = { sale: {}, buy: {} };
+    ents.forEach(function (d) {
+      var role = B.role(d), side = role === 'sale' ? 'sale' : role === 'buy' ? 'buy' : role === 'sret' ? 'sale' : role === 'pret' ? 'buy' : '';
+      if (!side || !d.items) return;
+      var sign = /ret$/.test(role) ? -1 : 1;
+      d.items.forEach(function (it) {
+        var nm = String(it.desc || '').trim(); if (!nm) return;
+        var x = out[side][key(nm)] || (out[side][key(nm)] = { name: nm, unit: it.unit || '', qty: 0, amt: 0, bills: {}, last: '' });
+        x.qty += sign * num(it.qty || 0); x.amt += sign * lineAmt(it); x.bills[d.id] = 1; if ((d.date || '') > x.last) x.last = d.date || '';
+      });
+    });
+    ['sale', 'buy'].forEach(function (k) { out[k] = Object.keys(out[k]).map(function (z) { return out[k][z]; }).sort(function (a, b) { return b.amt - a.amt; }); });
+    return out;
+  }
+  function itemsTable(list, title) {
+    if (!list.length) return '';
+    var tq = 0, ta = 0; list.forEach(function (x) { ta += x.amt; });
+    return '<h3>' + esc(title) + '</h3><div class="tbl-wrap"><table class="tbl lg-items"><thead><tr><th>' + esc(T('lg_itm')) + '</th><th class="n">' + esc(T('lg_iqty')) + '</th><th class="n">' + esc(T('lg_irate')) + '</th><th class="n">' + esc(T('lg_ibills')) + '</th><th>' + esc(T('lg_ilast')) + '</th><th class="n">' + esc(T('lg_iamt')) + '</th></tr></thead><tbody>' +
+      list.map(function (x) { return '<tr><td>' + esc(x.name) + '</td><td class="n">' + esc(String(Math.round(x.qty * 1000) / 1000)) + (x.unit ? ' ' + esc(x.unit) : '') + '</td><td class="n">' + (x.qty ? money(x.amt / x.qty) : '') + '</td><td class="n">' + Object.keys(x.bills).length + '</td><td>' + A.ldate(x.last) + '</td><td class="n"><b>' + money(x.amt) + '</b></td></tr>'; }).join('') +
+      '</tbody><tfoot><tr><th>' + esc(T('lg_itot')) + '</th><td></td><td></td><td></td><td></td><th class="n">' + money(ta) + '</th></tr></tfoot></table></div>';
+  }
+  function itemsXl(p, k, r, ents) {
+    var S = itemSums(ents), rows = [['Side', 'Item', 'Quantity', 'Unit', 'Average rate', 'Bills', 'Last bill', 'Amount']];
+    [['sale', 'Sold'], ['buy', 'Bought']].forEach(function (z) { S[z[0]].forEach(function (x) { rows.push([z[1], x.name, Math.round(x.qty * 1000) / 1000, x.unit, x.qty ? Math.round(x.amt / x.qty * 100) / 100 : '', Object.keys(x.bills).length, x.last, Math.round(x.amt * 100) / 100]); }); });
+    NS.xlsx(fileName(p.name) + '-items-' + r[0] + '-to-' + r[1] + '.xlsx', [{ name: 'Items', rows: rows }]);
+  }
+
   /* ---------- the party ledger ---------- */
   A.addSection('st', function (k) {
     if (k !== lastK) { shown = false; lastK = k; restoreView(k); }   /* a different party starts with the preview closed and its own last view */
@@ -79,20 +109,22 @@
         (p.bal > 0.004 && shareUrl(k) ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(shareUrl(k)) + '">' + esc(NS.t('sh.app.link')) + '</a>' : '') +
         '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button></div></div>' +
       '<p class="big">' + esc(line) + '</p>' +
-      seg('lgview', [['all', T('lg_all')], ['bills', T('lg_bills')], ['letter', T('lg_letter')]], view) +
+      '<div class="lg-bar">' + seg('lgview', [['all', T('lg_all')], ['items', T('lg_items')], ['bills', T('lg_bills')], ['letter', T('lg_letter')]], view) +
       period() +
       (view === 'all' ? '<div class="lg-vt" role="group" aria-label="' + esc(T('lg_vt')) + '"><span class="soft">' + esc(T('lg_vt')) + '</span> <button type="button" class="btn sm" data-vt="" aria-pressed="' + !types.length + '">' + esc(T('all')) + '</button>' +
         VT.map(function (v) { return '<button type="button" class="btn sm" data-vt="' + v + '" aria-pressed="' + (types.indexOf(v) >= 0) + '">' + esc(T('lg_vt_' + v)) + '</button>'; }).join('') + '</div>' +
-        (types.length ? '<p class="soft">' + esc(T('lg_filtered')) + '</p>' : '') : '') +
+        (types.length ? '<p class="soft">' + esc(T('lg_filtered')) + '</p>' : '') : '') + '</div>' +
       (view === 'bills' ? '<p class="soft">' + esc(T('lg_billsh', { d: A.ldate(r[1]) })) + '</p>' : '') +
       (view === 'letter' ? '<p class="soft">' + esc(T('lg_letterh', { p: p.name, d: A.ldate(r[1]) })) + '</p><label class="chk"><input type="checkbox" data-withst' + (withStmt ? ' checked' : '') + '> ' + esc(T('lg_stmt')) + '</label>' : '') +
+      (view === 'items' ? (function () { var S = itemSums(ents); return (itemsTable(S.sale, T('lg_sold', { p: p.name })) + itemsTable(S.buy, T('lg_bought', { p: p.name }))) || '<p class="soft">' + esc(T('lg_noitems')) + '</p>'; })() + '<div class="quick lg-acts"><button type="button" class="btn" data-lgixl>' + esc(T('lg_xl')) + '</button></div>' :
       '<h3>' + esc(T('lg_entries')) + ' <small class="soft">(' + ents.length + ')</small></h3>' + A.rowsHtml(ents.slice(0, 100), { left: A.leftMap(A.mine()) }) +
         (ents.length > 100 ? '<p class="soft">' + esc(T('lg_more', { n: ents.length - 100 })) + '</p>' : '') +
       '<div class="quick lg-acts"><button type="button" class="btn' + (shown ? '' : ' primary') + '" data-lgprev aria-pressed="' + shown + '">' + esc(T(shown ? 'lg_hideprev' : 'lg_prev_btn')) + '</button>' +
         (shown ? '<button type="button" class="btn" data-print>' + esc(T('print')) + '</button><button type="button" class="btn" data-lgpdf>' + esc(T('pdf')) + '</button>' : '') +
         (view !== 'letter' ? '<button type="button" class="btn" data-lgxl>' + esc(T('lg_xl')) + '</button><button type="button" class="btn wa" data-lgwa>' + esc(T('lg_wa')) + '</button>' : '') + '</div>' +
-      (shown ? '<div class="tbl-wrap"><div class="lg-print">' + body + '</div></div>' : '<p class="soft lg-hint">' + esc(T('lg_prevh')) + '</p>');
+      (shown ? '<div class="tbl-wrap"><div class="lg-print">' + body + '</div></div>' : '<p class="soft lg-hint">' + esc(T('lg_prevh')) + '</p>'));
   }, function (pane, k) {
+    var ix = $('[data-lgixl]', pane); if (ix) ix.addEventListener('click', function () { var r = A.range(); itemsXl(partyOf(k), k, r, A.mine().filter(function (d) { return B.partiesOf(d)[k] && B.role(d) && (d.date || '') >= r[0] && (d.date || '') <= r[1]; })); });
     wirePeriod(pane); saveView(k);
     var ps = $('[data-pswitch]', pane), names = partyNames();
     function goParty(v) {

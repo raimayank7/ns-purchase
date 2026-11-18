@@ -308,6 +308,9 @@
   }
 
   var FORMS = { oinc: oincForm, taxpay: taxForm, pdd: pddForm, wo: function (d) { woForm(d); }, gstset: function () { NS.toast(T('seth')); } };
+  /* Edit in the App's other lists (party ledger, sales, recent) opens the same forms (owner 2026-11-18: a write-off could not be changed) */
+  var prevX = A.editX;
+  A.editX = function (d) { if (d && FORMS[d.type] && d.type !== 'gstset') { if (closed(d.date)) return true; FORMS[d.type](d); return true; } return prevX ? prevX(d) : false; };
   function list() { return A.mine().filter(function (d) { return FORMS[d.type]; }).filter(A.match).sort(A.byDate); }
   function rowName(d) {
     var h = d.head && H.find(d.head);

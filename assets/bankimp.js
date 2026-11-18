@@ -111,7 +111,7 @@
       nameBox = '<select data-bifrom="' + e.i + '" aria-label="' + esc(BI('what')) + '"><option value="cash"' + (e.from === 'cash' ? ' selected' : '') + '>' + esc(BI('k_dep')) + '</option><option value="bank"' + (e.from === 'bank' ? ' selected' : '') + '>' + esc(BI('k_wd')) + '</option></select>';
     }
     var state = e.status === 'done' ? '<span class="soft">' + esc(BI('s_done')) + '</span>' : e.status === 'inbooks' ? '<span class="soft">' + esc(BI('s_inbooks')) + '</span>' : e.why ? '<span class="soft">' + esc(BI(e.why)) + '</span>' : '';
-    return '<tr' + (e.status !== 'new' ? ' class="soft"' : '') + '><td><input type="checkbox" data-bipost="' + e.i + '"' + (e.post ? ' checked' : '') + (e.problem && !e.post ? ' disabled' : '') + ' aria-label="' + esc(BI('postthis')) + '"></td>' +
+    return '<tr' + (e.status !== 'new' ? ' class="soft"' : '') + '><td><input type="checkbox" tabindex="-1" data-bipost="' + e.i + '"' + (e.post ? ' checked' : '') + (e.problem && !e.post ? ' disabled' : '') + ' aria-label="' + esc(BI('postthis')) + '"></td>' +
       '<td>' + NS.fmtDate(l.date) + '</td><td class="l">' + esc(l.desc || '—') + (l.ref ? ' <span class="mono soft">' + esc(l.ref) + '</span>' : '') + '</td><td class="n">' + (l.dr ? money(l.dr, false) : '') + '</td><td class="n">' + (l.cr ? money(l.cr, false) : '') + '</td>' +
       '<td class="l bi-do">' + (dis ? state : kindSel + nameBox + billSel + (e.status === 'new' && e.kind && e.problem ? '<span class="sb-note bad">' + esc(BI(e.problem)) + '</span>' : state)) + '</td></tr>';
   }

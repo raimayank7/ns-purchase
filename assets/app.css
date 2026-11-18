@@ -60,29 +60,6 @@
 .xi-t{border-collapse:collapse;width:100%;font-size:.88rem}.xi-t th,.xi-t td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:start;vertical-align:top}.xi-t th{background:var(--surface2);position:sticky;top:0}
 .xi-t .n{text-align:end;font-variant-numeric:tabular-nums;width:3.5em}.xi-t tr.bad td{color:var(--bad,#b42318)}
 .hub-dlg::backdrop{background:rgba(5,15,25,.55)}
-/* ---------- the voucher screen (dialog.hub-dlg.vs, app.js voucherScreen): a full screen beside the side menu ---------- */
-dialog.hub-dlg.vs{width:auto;max-width:none;max-height:none;margin:0;border-radius:0;box-shadow:none;padding:0;position:fixed;
-  inset-block:var(--hd-h,var(--tb,64px)) var(--sbh,30px);inset-inline:var(--sw,260px) 0;height:auto;overflow:auto;border-inline-start:1px solid var(--line);background:var(--bg)}
-dialog.hub-dlg.vs::backdrop{background:transparent}
-#app-form.vs.qe-on{width:auto}
-dialog.hub-dlg.vs[open]{animation:vs-in .16s ease-out}
-@keyframes vs-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-dialog.hub-dlg.vs .dlg-hd{justify-content:flex-start;gap:14px;padding:12px 24px;background:var(--surface);box-shadow:0 1px 0 var(--line);border-bottom:0}
-dialog.hub-dlg.vs .dlg-hd h2{font-size:1.25rem;order:2}
-dialog.hub-dlg.vs .dlg-h{display:flex;align-items:center;gap:14px;padding:12px 24px;background:var(--surface);box-shadow:0 1px 0 var(--line);position:sticky;top:0;z-index:2;margin:0}
-dialog.hub-dlg.vs .dlg-h{justify-content:flex-start}dialog.hub-dlg.vs .dlg-h h2{order:2;margin:0;font-size:1.25rem}dialog.hub-dlg.vs .dlg-h .vs-back,dialog.hub-dlg.vs .dlg-h>form{order:1;margin:0}
-dialog.hub-dlg.vs .dlg-h::before{content:"";order:0;width:4px;align-self:stretch;border-radius:4px;background:var(--accent)}
-/* the row with the Save button stays at the bottom of every voucher screen */
-dialog.hub-dlg.vs .vs-foot{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--bg);box-shadow:0 -1px 0 var(--line);padding:12px 0 14px;margin-top:20px}
-dialog.hub-dlg.vs>form,dialog.hub-dlg.vs>div:not(.dlg-hd):not(.dlg-h){padding-inline:24px}dialog.hub-dlg.vs .vs-back{order:1;flex:none}
-dialog.hub-dlg.vs .dlg-hd::before{content:"";order:1;width:4px;align-self:stretch;border-radius:4px;background:var(--accent)}
-dialog.hub-dlg.vs form{padding:20px 24px 0;max-width:1180px}
-dialog.hub-dlg.vs .dlg-foot{padding:12px 0 14px;margin-top:20px;align-items:center;background:var(--bg);box-shadow:0 -1px 0 var(--line)}
-dialog.hub-dlg.vs .dlg-foot .btn{min-height:42px;padding-inline:20px}
-.vs-keys{margin-inline-start:auto;font-size:.8rem;color:var(--soft)}
-html.side-mini dialog.hub-dlg.vs{inset-inline-start:var(--swm,64px)}
-@media (max-width:860px){dialog.hub-dlg.vs{inset:0;border:0}.vs-keys{display:none}dialog.hub-dlg.vs .dlg-hd{padding:10px 14px}dialog.hub-dlg.vs form{padding:14px 14px 0}}
-@media print{dialog.hub-dlg.vs{position:static}}
 html.no-sponsor .sponsor-slot{display:none!important}
 .hub-dlg .dlg-hd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:1}
 .hub-dlg .dlg-hd h2{margin:0;font-size:1.15rem;flex:1;min-width:0;overflow-wrap:anywhere}.hub-dlg .dlg-hd .icon-btn{flex:none}
@@ -159,7 +136,8 @@ label.chk{display:flex;align-items:center;gap:8px;min-height:44px}
 .al input:not([type=checkbox]){width:96px}
 }
 @media print{
-body *{visibility:hidden}
+/* only the App's own screens print just their sheet; other pages of the App (keyboard shortcuts, help) and the shortcuts list print normally (owner 2026-11-18: blank pages) */
+html.has-hub:not(.dk-print) body *{visibility:hidden}
 .stsheet,.stsheet *{visibility:visible}
 .stsheet{position:absolute;left:0;top:0;width:100%;border:0;min-width:0;padding:0}
 .tbl-wrap{overflow:visible}
@@ -491,3 +469,56 @@ html.vch-on .vch-print .stsheet{position:static;width:auto;max-width:720px;margi
 .sw-how{font-size:.88rem}.sw-list{margin:10px 0;padding:10px 12px}.sw-list summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.sw-ctl{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:10px 0}.sw-ctl input[type=number]{width:5em}
 .sw-map{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}.sw-f{display:flex;flex-direction:column;gap:2px;font-size:.85rem;min-width:0}.sw-f select{min-width:0;max-width:100%}.sw-f.req span{font-weight:700}
 .sw-opts{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin:10px 0;padding:10px 12px}.sw-tiles{margin:10px 0}.sw-last{margin:10px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+/* bank statement import: the "What is it" column keeps room for its choice and name (it was squeezed when the side menu opened) */
+.bi-t th:last-child,.bi-t td:last-child{min-width:240px;width:26%}.bi-t td:last-child select,.bi-t td:last-child input{width:100%;box-sizing:border-box}
+@media (max-width:860px){.bi-t th:last-child,.bi-t td:last-child{min-width:190px}}
+
+/* the notification centre (home.js): the bell in the header and its list */
+.desk-bell{position:relative;padding-inline:9px}.desk-bell svg{width:18px;height:18px;display:block}
+.bell-n{position:absolute;top:-6px;inset-inline-end:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#D93025;color:#fff;font:700 .7rem/18px var(--font);text-align:center;box-sizing:border-box}
+.bell-pnl{position:fixed;margin:0;inset-inline-start:auto;width:min(420px,calc(100vw - 16px));max-height:min(70vh,640px);overflow:auto;padding:0;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);box-shadow:0 18px 50px rgba(0,0,0,.3)}
+.bell-pnl::backdrop{background:transparent}
+.bell-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+.bell-hd h2{margin:0;font-size:1.05rem}.bell-body{padding:4px 14px}.bell-body h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft);margin:12px 0 4px}
+.bell-pnl .bell-new>a{font-weight:700}.bell-ft{padding:8px 14px 14px;margin:0}
+@media (max-width:520px){.bell-pnl{inset-inline:8px!important;width:auto}}
+
+/* Customize the Dashboard (dash.js) */
+.dash-x{display:contents}.dash-root>[hidden],.dash-root .quick>[hidden],.dash-root .tiles>[hidden]{display:none!important}
+.dash-edit{vertical-align:middle;margin-inline-start:8px;font-size:.85rem}
+.dash-set{margin:12px 0}.dash-list{list-style:none;margin:0;padding:0}.dash-list li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.dash-mv{display:flex;gap:6px;flex:none}.dash-mv .btn{min-width:36px}
+
+/* lists look like a desktop program's grid (owner 2026-11-18: "gives the vibe of a web page"): one framed list, one thin line per
+   entry, striped, the row under the pointer lit, amounts lined up on the right, smaller buttons on the same line */
+.rows{gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.rows li,.card .rows li{background:transparent;border:0;border-radius:0;border-bottom:1px solid var(--line);padding:7px 12px}
+.rows li:last-child{border-bottom:0}
+.rows li:nth-child(even){background:color-mix(in srgb,var(--ink) 3.5%,transparent)}
+.rows li:hover{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.rows .amt{font-variant-numeric:tabular-nums;white-space:nowrap;min-width:110px;text-align:end}
+.rows .acts .btn.sm,.rows .acts select.sm{min-height:30px;padding:3px 10px;font-size:.8rem}
+@media (min-width:900px){
+  .rows li{flex-wrap:nowrap}
+  .rows li>.ln{flex:1 1 auto;min-width:0;width:auto}
+  .rows li>.ln>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rows li>.acts{flex:none;flex-wrap:nowrap;justify-content:flex-end}
+}
+
+/* party screen: the view buttons, period and filters in one toolbar; the Items view (ledger.js) */
+.lg-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:8px 0 14px}
+.lg-bar>*{margin:0!important}.lg-bar .tools-row{margin:0;gap:8px}.lg-bar select,.lg-bar input[type=date]{min-height:34px;padding-block:4px}
+.lg-bar .lg-vt{display:flex;flex-wrap:wrap;gap:4px;align-items:center;flex-basis:100%}.lg-bar .lg-vt .btn.sm{min-height:28px;padding:2px 10px;font-size:.8rem}
+.lg-items td.n,.lg-items th.n{text-align:end;white-space:nowrap;font-variant-numeric:tabular-nums}.lg-items tfoot th,.lg-items tfoot td{border-top:2px solid var(--line)}
+
+/* entries list: icon-only buttons (name on hover), and the Open view (app.js viewDoc) */
+.rows .acts .btn.ib{width:34px;min-width:34px;height:34px;min-height:34px;padding:0;display:inline-grid;place-items:center}
+.rows .acts .btn.ib .bi{width:17px;height:17px;margin:0}
+.rows .acts .btn.ib.danger{color:var(--bad,#dc2626)}
+@media (pointer:coarse){.rows .acts .btn.ib{width:40px;min-width:40px;height:40px}}
+.vw-dlg .vw-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:4px 0 12px}.vw-ttl{font-size:1.15rem}.vw-amt{font-size:1.3rem;white-space:nowrap;font-variant-numeric:tabular-nums}
+.vw-dlg h3{margin:16px 0 6px;font-size:.95rem}.vw-facts th{width:30%;text-align:start;font-weight:600;color:var(--soft)}
+.vw-dlg td.n,.vw-dlg th.n{text-align:end;white-space:nowrap;font-variant-numeric:tabular-nums}.vw-post .vw-to{color:var(--soft);padding-inline-start:18px}
+.vw-photo{max-width:100%;max-height:60vh;border:1px solid var(--line);border-radius:8px}.vw-note{margin:12px 0}
+.vw-print{padding:24px}.vw-print .vw-photo{max-height:120mm}

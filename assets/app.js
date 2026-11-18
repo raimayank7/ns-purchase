@@ -309,25 +309,28 @@
       ['recv', r2(recv), '#dues'], ['pay', r2(pay), '#dues/pay'], ['cashin', A.cash || 0, '#cash'], ['bank', A.bank || 0, '#cash/bank']];
     var recent = D.filter(function (d) { return B.role(d); }).sort(function (a, b) { return (b.date || '').localeCompare(a.date || '') || (b.updated || 0) - (a.updated || 0); }).slice(0, 8);
     var cf = cashFlow(D, mon), owe = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return p.bal > 0.004; }).sort(function (a, b) { return b.bal - a.bal; }).slice(0, 5);
-    return '<h2>' + esc(T('home')) + ' <small class="soft">' + esc(bizName()) + '</small></h2>' +
-      '<div class="tiles">' + tiles.map(function (x) { return '<a href="' + x[2] + '" class="tile' + (x[1] < 0 ? ' neg' : '') + '"><span>' + esc(T(x[0])) + '</span><b>' + money(x[1]) + '</b></a>'; }).join('') + '</div>' +
+    /* every part carries data-dash (and each tile data-tile) so the person can arrange the Dashboard (dash.js) */
+    return '<h2>' + esc(T('home')) + ' <small class="soft">' + esc(bizName()) + '</small></h2><div class="dash-root">' +
+      '<div class="tiles" data-dash="tiles">' + tiles.map(function (x) { return '<a href="' + x[2] + '" data-tile="' + x[0] + '" class="tile' + (x[1] < 0 ? ' neg' : '') + '"><span>' + esc(T(x[0])) + '</span><b>' + money(x[1]) + '</b></a>'; }).join('') + '</div>' +
       /* cash below zero: money went out that never came in, usually the opening cash is missing (round C) */
       ((A.cash || 0) < -0.004 ? '<p class="note">' + esc(T('negcash')) + ' <button type="button" class="btn sm" data-form="ob">' + esc(T('ob')) + '</button></p>' : '') +
-      '<div class="card"><h3>' + esc(T('quick')) + '</h3><div class="quick">' +
-        '<a class="btn primary" href="' + toolUrl('billing') + '">+ ' + esc(T('newinv')) + '</a>' +
+      '<div class="card" data-dash="quick"><h3>' + esc(T('quick')) + '</h3><div class="quick">' +
+        '<a class="btn primary" data-q="newinv" href="' + toolUrl('billing') + '">+ ' + esc(T('newinv')) + '</a>' +
         '<button type="button" class="btn primary" data-quick aria-keyshortcuts="Alt+Q">' + esc(T('qe_title')) + ' <kbd>Alt Q</kbd></button>' +
-        ['min', 'mout', 'pbill', 'exp', 'ob'].map(function (f) { return '<button type="button" class="btn" data-form="' + f + '">+ ' + esc(T(f)) + '</button>'; }).join('') + '</div></div>' +
-      '<div class="card"><h3>' + esc(T('overdue')) + '</h3>' + (bw.length ? '<ul class="rows">' + bw.map(function (b) {
+        ['min', 'mout', 'pbill', 'exp', 'ob', 'sale', 'contra', 'pret'].map(function (f) { return '<button type="button" class="btn" data-form="' + f + '">+ ' + esc(T(f === 'sale' ? 'qe_sale' : f)) + '</button>'; }).join('') + '</div></div>' +
+      '<div class="card" data-dash="overdue"><h3>' + esc(T('overdue')) + '</h3>' + (bw.length ? '<ul class="rows">' + bw.map(function (b) {
         return '<li><a href="#st/' + encodeURIComponent(key(b.party)) + '"><b>' + esc(b.party) + '</b><span class="soft">' + esc(docName(b)) + ' ' + esc(b.no) + ' · ' + ldate(b.date) + ' · ' + esc(T('days', { n: B.daysBetween(b.date, today) })) + '</span></a><b class="amt">' + money(b.left) + '</b></li>'; }).join('') + '</ul>'
         : '<p class="soft">' + esc(T('nodues')) + '</p>') + '</div>' +
-      '<div class="card"><h3>' + esc(T('d_cf')) + ' <small class="soft">' + esc(bizName()) + '</small></h3><div class="tiles">' + [['d_in', cf.inn], ['d_out', cf.out], ['d_net', cf.net]].map(function (x) { return '<div class="tile' + (x[1] < 0 ? ' neg' : '') + '"><span>' + esc(T(x[0])) + '</span><b>' + money(x[1]) + '</b></div>'; }).join('') + '</div></div>' +
-      '<div class="card"><h3>' + esc(T('d_top')) + '</h3>' + (owe.length ? '<ul class="rows">' + owe.map(function (p) { return '<li><a href="#st/' + encodeURIComponent(p.key) + '"><b>' + esc(p.name) + '</b></a><b class="amt">' + money(p.bal) + '</b></li>'; }).join('') + '</ul><p><a class="link" href="#dues">' + esc(T('dues')) + ' ›</a></p>' : '<p class="soft">' + esc(T('nodues')) + '</p>') + '</div>' +
-      HOME.map(function (f) { try { return f() || ''; } catch (e) { return ''; } }).join('') +
-      '<div class="card"><h3>' + esc(T('recent')) + '</h3>' + rowsHtml(recent) + '</div>' +
-      '<details class="card"><summary><b>' + esc(T('help')) + '</b></summary><p>' + esc(T('helpp')) + '</p><p class="soft">' + esc(T('invfix')) + '</p></details>';
+      '<div class="card" data-dash="cf"><h3>' + esc(T('d_cf')) + ' <small class="soft">' + esc(bizName()) + '</small></h3><div class="tiles">' + [['d_in', cf.inn], ['d_out', cf.out], ['d_net', cf.net]].map(function (x) { return '<div class="tile' + (x[1] < 0 ? ' neg' : '') + '"><span>' + esc(T(x[0])) + '</span><b>' + money(x[1]) + '</b></div>'; }).join('') + '</div></div>' +
+      '<div class="card" data-dash="top"><h3>' + esc(T('d_top')) + '</h3>' + (owe.length ? '<ul class="rows">' + owe.map(function (p) { return '<li><a href="#st/' + encodeURIComponent(p.key) + '"><b>' + esc(p.name) + '</b></a><b class="amt">' + money(p.bal) + '</b></li>'; }).join('') + '</ul><p><a class="link" href="#dues">' + esc(T('dues')) + ' ›</a></p>' : '<p class="soft">' + esc(T('nodues')) + '</p>') + '</div>' +
+      HOME.map(function (f, i) { var h = ''; try { h = f() || ''; } catch (e) {} return h ? '<div class="dash-x" data-dash="x' + i + '">' + h + '</div>' : ''; }).join('') +
+      '<div class="card" data-dash="recent"><h3>' + esc(T('recent')) + '</h3>' + rowsHtml(recent) + '</div>' +
+      '<details class="card" data-dash="help"><summary><b>' + esc(T('help')) + '</b></summary><p>' + esc(T('helpp')) + '</p><p class="soft">' + esc(T('invfix')) + '</p></details></div>';
   }
 
   /* one line per record, with its actions */
+  /* record types another part of the App edits through NSApp.editX (acctx, more, finrep, mfg, staff); canEdit lets them say no (a GST set-off) */
+  var XEDIT = /^(jv|fa|stk|wo|oinc|taxpay|pdd|sadv|loan|emi)$/;
   function rowsHtml(list, opts) {
     opts = opts || {};
     if (!list.length) return '<p class="soft">' + esc(T('none')) + '</p>';
@@ -339,19 +342,24 @@
       if (B.bounced(d)) pills += ' <span class="pill bad">' + esc(T('c_bounce')) + '</span>';
       else if (d.mode === 'cheque' && d.chq && d.chq.st && d.chq.st !== 'ok') pills += ' <span class="pill warn">' + esc(T('c_' + d.chq.st)) + '</span>';
       if (d.status === 'inv' && d.invNo) pills += ' <span class="pill ok">' + esc(T('made', { x: d.invNo })) + '</span>';
-      var acts = [];
-      if (d.photo) acts.push('<button type="button" class="btn sm" data-photo="' + d.id + '">' + esc(T('photo')) + '</button>');
-      if (appMade && ty !== 'cashmemo') acts.push('<button type="button" class="btn sm" data-edit="' + d.id + '">' + esc(T('edit')) + '</button>');
-      if (docUrl(d) && (!site || !appMade || /^(receipt|voucher|cashmemo)$/.test(ty))) acts.push('<a class="btn sm" href="' + docUrl(d) + '">' + esc(T('open')) + '</a>');
+      var acts = [], ib = function (attr, ic, lbl, cls) { return '<button type="button" class="btn sm ib' + (cls ? ' ' + cls : '') + '" ' + attr + ' title="' + esc(lbl) + '" aria-label="' + esc(lbl) + '">' + NS.icSvg(ic) + '</button>'; };
+      /* every entry opens to look at it (its lines, its accounting entry, the bill photo); the small buttons show only an icon, the name on hover */
+      acts.push(ib('data-view="' + d.id + '"', 'eye', T('open')));
+      var xed = !appMade && XEDIT.test(ty) && (ty !== 'stk' || /^(move|make|jobout|jobin)$/.test(d.kind || ''));   /* stock counts and adjustments are changed on the stock site */
+      if ((appMade && ty !== 'cashmemo') || xed) acts.push(ib('data-edit="' + d.id + '"', 'edit', T('edit')));
+      /* a document made in a maker (invoice, quotation...) is changed there: the button says Edit; the App's own receipts keep Open (to print) */
+      if (docUrl(d) && (!site || !appMade || /^(receipt|voucher|cashmemo)$/.test(ty))) acts.push('<a class="btn sm ib" href="' + docUrl(d) + '" title="' + esc(T(appMade ? 'print' : 'edit')) + '" aria-label="' + esc(T(appMade ? 'print' : 'edit')) + '">' + NS.icSvg(appMade ? 'print' : 'edit') + '</a>');
+      /* a document made in a maker: Print opens it there and prints at once */
+      if (docUrl(d) && !appMade) acts.push('<a class="btn sm ib" href="' + docUrl(d) + '&amp;print=1" title="' + esc(T('print')) + '" aria-label="' + esc(T('print')) + '">' + NS.icSvg('print') + '</a>');
       if (left[d.id] > 0.004 && (ty === 'invoice' || ty === 'cashmemo')) acts.push('<button type="button" class="btn sm" data-form="min" data-for="' + d.id + '">' + esc(T('recpay')) + '</button>');
       if (left[d.id] > 0.004 && ty === 'pbill') acts.push('<button type="button" class="btn sm" data-form="mout" data-for="' + d.id + '">' + esc(T('recpay')) + '</button>');
       if (CONVERT[ty] && !opts.noconv) acts.push('<select class="sm conv" data-conv="' + d.id + '" aria-label="' + esc(T('convert')) + ' ' + esc(d.no || '') + '"><option value="">' + esc(T('convert')) + '…</option>' +
         CONVERT[ty].map(function (x) { return '<option value="' + x + '">' + esc(T(x === 'invoice' ? 'makeinv' : x === 'so' ? 'makeso' : 'makedc')) + '</option>'; }).join('') + '</select>');
-      if (window.NSReuse && ty === 'pbill' && d.kind !== 'return' && d.items && d.items.length) acts.push('<button type="button" class="btn sm" data-reorder="' + d.id + '">' + esc(NS.t('cap.again_order')) + '</button>');
-      if (window.NSReuse && /^(invoice|cashmemo)$/.test(ty) && docUrl(d) && d.items && d.items.length) acts.push('<a class="btn sm" href="' + docUrl(d).replace('open=', 'copy=') + '">' + esc(NS.t('cap.again_sale')) + '</a>');
-      if ((ty === 'invoice' || ty === 'cashmemo') && B.partyName(d)) acts.push('<button type="button" class="btn sm wa" data-rowwa="' + d.id + '">' + esc(T('rwa')) + '</button>');
-      if (ty === 'exp') acts.push('<button type="button" class="btn sm" data-vprint="' + d.id + '">' + esc(T('print')) + '</button>');
-      if (appMade) acts.push('<button type="button" class="btn sm danger" data-del="' + d.id + '">' + esc(T('del')) + '</button>');
+      if (window.NSReuse && ty === 'pbill' && d.kind !== 'return' && d.items && d.items.length) acts.push(ib('data-reorder="' + d.id + '"', 'repeat', NS.t('cap.again_order')));
+      if (window.NSReuse && /^(invoice|cashmemo)$/.test(ty) && docUrl(d) && d.items && d.items.length) acts.push('<a class="btn sm ib" href="' + docUrl(d).replace('open=', 'copy=') + '" title="' + esc(NS.t('cap.again_sale')) + '" aria-label="' + esc(NS.t('cap.again_sale')) + '">' + NS.icSvg('repeat') + '</a>');
+      if ((ty === 'invoice' || ty === 'cashmemo') && B.partyName(d)) acts.push(ib('data-rowwa="' + d.id + '"', 'wa', T('rwa'), 'wa'));
+      if (ty === 'exp') acts.push(ib('data-vprint="' + d.id + '"', 'print', T('print')));
+      if (appMade || xed) acts.push(ib('data-del="' + d.id + '"', 'trash', T('del'), 'danger'));
       return '<li><div class="ln"><span><b>' + esc(docName(d)) + ' ' + esc(d.no || d.billNo || (ty === 'exp' && d.vno) || '') + '</b> ' + pills + '<span class="soft"> · <span class="nw">' + ldate(d.date) + '</span>' + (B.partyName(d) ? ' · ' + esc(B.partyName(d)) : d.cat ? ' · ' + esc(catName(d.cat)) : '') + '</span></span>' +
         '<b class="amt">' + money(amountOf(d)) + '</b></div><div class="acts">' + acts.join('') + '</div></li>';
     }).join('') + '</ul>';
@@ -553,7 +561,8 @@
     else if (b.hasAttribute('data-scan') && window.NSApp && NSApp.scan) NSApp.scan();
     else if (b.hasAttribute('data-quick')) quickEntry(b.getAttribute('data-quick'));
     else if (b.hasAttribute('data-form')) openForm(b.getAttribute('data-form'), { forId: b.getAttribute('data-for'), party: b.getAttribute('data-party'), mode: b.getAttribute('data-mode'), side: b.getAttribute('data-side') || '' });
-    else if (b.hasAttribute('data-photo')) showPhoto(b.getAttribute('data-photo'));
+    else if (b.hasAttribute('data-photo') || b.hasAttribute('data-view')) viewDoc(b.getAttribute('data-view') || b.getAttribute('data-photo'));
+    else if (b.hasAttribute('data-vwprint')) printHtml($('.vw-body', b.closest('dialog')).innerHTML);
     else if (b.hasAttribute('data-edit')) { var d = C.doc.filter(function (x) { return x.id === b.getAttribute('data-edit'); })[0]; if (d && !(window.NSApp.editX && NSApp.editX(d))) openForm(formOf(d), { rec: d }); }
     else if (b.hasAttribute('data-del')) delRec(b.getAttribute('data-del'));
     else if (b.hasAttribute('data-wa')) whatsapp(b.getAttribute('data-wa'));
@@ -661,6 +670,56 @@
     if (d.type === 'exp' && !d.vno) { var c = JSON.parse(JSON.stringify(d)); c.vno = vnoNext(c.date); NSStore.put('doc', c).then(function (s) { go(s || c); show(false, true); }, function () { go(d); }); }
     else go(d);
   }
+  /* ---------- Open: look at one entry inside the App (owner 2026-11-18) ---------- */
+  function printHtml(html) {
+    var host = $('#vch-print');
+    if (!host) { host = document.createElement('div'); host.id = 'vch-print'; host.className = 'vch-print'; document.body.appendChild(host); }
+    host.innerHTML = '<div class="stsheet sh vw-print">' + html + '</div>';
+    document.documentElement.classList.add('vch-on');
+    var off = function () { window.removeEventListener('afterprint', off); document.documentElement.classList.remove('vch-on'); host.innerHTML = ''; };
+    window.addEventListener('afterprint', off);
+    setTimeout(function () { window.print(); }, 60);
+  }
+  function viewDoc(id) {
+    var d = C.doc.filter(function (x) { return x.id === id; })[0]; if (!d) return;
+    var ty = d.type || 'invoice', appMade = d.app || /^(pbill|exp|ob|contra)$/.test(ty), url = docUrl(d), m = function (v) { return v ? money(v) : ''; };
+    var xed = !appMade && XEDIT.test(ty) && (ty !== 'stk' || /^(move|make|jobout|jobin)$/.test(d.kind || ''));
+    var row = function (k, v) { return v ? '<tr><th scope="row">' + esc(T(k)) + '</th><td>' + v + '</td></tr>' : ''; };
+    var party = B.partyName(d) || d.emp || d.lender || '';
+    var h = '<div class="vw-top"><div><b class="vw-ttl">' + esc(docName(d)) + ' ' + esc(d.no || d.billNo || d.vno || '') + '</b><br><span class="soft">' + ldate(d.date) + (party ? ' · ' + esc(party) : '') + '</span></div>' +
+      '<b class="vw-amt">' + money(amountOf(d)) + '</b></div>';
+    h += '<table class="tbl vw-facts"><tbody>' + row('vw_mode', esc(ENMODE[d.mode] || d.mode || '')) + row('vw_ref', esc(d.ref || d.billNo && d.no !== d.billNo && d.billNo || '')) +
+      row('vw_head', d.cat ? esc(EXP.indexOf(d.cat) >= 0 ? T('ex_' + d.cat) : catName(d.cat)) : '') + row('vw_due', d.due ? ldate(d.due) : '') + '</tbody></table>';
+    if (d.items && d.items.length) h += '<h3>' + esc(T('vw_items')) + '</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + esc(T('lg_itm')) + '</th><th class="n">' + esc(T('lg_iqty')) + '</th><th class="n">' + esc(T('vw_rate')) + '</th><th class="n">' + esc(T('vw_gst')) + '</th><th class="n">' + esc(T('lg_iamt')) + '</th></tr></thead><tbody>' +
+      d.items.map(function (it) { var a = num(it.qty || 0) * num(it.rate || 0) * (1 - num(it.disc || 0) / 100); return '<tr><td>' + esc(it.desc || '') + (it.hsn ? ' <small class="soft">HSN ' + esc(it.hsn) + '</small>' : '') + '</td><td class="n">' + esc(String(it.qty == null ? '' : it.qty)) + (it.unit ? ' ' + esc(it.unit) : '') + '</td><td class="n">' + m(num(it.rate)) + '</td><td class="n">' + (it.gst != null && it.gst !== '' ? esc(it.gst) + '%' : '') + '</td><td class="n">' + m(a) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    var P = [];
+    try { P = B.postings(d) || []; } catch (e) { P = []; }
+    if (P.length) {
+      var an = function (a) { return NSApp.accName ? NSApp.accName(a, d) : a; }, td = 0, tc = 0;
+      h += '<h3>' + esc(T('vw_entry')) + '</h3><div class="tbl-wrap"><table class="tbl vw-post"><thead><tr><th>' + esc(T('vw_acct')) + '</th><th class="n">' + esc(T('vw_dr')) + '</th><th class="n">' + esc(T('vw_cr')) + '</th></tr></thead><tbody>' +
+        P.map(function (l) { td += l.dr; tc += l.cr; return '<tr><td>' + (l.cr ? '<span class="vw-to">' + esc(T('vw_to')) + '</span> ' : '') + esc(an(l.a)) + '</td><td class="n">' + m(l.dr) + '</td><td class="n">' + m(l.cr) + '</td></tr>'; }).join('') +
+        '</tbody><tfoot><tr><th>' + esc(T('lg_itot')) + '</th><th class="n">' + money(td) + '</th><th class="n">' + money(tc) + '</th></tr></tfoot></table></div>';
+    }
+    var note = d.notes || d.narr || d.note || '';
+    if (note) h += '<p class="vw-note"><b>' + esc(T('vw_note')) + ':</b> ' + esc(note) + '</p>';
+    if (d.photo) h += '<h3>' + esc(T('photo')) + '</h3><img class="vw-photo" src="' + esc(d.photo) + '" alt="' + esc(T('photo')) + '">';
+    var acts = '';
+    if ((appMade && ty !== 'cashmemo') || xed) acts += '<button type="button" class="btn primary" data-edit="' + d.id + '" data-close-box>' + esc(T('edit')) + '</button>';
+    if (url && !appMade) acts += '<a class="btn primary" href="' + url + '" data-close-box>' + esc(T('edit')) + '</a>';
+    if (url && !appMade) acts += '<a class="btn" href="' + url + '&amp;print=1" data-close-box>' + esc(T('print')) + '</a>';
+    if (url && appMade) acts += '<a class="btn" href="' + url + '" data-close-box>' + esc(T('print')) + '</a>';
+    else if (/^(exp|sadv)$/.test(ty)) acts += '<button type="button" class="btn" data-vprint="' + d.id + '">' + esc(T('print')) + '</button>';
+    else if (!url) acts += '<button type="button" class="btn" data-vwprint>' + esc(T('print')) + '</button>';
+    var dlg = $('#vw-dlg');
+    if (!dlg) {
+      dlg = document.createElement('dialog'); dlg.id = 'vw-dlg'; dlg.className = 'vw-dlg';
+      document.body.appendChild(dlg);
+      dlg.addEventListener('click', function (e) { var x = e.target.closest('[data-close-box],[data-vwclose]'); if (x) dlg.close(); if (e.target.closest('button')) onClick(e); });
+    }
+    dlg.innerHTML = '<div class="dlg-hd"><h2>' + esc(T('open')) + ': ' + esc(docName(d)) + '</h2></div>' +
+      '<div class="vw-body">' + h + '</div><div class="quick vw-acts">' + acts + '</div>';
+    dlg.showModal();
+  }
   function showPhoto(id) {
     var d = C.doc.filter(function (x) { return x.id === id; })[0]; if (!d || !d.photo) return;
     var w = window.open('', '_blank'); if (!w) return;
@@ -732,9 +791,11 @@
   var andPrint = false;
   function openForm(kind, o) {
     o = o || {};
-    if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); andPrint = !!(e.submitter && e.submitter.hasAttribute('data-andprint')); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); dlg.addEventListener('close', function () { PRE = null; NSStore.sfRelease(); }); }
+    /* the entry window is parked with typing in it (multitasking): go back to it, or let it go and start the new one */
+    if (dlg && NS.vsParked && NS.vsParked(dlg)) { NS.ask(NS.t('desk.parkq'), { ok: NS.t('desk.parkback'), no: NS.t('desk.parkdrop') }).then(function (y) { if (y) NS.vsResume(dlg); else { NS.vsDrop(dlg); openForm(kind, o); } }); return; }
+    if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); andPrint = !!(e.submitter && e.submitter.hasAttribute('data-andprint')); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); dlg.addEventListener('close', function () { if (dlg._parking) return; PRE = null; NSStore.sfRelease(); }); }
     var rec = o.rec || null, today = NS.today(), h = '';
-    F = { kind: kind, rec: rec, forId: o.forId, biz: bizName() };
+    F = { kind: kind, rec: rec, forId: o.forId, biz: bizName() }; if (dlg) dlg.setAttribute('data-kind', kind);
     var forDoc = o.forId && C.doc.filter(function (d) { return d.id === o.forId; })[0];
     var party = rec ? B.partyName(rec) : o.party || (o.draft && o.draft.buyer ? o.draft.buyer.name : '') || (forDoc ? B.partyName(forDoc) : '');
     if (kind === 'min' || kind === 'mout') {
@@ -1035,7 +1096,7 @@
       if (!d.items.length) { NS.toast(T('need', { f: T('items') }), 'bad'); return; }
       if (rec) d = Object.assign(rec, d, { id: rec.id });
       var dup = k === 'pbill' && C.doc.filter(function (x) { return x.type === 'pbill' && x.kind !== 'return' && x.id !== (rec && rec.id) && key(x.no) === key(d.no) && key(B.partyName(x)) === key(party) && key(x.seller && x.seller.name) === key(bizName()); })[0];
-      if (dup && !confirm(T('samebill', { no: d.no, p: party }))) return;
+      if (dup && !window.confirm(T('samebill', { no: d.no, p: party }))) return;   /* (a check before saving the App's own entry; NS.ask is used where Save waits for an answer) */
       var mode = $('#f-mode', form) ? $('#f-mode', form).value : 'credit';
       jobs.push(savePartyRole(party, 'supplier', { gstin: d.buyer.gstin, state: d.buyer.state }));
       d.items.forEach(function (it) {
@@ -1114,66 +1175,6 @@
     if (again) load().then(function () { openForm(again, { quick: 1 }); });   /* quick entry: the next one, blank (after the saved one is in the list, so the next number is right) */
   }
   /* ---------- quick entry: the five everyday entries, keyboard first ---------- */
-  /* ---------- the voucher screen: every entry form (#app-form) is a full screen beside the side menu, not a box over the page
-     (owner 2026-11-18). Title bar with Back, the form, a Save bar that stays at the bottom. Leaving with unsaved typing asks first
-     (Esc, Back, Cancel, an F key for another entry). Small questions stay small boxes. ---------- */
-  function voucherScreen(d) {
-    if (!d) {
-      /* the App's own entry form, and every entry box another part of the App makes (other income and taxes, journal, fixed assets,
-         capital and loans, production...: class b2-dlg), now and when they are made later */
-      voucherScreen($('#app-form')); $$('dialog.b2-dlg').forEach(voucherScreen);
-      new MutationObserver(function (ms) { ms.forEach(function (m) { [].forEach.call(m.addedNodes, function (n) { if (n.nodeType === 1 && n.matches('dialog.b2-dlg')) voucherScreen(n); }); }); }).observe(document.body, { childList: true });
-      /* any other box with an entry form (a Save button and a title bar) becomes a voucher screen when it opens; questions, search,
-         help, the setup and other small boxes stay small. Some boxes draw their whole inside again at every opening: dressed each time */
-      var SMALL = '#desk-ask,#desk-cmd,#desk-keys,#ns-help,.nsf-dlg,.pk-dlg,.bz-dlg,#ns-mydata,.cap-dlg,#ns-tell,#ns-series,.sf-gate,.help-pnl';
-      var open0 = HTMLDialogElement.prototype.showModal;
-      HTMLDialogElement.prototype.showModal = function () {
-        try { if (this.classList.contains('vs')) vsDress(this); else if (!this.matches(SMALL) && $('button[type=submit]', this) && $('.dlg-hd,.dlg-h', this)) voucherScreen(this); } catch (e) {}
-        return open0.apply(this, arguments);
-      };
-      return;
-    }
-    if (d.classList.contains('vs')) return;
-    d.classList.add('vs', 'hub-dlg');
-    /* Back asks first when something is typed (before the box's own close listener runs) */
-    d.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('.vs-back')) { e.preventDefault(); e.stopPropagation(); NS.vsLeave(null, d); } }, true);
-    d.addEventListener('input', function (e) { if (e.target.closest && e.target.closest('form')) d.setAttribute('data-dirty', '1'); });
-    d.addEventListener('change', function (e) { if (e.target.closest && e.target.closest('form')) d.setAttribute('data-dirty', '1'); });
-    /* the other parts' boxes get the same keys as the App's own entry form: Ctrl+S saves, Enter goes to the next box */
-    if (d.id !== 'app-form') d.addEventListener('keydown', function (e) {
-      var k = (e.key || '').toLowerCase(), t = e.target, sb = $('button[type=submit]', d), f = sb && sb.closest('form');
-      if (!f) return;
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && k === 's') { e.preventDefault(); if (f.requestSubmit) f.requestSubmit(sb); else sb.click(); return; }
-      if (k !== 'enter' || e.shiftKey || e.ctrlKey || !t || t.tagName !== 'INPUT' || /^(checkbox|radio|file|submit|button)$/.test(t.type)) return;
-      var all = $$('input,select', f).filter(function (x) { return !x.disabled && x.type !== 'hidden' && x.type !== 'file' && x.type !== 'checkbox' && x.offsetParent !== null && !x.closest('details:not([open])'); });
-      var i = all.indexOf(t); if (i >= 0 && i < all.length - 1) { e.preventDefault(); all[i + 1].focus(); }
-    });
-    d.addEventListener('cancel', function (e) { if (d.getAttribute('data-dirty')) { e.preventDefault(); NS.vsLeave(null, d); } });
-    d.addEventListener('close', function () { d.removeAttribute('data-dirty'); });
-    /* a form drawn again inside the box (the App's entry form, the b2 boxes) is dressed again */
-    new MutationObserver(function () { vsDress(d); }).observe(d, { childList: true, subtree: false });
-    $$('form', d).forEach(function (f) { new MutationObserver(function () { vsDress(d); }).observe(f, { childList: true }); });
-    vsDress(d);
-  }
-  /* the title bar's close button becomes Back; the Save bar gets the keys to remember; a new form starts clean at the top */
-  function vsDress(d) {
-    var back = $('.vs-back', d) || $('.dlg-hd .icon-btn', d) || $('.dlg-hd [data-x]', d) || $('.dlg-h form[method=dialog] button', d) || $('.dlg-h > button:last-child', d);
-    if (back && !back.classList.contains('vs-back')) {
-      back.removeAttribute('onclick'); back.type = 'button'; back.className = 'btn sm vs-back'; back.setAttribute('aria-keyshortcuts', 'Escape');
-      back.innerHTML = '<span data-i18n="app.back">' + esc(T('back')) + '</span>';
-    }
-    var sb = $('button[type=submit]', d), ft = sb && (sb.closest('.dlg-foot,.btns,.dlg-f') || sb.parentNode);
-    if (ft) ft.classList.add('vs-foot');
-    if (ft && !$('.vs-keys', ft)) ft.insertAdjacentHTML('beforeend', '<span class="vs-keys" aria-hidden="true">' + esc(T('vs_keys')) + '</span>');
-    d.removeAttribute('data-dirty'); d.scrollTop = 0;
-  }
-  /* leave the voucher screen; with typing in it, ask first. then = what to open next (an F key) */
-  NS.vsLeave = function (then, d) {
-    d = d || $('dialog.vs[open]');
-    var go = function () { if (d) { d.removeAttribute('data-dirty'); if (d.open) d.close(); } if (then) setTimeout(then, 0); };
-    if (!d || !d.open || !d.getAttribute('data-dirty')) { go(); return; }
-    NS.ask(T('vs_leave'), { ok: T('vs_discard'), no: T('vs_stay'), danger: 1 }).then(function (y) { if (y) go(); else { var x = $('input,select', d); if (x) x.focus(); } });
-  };
   var QE = ['sale', 'pbill', 'min', 'mout', 'exp'];
   function quickEntry(kind) {
     whenReady(function () {
@@ -1261,7 +1262,6 @@
        printable sheets (.stsheet) and the dues table keep their own layout */
     var pn = $('[data-pane]');
     if (pn) new MutationObserver(function () { cardTables(pn); }).observe(pn, { childList: true, subtree: true });
-    voucherScreen();
     /* links to a document maker or My data open inside the app (new-tab and modified clicks are left alone) */
     document.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('a[href]');

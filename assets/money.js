@@ -224,6 +224,7 @@
     if (a.indexOf('exp:') === 0) { var n = d.type === 'exp' ? d.cat : ((d.lines || []).filter(function (l) { return key(l.head || 'Miscellaneous') === a.slice(4); })[0] || {}).head; return (n || a.slice(4)) + ' (expense)'; }
     return a;
   }
+  A.accName = accName;
   function particulars(d) {
     if (d.type === 'contra') return d.from === 'bank' ? 'Cash withdrawn from bank' : 'Cash deposited in bank';
     if (d.type === 'ob' && (d.side === 'cash' || d.side === 'bank')) return d.side === 'bank' ? 'Opening bank balance' : 'Opening cash in hand';

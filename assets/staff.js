@@ -72,6 +72,9 @@
   }
 
   /* ---------- loans ---------- */
+  /* Edit in the App's other lists opens these forms too (owner 2026-11-18) */
+  var prevSX = A.editX;
+  A.editX = function (d) { if (d && d.type === 'sadv') { advForm(d); return true; } if (d && d.type === 'loan') { loanForm(d); return true; } if (d && d.type === 'emi') { emiForm(d); return true; } return prevSX ? prevSX(d) : false; };
   function loanForm(rec) {
     var r = rec || { date: today(), lt: 'loan', amount: '', rate: '', months: '', emi: '', first: '', recv: true, mode: 'bank' };
     X.open(A.T('d_loan'), '<p class="soft">' + esc(F('loanh')) + '</p><div class="fg">' +
