@@ -303,7 +303,6 @@
       ((A.cash || 0) < -0.004 ? '<p class="note">' + esc(T('negcash')) + ' <button type="button" class="btn sm" data-form="ob">' + esc(T('ob')) + '</button></p>' : '') +
       '<div class="card"><h3>' + esc(T('quick')) + '</h3><div class="quick">' +
         '<a class="btn primary" href="' + toolUrl('billing') + '">+ ' + esc(T('newinv')) + '</a>' +
-        '<button type="button" class="btn primary" data-quick aria-keyshortcuts="Alt+Q">' + esc(T('qe_title')) + ' <kbd>Alt Q</kbd></button>' +
         ['min', 'mout', 'pbill', 'exp', 'ob'].map(function (f) { return '<button type="button" class="btn" data-form="' + f + '">+ ' + esc(T(f)) + '</button>'; }).join('') + '</div></div>' +
       '<div class="card"><h3>' + esc(T('overdue')) + '</h3>' + (bw.length ? '<ul class="rows">' + bw.map(function (b) {
         return '<li><a href="#st/' + encodeURIComponent(key(b.party)) + '"><b>' + esc(b.party) + '</b><span class="soft">' + esc(docName(b)) + ' ' + esc(b.no) + ' · ' + ldate(b.date) + ' · ' + esc(T('days', { n: B.daysBetween(b.date, today) })) + '</span></a><b class="amt">' + money(b.left) + '</b></li>'; }).join('') + '</ul>'
@@ -539,7 +538,6 @@
     var b = e.target.closest('button'); if (!b) return;
     if (b.hasAttribute('data-reorder')) { var od = C.doc.filter(function (x) { return x.id === b.getAttribute('data-reorder'); })[0], dr = od && NSReuse.orderAgain(od); if (dr) { dr.date = NS.today(); openForm('pbill', { draft: dr, after: function (form) { var n = document.createElement('div'); n.className = 'scan-note'; n.setAttribute('role', 'note'); n.textContent = NS.t('cap.reorder_note', { p: B.partyName(od), d: ldate(od.date) }); form.insertBefore(n, form.firstChild); } }); } }
     else if (b.hasAttribute('data-scan') && window.NSApp && NSApp.scan) NSApp.scan();
-    else if (b.hasAttribute('data-quick')) quickEntry(b.getAttribute('data-quick'));
     else if (b.hasAttribute('data-form')) openForm(b.getAttribute('data-form'), { forId: b.getAttribute('data-for'), party: b.getAttribute('data-party'), mode: b.getAttribute('data-mode'), side: b.getAttribute('data-side') || '' });
     else if (b.hasAttribute('data-photo')) showPhoto(b.getAttribute('data-photo'));
     else if (b.hasAttribute('data-edit')) { var d = C.doc.filter(function (x) { return x.id === b.getAttribute('data-edit'); })[0]; if (d && !(window.NSApp.editX && NSApp.editX(d))) openForm(formOf(d), { rec: d }); }
@@ -741,25 +739,22 @@
           : fld('f-tds', T('tdsin'), inp('f-tds', rec ? rec.tds : '', { mode: 'decimal', ltr: 1 }), { hint: T('tdsinh') }) + fld('f-tdsx', NS.t('uf.tdsr'), inp('f-tdsx', '', { mode: 'decimal', ltr: 1 }))) +
         fld('f-disc', NS.t(out ? 'wo.discr' : 'wo.disca'), inp('f-disc', rec ? rec.disc || '' : '', { mode: 'decimal', ltr: 1 }), { hint: NS.t(out ? 'wo.discrh' : 'wo.discah') }) +   /* cash discount (WP-3) */
         fld('f-note', T('note'), inp('f-note', rec ? (out ? (rec.lines && rec.lines[0] || {}).desc : rec.purpose) : ''), { wide: 1 }) + '</div></details>';
-    } else if (kind === 'pbill' || kind === 'pret' || kind === 'sale') {
+    } else if (kind === 'pbill' || kind === 'pret') {
       var r = rec || o.draft || { date: today, items: [{ desc: '', hsn: '', qty: 1, rate: '', gst: 18 }], round: true, buyer: { name: party } };   /* o.draft: a purchase bill read from a photo (billscan.js), not saved until confirmed */
-      var pm = C.party.filter(function (p) { return key(p.name) === key(party); })[0] || {}, sale = kind === 'sale';
-      if (sale && !rec) { r.no = NS.nextInvNo(C.doc, bizName(), today, CFG); r.noGst = /^(comp|unreg)$/.test(BIZ.reg || ''); r.round = (CFG.invoice || {}).round !== false; }
-      h = '<div class="fg">' + fld('f-party', T(sale ? 'cust' : 'supp'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList(sale ? 'customer' : 'supplier')) +
-        fld('f-gstin', sale ? T('qe_gstin') : T('gstin'), inp('f-gstin', (r.buyer && r.buyer.gstin) || pm.gstin || '', { ltr: 1 })) +
-        fld('f-state', sale ? T('qe_state') : T('state'), sel('f-state', (r.buyer && r.buyer.state) || pm.state || (BIZ.state || ''), [['', '—']].concat(NS.STATES.map(function (s) { return [s[0], s[0] + ' · ' + NS.stateLoc(s[0])]; })))) +
-        fld('f-no', T(kind === 'pret' ? 'billno' : sale ? 'qe_no' : 'sno'), inp('f-no', r.no || '', { ltr: 1, req: kind !== 'pret' })) +
+      var pm = C.party.filter(function (p) { return key(p.name) === key(party); })[0] || {};
+      h = '<div class="fg">' + fld('f-party', T('supp'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList('supplier')) +
+        fld('f-gstin', T('gstin'), inp('f-gstin', (r.buyer && r.buyer.gstin) || pm.gstin || '', { ltr: 1 })) +
+        fld('f-state', T('state'), sel('f-state', (r.buyer && r.buyer.state) || pm.state || (BIZ.state || ''), [['', '—']].concat(NS.STATES.map(function (s) { return [s[0], s[0] + ' · ' + NS.stateLoc(s[0])]; })))) +
+        fld('f-no', T(kind === 'pret' ? 'billno' : 'sno'), inp('f-no', r.no || '', { ltr: 1, req: kind === 'pbill' })) +
         fld('f-date', T('date'), inp('f-date', r.date, { type: 'date', req: 1 })) +
         (kind === 'pret' ? fld('f-orig', T('origno'), inp('f-orig', r.orig && r.orig.no || '', { ltr: 1 })) : fld('f-due', T('due'), inp('f-due', r.due || '', { type: 'date' }))) +
-        (window.NSApp.gdField && !sale ? NSApp.gdField(r.gd) : '') + '</div>' +
+        (window.NSApp.gdField ? NSApp.gdField(r.gd) : '') + '</div>' +
         '<fieldset><legend>' + esc(T('items')) + '</legend><div data-lines></div><button type="button" class="btn sm" data-addline>' + esc(T('addline')) + '</button>' +
-        '<label class="chk"><input type="checkbox" id="f-nogst"' + (r.noGst ? ' checked' : '') + '> ' + esc(T(sale ? 'qe_nogst' : 'nogst')) + '</label><label class="chk"><input type="checkbox" id="f-round"' + (r.round !== false ? ' checked' : '') + '> ' + esc(T('round')) + '</label>' +
+        '<label class="chk"><input type="checkbox" id="f-nogst"' + (r.noGst ? ' checked' : '') + '> ' + esc(T('nogst')) + '</label><label class="chk"><input type="checkbox" id="f-round"' + (r.round !== false ? ' checked' : '') + '> ' + esc(T('round')) + '</label>' +
         '<div class="sum" data-sum></div></fieldset>' +
         (kind === 'pbill' && !rec ? '<div class="fg">' + fld('f-mode', T('paidnow'), sel('f-mode', 'credit', modeOpts(true)), { hint: T('paidnowh') }) + '</div>' : '') +
-        (sale && !rec ? '<div class="fg">' + fld('f-mode', T('qe_recv'), sel('f-mode', /^(shop|resto|pharma)$/.test(BIZ.kind || '') ? 'cash' : 'credit', modeOpts(true)), { hint: T('qe_recvh') }) + '</div>' : '') +
-        (sale ? '' : '<div class="fg"><div class="f wide"><label for="f-photo">' + esc(T('photo')) + '</label><input type="file" id="f-photo" accept="image/*"><small class="soft">' + esc(T('photoh')) + '</small><div class="photo-pv" data-photo-pv></div></div></div>');
+        '<div class="fg"><div class="f wide"><label for="f-photo">' + esc(T('photo')) + '</label><input type="file" id="f-photo" accept="image/*"><small class="soft">' + esc(T('photoh')) + '</small><div class="photo-pv" data-photo-pv></div></div></div>';
       F.lines = JSON.parse(JSON.stringify(r.items)); F.photo = r.photo || '';
-      if (sale && !party && BIZ.state) h = h.replace('<option value="' + BIZ.state + '">', '<option value="' + BIZ.state + '" selected>');
     } else if (kind === 'exp') {
       var x = rec || { date: today, mode: 'cash', gst: '' };
       h = '<div class="fg">' + fld('f-date', T('date'), inp('f-date', x.date, { type: 'date', req: 1 })) +
@@ -790,9 +785,7 @@
         fld('f-amt', T('amount'), inp('f-amt', ob.amount || '', { mode: 'decimal', ltr: 1, req: 1 })) +
         fld('f-date', T('date'), inp('f-date', ob.date, { type: 'date', req: 1 })) + '</div>';
     }
-    $('[data-form-title]', dlg).textContent = (o.quick ? T('qe_title') + ' · ' : '') + T(kind === 'sale' ? 'qe_sale' : kind) + (rec && rec.no ? ' ' + rec.no : '') + (C.biz.length > 1 && bizName() ? ' · ' + bizName() : '');
-    F.quick = !!o.quick; dlg.classList.toggle('qe-on', F.quick);
-    if (F.quick) h = '<div class="qe-tabs" role="tablist">' + QE.map(function (q, i) { return '<button type="button" role="tab" class="btn sm' + (q === kind ? ' primary' : '') + '" aria-selected="' + (q === kind) + '" data-qe="' + q + '" aria-keyshortcuts="Alt+' + (i + 1) + '">' + esc(T(q === 'sale' ? 'qe_sale' : q)) + ' <kbd>Alt ' + (i + 1) + '</kbd></button>'; }).join('') + '</div><p class="soft qe-keys">' + esc(T('qe_keys')) + '</p>' + h;   /* two businesses: the form names the one it saves to */
+    $('[data-form-title]', dlg).textContent = T(kind) + (rec && rec.no ? ' ' + rec.no : '') + (C.biz.length > 1 && bizName() ? ' · ' + bizName() : '');   /* two businesses: the form names the one it saves to */
     form.innerHTML = h + '<div class="dlg-foot"><button type="submit" class="btn primary">' + esc(T('save')) + '</button>' +
       (kind === 'exp' ? '<button type="submit" class="btn" data-andprint data-ic="print">' + esc(T('save')) + ' + ' + esc(T('print')) + '</button>' : '') + '<button type="button" class="btn" data-close>' + esc(T('cancel')) + '</button></div>';
     $('[data-close]', form).addEventListener('click', function () { dlg.close(); });
@@ -803,9 +796,8 @@
     if (kind === 'ob') obShow();
     if (F.lines) drawPhoto();
     if (o.after) o.after(form, F);   /* billscan.js marks the fields it was unsure about */
-    $$('[data-qe]', form).forEach(function (b) { b.addEventListener('click', function () { openForm(b.getAttribute('data-qe'), { quick: 1 }); }); });
     dlg.showModal();
-    var first = F.quick ? $('#f-party,#f-cat', form) : $('input:not([type=date]),select', form); if (first && (F.quick || !first.value)) first.focus();
+    var first = $('input:not([type=date]),select', form); if (first && !first.value) first.focus();
   }
   function chqFields(out, c) {
     c = c || {};
@@ -889,7 +881,7 @@
     var m = C.item.filter(function (x) { return key(x.desc) === key(F.lines[i].desc); })[0];
     var sp = window.NSReuse && $('#f-party', form) ? NSReuse.partyRate(C.party.filter(function (p) { return key(p.name) === key($('#f-party', form).value); })[0], F.lines[i].desc) : null;   /* this supplier's own price list (My data) */
     if (!m && sp == null) return; m = m || {};
-    var L = F.lines[i], sr = F.kind === 'sale' ? m.rate || m.prate : m.prate || m.rate; if (!L.hsn) L.hsn = m.hsn || ''; if (!num(L.rate) && (sp != null || sr)) L.rate = sp != null ? sp : sr; if (m.gst !== '' && m.gst != null) L.gst = m.gst;
+    var L = F.lines[i]; if (!L.hsn) L.hsn = m.hsn || ''; if (!num(L.rate) && (sp != null || m.prate || m.rate)) L.rate = sp != null ? sp : m.prate || m.rate; if (m.gst !== '' && m.gst != null) L.gst = m.gst;
     var row = $$('[data-row]', form)[i]; if (row) { $('[data-lk=hsn]', row).value = L.hsn; $('[data-lk=rate]', row).value = L.rate; $('[data-lk=gst]', row).value = L.gst; }
     if (row && m.track && !$('[data-lk=batch],[data-lk=serial]', row)) { drawLines(); var di = $$('[data-lk=desc]', form)[i]; if (di) { di.focus(); di.setSelectionRange(di.value.length, di.value.length); } }   /* batch / serial item (more.js) */
   }
@@ -915,23 +907,8 @@
     d.tax = { taxable: t.taxable, cgst: t.cgst, sgst: t.sgst, igst: t.igst };
     return d;
   }
-  /* a sale bill made here is the same record the billing maker saves (docs.js blank() + totals), numbered by its rule */
-  function saleFromForm() {
-    var b = billFromForm(), inv = CFG.invoice || {}, ship = /^(comp|unreg)$/.test(BIZ.reg || '') || b.noGst;
-    var d = { type: 'invoice', app: 1, kind: ship ? 'supply' : 'tax', no: b.no, deliv: '', orig: { no: '', date: '' }, reason: 'ret', tr: { veh: '', tname: '', lr: '' },
-      paper: inv.paper || 'a4', design: inv.design || 'classic', copies: 1, date: b.date, due: b.due || '', pos: '', rc: false, recv: '', ref: '',
-      seller: sellerCopy(), buyer: { name: b.buyer.name, addr: '', city: '', pin: '', state: b.buyer.state, gstin: b.buyer.gstin, phone: '' }, ship: null, einv: null, irn: null,
-      items: b.items.map(function (it) { return Object.assign({}, it, { disc: '' }); }), round: b.round, comp: true, notes: inv.notes || '', terms: inv.terms || '',
-      status: 'unpaid', copyLabel: 'orig', valid: '', charges: [], tcs: { on: false, rate: '', base: 'total', sec: '' }, rec: null };
-    var pm = C.party.filter(function (p) { return key(p.name) === key(d.buyer.name); })[0];
-    if (pm) ['addr', 'city', 'pin', 'phone'].forEach(function (k) { if (pm[k]) d.buyer[k] = pm[k]; });
-    var t = B.itemTotals(d), total = r2(t.taxable + t.cgst + t.sgst + t.igst);
-    d.total = d.round ? Math.round(total) : total;
-    d.tax = { taxable: t.taxable, cgst: t.cgst, sgst: t.sgst, igst: t.igst };
-    return d;
-  }
   function drawSum() {
-    var d = F.kind === 'sale' ? saleFromForm() : billFromForm(), t = d.tax;
+    var d = billFromForm(), t = d.tax;
     $('[data-sum]', form).innerHTML = '<span>' + esc(T('taxable')) + ' <b>' + money(t.taxable) + '</b></span><span>' + esc(T('tax')) + ' <b>' + money(t.cgst + t.sgst + t.igst) + '</b>' + (t.igst ? ' (IGST)' : t.cgst ? ' (CGST + SGST)' : '') + '</span><span>' + esc(T('total')) + ' <b>' + money(d.total) + '</b></span>';
   }
   /* open bills of the party on the right side, ticked oldest first up to the amount */
@@ -1042,28 +1019,6 @@
         return NSStore.put('doc', v);
       }).then(done);
     }
-    if (k === 'sale') {
-      d = saleFromForm(); delete d.tax;
-      if (!d.items.length) { NS.toast(T('need', { f: T('items') }), 'bad'); return; }
-      var sdup = C.doc.filter(function (x) { return (x.type || 'invoice') === 'invoice' && key(x.no) === key(d.no) && NS.fy(x.date) === NS.fy(d.date) && key(x.seller && x.seller.name) === key(bizName()); })[0];
-      if (sdup) { NS.toast(T('qe_dup', { no: d.no }), 'bad'); $('#f-no', form).focus(); return; }
-      var smode = $('#f-mode', form) ? $('#f-mode', form).value : 'credit';
-      jobs.push(savePartyRole(party, 'customer', { gstin: d.buyer.gstin, state: d.buyer.state }));
-      d.items.forEach(function (it) {
-        if (!it.desc) return;
-        var hit = C.item.filter(function (x) { return key(x.desc) === key(it.desc); })[0];
-        if (!hit) jobs.push(NSStore.put('item', { desc: it.desc, hsn: it.hsn, unit: it.unit, rate: it.rate, prate: '', gst: it.gst, kind: 'goods' }));   /* a new item learns its sale rate; a saved one keeps its price list */
-      });
-      return Promise.all(jobs).then(function () { return NSStore.put('doc', d); }).then(function (saved) {
-        F.savedNo = saved.no;
-        if (smode === 'credit') return saved;
-        /* paid at once: a receipt linked to this bill, and the bill is marked paid (as Money received does) */
-        var rv = { type: 'receipt', app: 1, kind: 'pay', no: nextNo('receipt', 'RCT', saved.date), date: saved.date, paper: 'a4', design: 'classic', copies: 1, copyLabel: '', gstAdv: false, rate: '18', pos: '', sac: '', rv: '', rvDate: '', refDate: '', bank: '', balance: '', status: '',
-          seller: sellerCopy(), buyer: { name: party, addr: '', phone: '', gstin: saved.buyer.gstin, pan: '' }, amount: saved.total, tds: '', disc: 0, mode: smode, ref: '', against: saved.no, purpose: '', alloc: [{ id: saved.id, no: saved.no, amt: saved.total }] };
-        rv.total = saved.total;
-        return NSStore.put('doc', rv).then(markPaid);
-      }).then(done);
-    }
     if (k === 'exp') {
       d = Object.assign(rec || { type: 'exp', app: 1 }, { date: $('#f-date', form).value, seller: sellerCopy(), cat: catCode($('#f-cat', form).value.trim()), amount: r2(num($('#f-amt', form).value)), mode: $('#f-mode', form).value,
         buyer: { name: party }, no: $('#f-no', form).value.trim(), gst: $('#f-gst', form).value, itc: $('#f-itc', form).checked, inter: $('#f-inter', form).checked, notes: $('#f-note', form).value.trim() });
@@ -1096,37 +1051,7 @@
       return savePartyRole(party, d.side === 'pay' ? 'supplier' : 'customer').then(function () { return NSStore.put('doc', d); }).then(done);
     }
   }
-  function done() {
-    var again = F && F.quick && !F.rec ? F.kind : '', no = F && F.savedNo;
-    PRE = null; dlg.close(); NS.toast(again ? T('qe_saved', { no: no || '' }) : T('saved')); NS.checkReminder && NS.checkReminder(); show();
-    if (again) load().then(function () { openForm(again, { quick: 1 }); });   /* quick entry: the next one, blank (after the saved one is in the list, so the next number is right) */
-  }
-  /* ---------- quick entry: the five everyday entries, keyboard first ---------- */
-  var QE = ['sale', 'pbill', 'min', 'mout', 'exp'];
-  function quickEntry(kind) {
-    whenReady(function () {
-      if (!BIZ) { NS.toast(T('qe_nobiz'), 'bad'); return; }
-      if (dlg && dlg.open) dlg.close();
-      openForm(QE.indexOf(kind) >= 0 ? kind : 'sale', { quick: 1 });
-    });
-  }
-  /* Enter moves to the next box (the last box of the last item line starts a new line); Ctrl+S or Ctrl+Enter saves; Alt+1..5 switch */
-  document.addEventListener('keydown', function (e) {
-    if (!dlg || !dlg.open || !F || !F.quick) return;
-    var k = (e.key || '').toLowerCase(), t = e.target;
-    if (e.altKey && !e.ctrlKey) { var n = /^Digit([1-5])$/.exec(e.code || ''); if (n) { e.preventDefault(); openForm(QE[+n[1] - 1], { quick: 1 }); } return; }
-    if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'enter')) { e.preventDefault(); if (form.requestSubmit) form.requestSubmit(); else submit(); return; }
-    if (k !== 'enter' || e.shiftKey || !t || !form.contains(t) || !/^(INPUT|SELECT)$/.test(t.tagName) || /^(checkbox|file|submit|button)$/.test(t.type)) return;
-    e.preventDefault();
-    if (t.getAttribute('data-lk') === 'gst' && +t.getAttribute('data-li') === F.lines.length - 1 && (String(F.lines[F.lines.length - 1].desc).trim() || num(F.lines[F.lines.length - 1].rate))) {
-      F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form) && $('#f-nogst', form).checked ? 0 : 18 }); drawLines();
-      var nd = $$('[data-lk=desc]', form); nd[nd.length - 1].focus(); return;
-    }
-    var all = $$('input,select', form).filter(function (x) { return !x.disabled && x.type !== 'hidden' && x.type !== 'file' && x.type !== 'checkbox' && x.offsetParent !== null && !x.closest('details:not([open])'); });
-    var i = all.indexOf(t);
-    if (i >= 0 && i < all.length - 1) { all[i + 1].focus(); if (all[i + 1].select) try { all[i + 1].select(); } catch (er) {} }
-    else { var sb = $('button[type=submit]', form); if (sb) sb.focus(); }
-  }, true);
+  function done() { PRE = null; dlg.close(); NS.toast(T('saved')); NS.checkReminder && NS.checkReminder(); show(); }
   function savePartyRole(name, want, extra) {
     if (!name) return Promise.resolve();
     var hit = C.party.filter(function (x) { return key(x.name) === key(name); })[0];
@@ -1159,7 +1084,7 @@
     range: function (f, t) { if (f) stFrom = f; if (t) stTo = t; if (!stTo) stTo = NS.today(); if (!stFrom) stFrom = fyStart(stTo); return [stFrom, stTo]; },
     markPaid: markPaid, openUrl: openUrl, siteHome: siteHome, frameAt: frameAt, docUrl: docUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },
     whatsapp: whatsapp, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
-    door: function () { return DOOR; }, whenReady: whenReady, switchBiz: switchBiz, setBiz: setBiz, printVoucher: printVoucher, quickEntry: quickEntry
+    door: function () { return DOOR; }, whenReady: whenReady, switchBiz: switchBiz, setBiz: setBiz, printVoucher: printVoucher
   };
   function cardTables(root) {
     $$('table.tbl:not(.tbl-cards):not(.dues-t)', root).forEach(function (tb) {
