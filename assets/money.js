@@ -1,4 +1,4 @@
-/* Money door sites (khata., purchase., expenses., cheque., cash-book.): extra sections of the Nivesh Sahayak App.
+/* Money door sites (khata., purchase., expenses., cheque., cash-book.): extra sections of NSBiz.
    They read the same records as app.niveshsahayak.in through NSApp (app.js) and NSBooks (books.js), so nothing is stored twice:
      khata   customers who owe you: totals, quick credit sale / money received, top dues with WhatsApp and statement
      preg    purchase register: purchase bills, returns and self invoices with GST between two dates; debit note for a return

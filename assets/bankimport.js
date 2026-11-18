@@ -1,4 +1,4 @@
-/* NSBI: bank statement import for the Nivesh Sahayak App (gap-money, 2026-11-14). Pure functions, no screen; node scripts/test_bankimport.js.
+/* NSBI: bank statement import for NSBiz (gap-money, 2026-11-14). Pure functions, no screen; node scripts/test_bankimport.js.
    The statement is read by NSBank (bankcore.js: CSV or Excel, columns found by heading or chosen by hand). This file decides, for each line:
      - is it already in the books? (a line posted by an earlier import carries the same key `bsk`; a line that matches a saved receipt,
        payment, expense or contra of the same amount and direction within a few days is "in the books" and left out)

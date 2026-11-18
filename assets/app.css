@@ -1,4 +1,4 @@
-/* Nivesh Sahayak App and the money door sites: hub layout, lists, forms, printable sheets */
+/* NSBiz and the money door sites: hub layout, lists, forms, printable sheets */
 .mode-line{margin-top:6px!important;font-size:.9rem}
 .hub{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;align-items:start;margin-top:14px}
 .hub-nav{position:sticky;top:76px;display:flex;flex-direction:column;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:6px}

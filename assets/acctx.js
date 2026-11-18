@@ -1,4 +1,4 @@
-/* Accounts coverage screens of the Nivesh Sahayak App (after app.js and ledger.js, like money.js and more.js).
+/* Accounts coverage screens of NSBiz (after app.js and ledger.js, like money.js and more.js).
      WP-1  the App's expense form suggests the heads of heads.js (NSHeads); under the head it says what kind of head it is, its
            Tally group, blocked GST credit (CGST Act s.17(5)), reverse charge and TDS hints; a new name asks its type once and
            is kept as an own head (meta 'heads' = { custom: [{ name, t }] }).

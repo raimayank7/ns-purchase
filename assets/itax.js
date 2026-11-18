@@ -1,4 +1,4 @@
-/* Income tax in the Nivesh Sahayak App (gap-money, 2026-11-14; after acctx.js and staff.js, before the end of the app engine list).
+/* Income tax in NSBiz (gap-money, 2026-11-14; after acctx.js and staff.js, before the end of the app engine list).
    Section 'itx' with three parts (#itx, #itx/itr, #itx/data):
      Advance tax   estimate of the year's income from the books (the profit so far carried to the whole year, or the presumptive profit of
                    44AD / 44ADA, or typed), both regimes side by side, the four instalments (15 Jun / 15 Sep / 15 Dec / 15 Mar), what is already

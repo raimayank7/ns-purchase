@@ -1,4 +1,4 @@
-/* Staff, salary and loans in the Nivesh Sahayak App (Accounts coverage WP-5; after acctx.js, whose form helpers it uses).
+/* Staff, salary and loans in NSBiz (Accounts coverage WP-5; after acctx.js, whose form helpers it uses).
    Section 'stf' with four parts (#stf, #stf/emp, #stf/adv, #stf/loan):
      Salary     every salary slip of the business by month: gross, deductions, net, in the accounts or not, paid or not;
                 "Add to accounts" ticks an older slip in, "Mark paid" saves payDate / payMode on the slip (books.js posts the payment);

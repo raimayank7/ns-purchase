@@ -1,4 +1,4 @@
-/* Route / beat and scheme in the Nivesh Sahayak App (after app.js and ledger.js; India plan A, 2026-11-17; sums in routecore.js).
+/* Route / beat and scheme in NSBiz (after app.js and ledger.js; India plan A, 2026-11-17; sums in routecore.js).
      Party master (My data): optional Route / beat and Scheme boxes.
      Dues, Parties:           a Route filter next to the Group filter; each due line shows the party's route and scheme.
      Group reports:           a "Route-wise" tab = outstanding per route with ageing (0-30, 31-60, 61-90, 90+), the parties under each

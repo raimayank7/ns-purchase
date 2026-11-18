@@ -1,4 +1,4 @@
-/* Nivesh Sahayak App (app.niveshsahayak.in): the full software on the same data home as the document sites.
+/* NSBiz (app.niveshsahayak.in): the full software on the same data home as the document sites.
    Phase 2, money in and out: dashboard, sales list with what is still due on each bill, money received and paid
    (linked to bills, part payments, advances), purchase bills and returns, expenses, dues with ageing,
    party statements (print, PDF, WhatsApp reminder), cash and bank books, opening balances, one-click convert.
@@ -50,9 +50,15 @@
       if (/^\/do\/[a-z0-9-]+\//.test(u.pathname)) { go(u.pathname.slice(1) + u.search + u.hash); return true; }
       var h = u.hash.slice(1).split('/')[0];
       if (u.pathname === '/' && h && !DOOR && (SECS.indexOf(h) >= 0 || EXT[h])) { go(u.hash.slice(1)); return true; }
+      /* any other page of the App (Help, What's new, Windows program, About, privacy...) opens on an App screen with Back, so the
+         side menu, the business and the way back to the Dashboard stay (owner 2026-11-18: nothing may keep the user away); files are left alone */
+      if (!DOOR && u.pathname !== '/' && !/\.(json|xml|txt|exe|zip|pdf|png|jpe?g|webp|svg|ico|js|css)$/i.test(u.pathname)) { go('do/page' + u.pathname + u.search + u.hash); return true; }
       return false;
     }
     var s = DOOR ? '' : siteOf(u);
+    /* our other sites with no screen of their own in the App (support, promotion cards, website designs...): shown on an App screen too,
+       so nothing opens a new tab (owner 2026-11-18). www (Blogger) cannot be shown inside another page, so it still opens on its own. */
+    if (!s && !DOOR && /\.niveshsahayak\.in$/.test(u.hostname) && u.hostname !== 'www.niveshsahayak.in' && u.protocol === 'https:') { go('do/web/' + encodeURIComponent(u.href)); return true; }
     if (!s) return false;
     var how = (INAPP[s] || [])[2] || 'twin', path = u.pathname.replace(/^\/[a-z]{2,3}\/$/, '/');   /* a language home (/hi/) is the maker too */
     if (how.charAt(0) === '#') { var sh = u.hash.slice(1), s0 = sh.split('/')[0]; go(sh && (SECS.indexOf(s0) >= 0 || EXT[s0]) ? sh : how.slice(1)); return true; }
@@ -71,6 +77,8 @@
     var nd = NEWDOCS.filter(function (n) { return n[0] === site; })[0], k = (INAPP[site] || [])[3], nm = nd ? NS.t(nd[2] || 'Doc.' + nd[1]) : k ? NS.t(k) : site;
     if (/[?&]from=/.test(rest)) return T('fr_conv', { doc: nm });
     if (site === 'my') return NS.t('my.title');
+    if (site === 'web') { try { return new URL(decodeURIComponent(rest.slice(1))).hostname.replace('.niveshsahayak.in', ''); } catch (e) { return ''; } }
+    if (site === 'page') return /^\/([a-z]{2,3}\/)?help\//.test(rest) ? NS.t('f.help') : /whats-new/.test(rest) ? NS.t('wn.title') : /^\/desktop\//.test(rest) ? NS.t('nav.desktop') : 'Nivesh Sahayak';
     return nd && !id && /^\/(\?|#|$)/.test(rest) ? T('fr_new', { doc: nm }) : nm;
   }
   /* a maker copy tells what it has saved (inapp.js): the App's address and title follow it (replaceState: no new history step) */
@@ -106,7 +114,7 @@
   function frame(a) {
     var site = a.split(/[\/?#]/)[0], rest = a.slice(site.length) || '/';
     var how = (INAPP[site] || [])[2] || (site === 'my' ? 'twin' : 'frame'), path = rest.replace(/[?#].*$/, '');
-    var url = how === 'twin' && path === '/' ? '/do/' + site + rest : siteHome(site).replace(/\/$/, '') + rest;
+    var url = site === 'page' ? rest : site === 'web' ? decodeURIComponent(rest.slice(1)) : how === 'twin' && path === '/' ? '/do/' + site + rest : siteHome(site).replace(/\/$/, '') + rest;
     if (how === 'twin' && site !== 'my' && rest === '/') url += '?new=1';   /* "New ...": a fresh document, not the one last opened */
     var title = frameTitle(site, rest);
     var pane = $('[data-pane]'), sh = shelfEl(), box = curBox();
@@ -125,7 +133,11 @@
         '<iframe class="app-frame" src="' + esc(url) + '" title="' + esc(title) + '" allow="web-share; clipboard-write"></iframe>';
       sh.appendChild(box);
       var fr = $('iframe.app-frame', box);
-      fr.addEventListener('load', function () { fr.classList.add('on'); sizeFrame(); });
+      fr.addEventListener('load', function () {
+        fr.classList.add('on'); sizeFrame();
+        /* a page of the App: its own heading names the screen */
+        if (site === 'page') try { var hh = fr.contentDocument.querySelector('h1'), t2 = $('.fr-hd h2'); if (hh && t2 && box.classList.contains('cur')) t2.textContent = hh.textContent.trim(); } catch (er) {}
+      });
     } else $('iframe.app-frame', box).title = title;
     box.classList.add('cur'); box.setAttribute('data-used', String(Date.now())); sh.hidden = false;
     sizeFrame(); requestAnimationFrame(sizeFrame);
@@ -1189,6 +1201,13 @@
        printable sheets (.stsheet) and the dues table keep their own layout */
     var pn = $('[data-pane]');
     if (pn) new MutationObserver(function () { cardTables(pn); }).observe(pn, { childList: true, subtree: true });
+    /* My data (the button at the top, the status bar's backup line, the search box): the whole data manager on an App screen,
+       not a small box with links out (owner 2026-11-18) */
+    if (!DOOR) window.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-act="my-data"]');
+      if (!b || b.closest('dialog')) return;
+      e.preventDefault(); e.stopImmediatePropagation(); openUrl(myUrl());
+    }, true);
     /* links to a document maker or My data open inside the app (new-tab and modified clicks are left alone) */
     document.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('a[href]');

@@ -1,4 +1,4 @@
-/* Bank statement import in the Nivesh Sahayak App (gap-money, 2026-11-14; after itax.js).
+/* Bank statement import in NSBiz (gap-money, 2026-11-14; after itax.js).
    Section 'bimp': the user opens the CSV or Excel statement from net banking, checks the columns, and every line is sorted by bankimport.js
    (NSBI) into: receipt from a party, payment to a party, expense, other income, cash deposited or withdrawn, or still open. What the user
    confirms is saved as the records the Money screens already make (receipt, voucher, exp, oinc, contra), each with a `bsk` key so a line is

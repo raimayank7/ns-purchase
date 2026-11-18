@@ -1,4 +1,4 @@
-/* NSIT: income tax planning for the Nivesh Sahayak App (gap-money, 2026-11-14). Pure functions, no screen; node scripts/test_itcore.js.
+/* NSIT: income tax planning for NSBiz (gap-money, 2026-11-14). Pure functions, no screen; node scripts/test_itcore.js.
    Tax year 2026-27 = financial year 1 Apr 2026 to 31 Mar 2027, the first year of the Income-tax Act, 2025 (in force 1 Apr 2026).
    Plan only: it estimates, it does not file, and it is not tax advice. Rules used (dated 14 Nov 2026):
      advance tax        Act 2025 ss. 403 (charge; resident 60+ with no business income is exempt, s.403(3)), 404 (only when the tax is

@@ -1,4 +1,4 @@
-/* Party ledger and group reports of the Nivesh Sahayak App (after app.js; Party Ledger plan, Steps B and C).
+/* Party ledger and group reports of NSBiz (after app.js; Party Ledger plan, Steps B and C).
      st/<party key>   the party ledger (it replaces the old statement of account, so every #st/ link keeps working):
                       all entries with voucher type, number, Debit, Credit and the running balance marked Dr / Cr, opening and closing,
                       date presets and a voucher-type filter; or bill-wise (each bill, what settled it, what is still due);
@@ -166,7 +166,7 @@
       (S.rows.length ? '' : '<tr><td colspan="6" class="soft">No entries in this period.</td></tr>') +
       '</tbody><tfoot><tr><th colspan="3">Total</th><th class="n">' + money(S.dr, false) + '</th><th class="n">' + money(S.cr, false) + '</th><th></th></tr>' +
       '<tr><th colspan="3">Closing balance on ' + A.ldate(r[1]) + '</th><th class="n"></th><th class="n"></th><th class="n">' + enBal(S.close) + '</th></tr></tfoot></table>' +
-      '<p class="st-ft">Made with the Nivesh Sahayak App on ' + A.ldate(NS.today()) + '. Dr = amount due to ' + esc(A.bizName()) + '; Cr = amount due from ' + esc(A.bizName()) + '.</p></div>';
+      '<p class="st-ft">Made with NSBiz on ' + A.ldate(NS.today()) + '. Dr = amount due to ' + esc(A.bizName()) + '; Cr = amount due from ' + esc(A.bizName()) + '.</p></div>';
   }
   var VTEN = { sales: 'Sales', receipts: 'Money received', notes: 'Credit and debit notes', purchases: 'Purchases', payments: 'Payments', journal: 'Journal', opening: 'Opening balance' };
 
@@ -184,7 +184,7 @@
     };
     return '<div class="stsheet sh" dir="ltr" data-sheet>' + bizHead('BILL-WISE DETAILS', '<br>' + esc(p.name) + addrLines(p.rec) + '<br>As on ' + A.ldate(r[1])) +
       (sides.length ? sides.map(tbl).join('') : '<p>No bills up to this date.</p>') +
-      '<p class="st-ft">Made with the Nivesh Sahayak App on ' + A.ldate(NS.today()) + '. Money is set against the bills it names first, then against the oldest bill.</p></div>';
+      '<p class="st-ft">Made with NSBiz on ' + A.ldate(NS.today()) + '. Money is set against the bills it names first, then against the oldest bill.</p></div>';
   }
 
   /* the balance confirmation letter: auditors and CAs ask for it at year end */
