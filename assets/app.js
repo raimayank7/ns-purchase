@@ -1154,6 +1154,8 @@
   /* for door sites and extra sections (money.js) */
   window.NSApp = {
     T: T, B: B, addSection: function (name, html, wire) { EXT[name] = { html: html, wire: wire }; }, addHome: function (f) { HOME.push(f); }, cfg: function () { return CFG; }, show: show, openForm: openForm,
+    newDoc: function (v) { var u = toolUrl(v) === '#' ? siteHome(v) : toolUrl(v); if (!openUrl(u)) location.href = u; },
+    newDocs: function () { return NEWDOCS.filter(function (n) { return TOOLS.some(function (x) { return x[0] === n[0]; }) || INAPP[n[0]]; }).map(function (n) { return [n[0], NS.t(n[2] || 'Doc.' + n[1])]; }); },
     mine: mine, biz: function () { return BIZ; }, bizName: bizName, data: function () { return C; }, docName: docName, enName: enName, amountOf: amountOf,
     rowsHtml: rowsHtml, leftMap: leftMap, searchBar: searchBar, match: match, byDate: byDate, fyStart: fyStart, toolUrl: toolUrl, myUrl: myUrl, ldate: ldate,
     range: function (f, t) { if (f) stFrom = f; if (t) stTo = t; if (!stTo) stTo = NS.today(); if (!stFrom) stFrom = fyStart(stTo); return [stFrom, stTo]; },
