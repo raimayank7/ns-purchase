@@ -17,7 +17,7 @@
   /* shop and trade records (kit.js) open in their own site, which is not in TOOLS */
   var KITSITE = { pos: 'pos', pharma: 'pharmacy', resto: 'restaurant', lr: 'bilty', job: 'job-card', hotel: 'hotel', rentb: 'rent', rabill: 'contractor-bill', fee: 'fee-receipt' };
   KITSITE.jewel = 'jewellery'; KITSITE.garment = 'garment';   /* group C trade tools */
-  var SITEOF = { invoice: 'billing', quote: 'quotation', proforma: 'proforma', so: 'sales-order', challan: 'challan', po: 'purchase-order', self: 'self-invoice', note: 'credit-note', cashmemo: 'cash-memo', receipt: 'receipt', voucher: 'voucher' };
+  var SITEOF = { invoice: 'billing', quote: 'quotation', proforma: 'proforma', so: 'sales-order', challan: 'challan', po: 'purchase-order', self: 'self-invoice', note: 'credit-note', cashmemo: 'cash-memo', receipt: 'receipt', voucher: 'voucher', expinv: 'export-invoice' };
   function toolUrl(site) { var x = TOOLS.filter(function (x) { return x[0] === site; })[0]; if (!x) return '#'; return LOCAL ? 'http://localhost:' + x[4] + '/' : 'https://' + x[1] + '/'; }
   function myUrl(h) { return (LOCAL ? 'http://localhost:8862/' : 'https://my.niveshsahayak.in/') + (h || ''); }
   /* the shell: document makers and My data open inside the app (a frame next to the menu), not as another website.
@@ -146,7 +146,7 @@
   }
   var MODES = ['cash', 'upi', 'cheque', 'bank', 'card', 'dd', 'other'];
   var EXP = ['rent', 'power', 'salary', 'transport', 'phone', 'repair', 'office', 'fuel', 'bank', 'prof', 'ads', 'misc'];
-  var SALES = { invoice: 1, cashmemo: 1, note: 1, quote: 1, proforma: 1, so: 1, challan: 1 };
+  var SALES = { invoice: 1, cashmemo: 1, note: 1, quote: 1, proforma: 1, so: 1, challan: 1, expinv: 1 };
   SALES.jewel = 1; SALES.garment = 1;   /* group C trade tools: their bills are in the Sales list */
   var CONVERT = { quote: ['so', 'challan', 'invoice'], proforma: ['invoice'], so: ['challan', 'invoice'], challan: ['invoice'] };
   var SECS = ['home', 'sales', 'buy', 'money', 'dues', 'parties', 'cash', 'st'];
@@ -514,7 +514,7 @@
       return '<option value="' + esc(g.id) + '"' + (g.id === grp ? ' selected' : '') + '>' + new Array(g.depth + 1).join('\u2003') + esc(gname(g)) + '</option>'; }).join('') + '</select></label>';
   }
   /* the statement is printed in English like every document */
-  var ENDOC = { advadj: 'GST on advance adjusted', jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice', oinc: 'Other income', don: 'Donation or subscription received', taxpay: 'Tax paid', gstset: 'GST set-off', wo: 'Write-off', pdd: 'Provision for doubtful debts' };
+  var ENDOC = { salary: 'Salary slip', rent: 'Rent receipt', petty: 'Petty cash', emi: 'Loan EMI', salpay: 'Salary paid', sadv: 'Staff advance', loan: 'Loan', pettyl: 'Petty cash', rentin: 'Rent received', sal: 'Salary slip', expinv: 'Export invoice', advadj: 'GST on advance adjusted', jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice', oinc: 'Other income', don: 'Donation or subscription received', taxpay: 'Tax paid', gstset: 'GST set-off', wo: 'Write-off', pdd: 'Provision for doubtful debts' };
   function enName(d) {
     var ty = d.type || 'invoice';
     return ENDOC[ty === 'note' ? d.kind : ty === 'receipt' && d.kind !== 'pay' ? d.kind : ty === 'pbill' && d.kind === 'return' ? 'pret' : ty] || ty;
@@ -740,7 +740,7 @@
       img.src = u;
     });
   }
-  function formOf(d) { return d.type === 'contra' ? 'contra' : d.type === 'exp' ? 'exp' : d.type === 'ob' ? 'ob' : d.type === 'pbill' ? (d.kind === 'return' ? 'pret' : 'pbill') : d.type === 'receipt' ? 'min' : 'mout'; }
+  function formOf(d) { return d.type === 'jv' ? 'jv' : (d.type || 'invoice') === 'invoice' ? 'sale' : d.type === 'contra' ? 'contra' : d.type === 'exp' ? 'exp' : d.type === 'ob' ? 'ob' : d.type === 'pbill' ? (d.kind === 'return' ? 'pret' : 'pbill') : d.type === 'receipt' ? 'min' : 'mout'; }
 
   function delRec(id) {
     var d = C.doc.filter(function (x) { return x.id === id; })[0]; if (!d) return;
@@ -792,9 +792,12 @@
   var andPrint = false;
   function openForm(kind, o) {
     o = o || {};
+    /* F1-11: a journal or other record with its own editor opens there (Ctrl K, Open, Edit), never in the money forms */
+    if (o.rec && window.NSApp.editX && kind === 'jv' && NSApp.editX(o.rec)) return;
+    if (kind === 'jv') { location.hash = 'b2jv'; return; }
     /* the entry window is parked with typing in it (multitasking): go back to it, or let it go and start the new one */
     if (dlg && NS.vsParked && NS.vsParked(dlg)) { NS.ask(NS.t('desk.parkq'), { ok: NS.t('desk.parkback'), no: NS.t('desk.parkdrop') }).then(function (y) { if (y) NS.vsResume(dlg); else { NS.vsDrop(dlg); openForm(kind, o); } }); return; }
-    if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); andPrint = !!(e.submitter && e.submitter.hasAttribute('data-andprint')); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); dlg.addEventListener('close', function () { if (dlg._parking) return; PRE = null; NSStore.sfRelease(); }); }
+    if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); if (F && F._sent && Date.now() - F._sent < 1000) return; if (F) F._sent = Date.now();   /* a double click or two Ctrl+S save once (F3-1) */ andPrint = !!(e.submitter && e.submitter.hasAttribute('data-andprint')); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); dlg.addEventListener('close', function () { if (dlg._parking) return; PRE = null; NSStore.sfRelease(); }); }
     var rec = o.rec || null, today = NS.today(), h = '';
     F = { kind: kind, rec: rec, forId: o.forId, biz: bizName() }; if (dlg) { dlg.setAttribute('data-kind', kind); dlg.removeAttribute('data-dirty'); }
     var forDoc = o.forId && C.doc.filter(function (d) { return d.id === o.forId; })[0];
@@ -818,7 +821,7 @@
     } else if (kind === 'pbill' || kind === 'pret' || kind === 'sale') {
       var r = rec || o.draft || { date: today, items: [{ desc: '', hsn: '', qty: 1, rate: '', gst: o.quick ? qeGst() : 18 }], round: !(o.quick && qeP().round === false), buyer: { name: party } };   /* o.draft: a purchase bill read from a photo (billscan.js), not saved until confirmed */
       var pm = C.party.filter(function (p) { return key(p.name) === key(party); })[0] || {}, sale = kind === 'sale';
-      if (sale && !rec) { r.no = F.autoNo = NS.nextInvNo(C.doc, bizName(), today, CFG); r.noGst = /^(comp|unreg)$/.test(BIZ.reg || ''); r.round = (CFG.invoice || {}).round !== false; }
+      if (sale && !rec) { r.no = F.autoNo = NS.nextInvNo(C.doc, bizName(), today, CFG); r.noGst = /^(comp|unreg)$/.test(BIZ.reg || '') || !String(BIZ.gstin || '').trim();   /* no GSTIN: a bill of supply, never GST (F1-7) */ r.round = (CFG.invoice || {}).round !== false; }
       h = '<div class="fg">' + fld('f-party', T(sale ? 'cust' : 'supp'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList(sale ? 'customer' : 'supplier')) +
         fld('f-gstin', sale ? T('qe_gstin') : T('gstin'), inp('f-gstin', (r.buyer && r.buyer.gstin) || pm.gstin || '', { ltr: 1 })) +
         fld('f-state', sale ? T('qe_state') : T('state'), sel('f-state', (r.buyer && r.buyer.state) || pm.state || (BIZ.state || ''), [['', '—']].concat(NS.STATES.map(function (s) { return [s[0], s[0] + ' · ' + NS.stateLoc(s[0])]; })))) +
@@ -1026,7 +1029,7 @@
     return d;
   }
   function saleFromForm() {
-    var b = billFromForm(), inv = CFG.invoice || {}, ship = /^(comp|unreg)$/.test(BIZ.reg || '') || b.noGst;
+    var b = billFromForm(), inv = CFG.invoice || {}, ship = /^(comp|unreg)$/.test(BIZ.reg || '') || !String(BIZ.gstin || '').trim() || b.noGst;
     var d = { type: 'invoice', app: 1, kind: ship ? 'supply' : 'tax', no: b.no, deliv: '', orig: { no: '', date: '' }, reason: 'ret', tr: { veh: '', tname: '', lr: '' },
       paper: inv.paper || 'a4', design: inv.design || 'classic', copies: 1, date: b.date, due: b.due || '', pos: '', rc: false, recv: '', ref: '',
       seller: sellerCopy(), buyer: { name: b.buyer.name, addr: '', city: '', pin: '', state: b.buyer.state, gstin: b.buyer.gstin, phone: '' }, ship: null, einv: null, irn: null,
@@ -1154,11 +1157,13 @@
     }
     if (k === 'sale') {
       d = saleFromForm(); delete d.tax;
+      /* F1-11: changing a saved sale bill keeps it (same id, paid status, ship-to and dispatch), never a second copy */
+      if (F.rec) d = Object.assign(JSON.parse(JSON.stringify(F.rec)), d, { id: F.rec.id, status: F.rec.status, paidBy: F.rec.paidBy, ship: d.ship || F.rec.ship || null, disp: d.disp || F.rec.disp });
       if (!d.items.length) { NS.toast(T('need', { f: T('items') }), 'bad'); return; }
       /* the number is checked against the saved bills NOW, not the list read when the form opened: another tab or a second person
          may have used it meanwhile (P3-6). A number the App suggested moves on to the next free one; a typed one is refused. */
       return NSStore.list('doc').then(function (all) {
-      var dupOf = function (no) { return all.filter(function (x) { return (x.type || 'invoice') === 'invoice' && key(x.no) === key(no) && NS.fy(x.date) === NS.fy(d.date) && key(x.seller && x.seller.name) === key(bizName()); })[0]; };
+      var dupOf = function (no) { return all.filter(function (x) { return x.id !== d.id && (x.type || 'invoice') === 'invoice' && key(x.no) === key(no) && NS.fy(x.date) === NS.fy(d.date) && key(x.seller && x.seller.name) === key(bizName()); })[0]; };
       if (dupOf(d.no)) {
         if (F.autoNo && d.no === F.autoNo) { var was = d.no; d.no = F.autoNo = NS.nextInvNo(all, bizName(), d.date, CFG); $('#f-no', form).value = d.no; F.renumMsg = NS.t('c.renum', { a: was, b: d.no }); }
         else { NS.toast(T('qe_dup', { no: d.no }), 'bad'); $('#f-no', form).focus(); throw 'dup'; }
@@ -1390,6 +1395,8 @@
       if (openUrl(u.href)) return;
       if (u.origin === location.origin) location.href = u.href; else window.open(u.href, '_blank', 'noopener');   /* an App page with no screen (Help, About...) / another site of ours */
     });
+    /* F3-10: export invoices saved earlier as type exp (the expense type) move to expinv once */
+    NSStore.ready().then(function () { return NSStore.list('doc'); }).then(function (L) { return Promise.all((L || []).filter(function (d) { return d.type === 'exp' && B.isExpInv(d); }).map(function (d) { d.type = 'expinv'; return NSStore.put('doc', d); })); }).catch(function () {});
     NSStore.ready().then(route).then(function () { NSStore.persist().catch(function () {}); });
     window.addEventListener('focus', function () { if (cur !== 'do' && !$('dialog[open]')) show(false, true); });
     document.addEventListener('ns-data', function () { if (cur !== 'do' && !$('dialog[open]')) show(false, true); });

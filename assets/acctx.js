@@ -150,7 +150,7 @@
 
   /* ---------- section: other income and taxes ---------- */
   /* ---------- WP-4: pay tax ---------- */
-  var HEADS4 = ['igst', 'cgst', 'sgst', 'cess'], MIN4 = ['tax', 'int', 'pen', 'fee', 'oth'], TAXK = ['gst', 'tds', 'tcs', 'adv', 'gstref', 'itref'];
+  var HEADS4 = ['igst', 'cgst', 'sgst', 'cess'], MIN4 = ['tax', 'int', 'pen', 'fee', 'oth'], TAXK = ['gst', 'tds', 'tcs', 'pf', 'esi', 'pt', 'adv', 'gstref', 'itref'];
   var HNAME = { igst: 'IGST', cgst: 'CGST', sgst: 'SGST/UTGST', cess: 'Cess' };
   var TDSSEC = ['194C', '194J', '194I', '194H', '194A', '194Q', '192'];
   function ownerTo() { var b = A.biz() || {}, t = b.btype || 'prop'; return t === 'prop' ? 'drw' : 'oca'; }
@@ -175,7 +175,7 @@
       var d = Object.assign(rec ? JSON.parse(JSON.stringify(rec)) : { type: 'taxpay', no: nextNo('taxpay', 'TX', date) }, { kind: k, date: date, seller: sellerCopy(), mode: val('ax-mode'), ref: val('ax-ref'), period: k === 'adv' || k === 'itref' ? '' : val('ax-per'), notes: val('ax-note') });
       ['gst', 'sec', 'tax', 'int', 'fee', 'amount', 'to'].forEach(function (x) { delete d[x]; });
       if (k === 'gst' || k === 'gstref') d.gst = readGrid(k);
-      else if (k === 'tds' || k === 'tcs') { var m = /(19\d\w*|206\w*)/.exec(val('ax-sec')); d.sec = m ? m[1] : val('ax-sec'); d.tax = r2(num(val('ax-tax'))); d['int'] = r2(num(val('ax-int'))); d.fee = r2(num(val('ax-fee'))); }
+      else if (/^(tds|tcs|pf|esi|pt)$/.test(k)) { var m = /^(tds|tcs)$/.test(k) && /(19\d\w*|206\w*)/.exec(val('ax-sec')); d.sec = /^(tds|tcs)$/.test(k) ? (m ? m[1] : val('ax-sec')) : ''; d.tax = r2(num(val('ax-tax'))); d['int'] = r2(num(val('ax-int'))); d.fee = r2(num(val('ax-fee'))); }
       else { d.amount = r2(num(val('ax-amt'))); d.to = ownerTo(); }
       d.total = NSBooks.taxPay(d).total;
       if (!(d.total > 0)) { NS.toast(A.T('need', { f: A.T('amount') }), 'bad'); return; }
@@ -195,7 +195,7 @@
         var k = val('ax-kind');
         if (k !== shown) { shown = k; if (k === 'gst' || k === 'gstref') grid(k); }
         $('[data-axgst]', f).hidden = !(k === 'gst' || k === 'gstref');
-        $('[data-axtds]', f).hidden = !(k === 'tds' || k === 'tcs');
+        $('[data-axtds]', f).hidden = !/^(tds|tcs|pf|esi|pt)$/.test(k); $('#ax-sec', f).closest('.f').hidden = !(k === 'tds' || k === 'tcs');
         $('[data-axadv]', f).hidden = !(k === 'adv' || k === 'itref');
         $('#ax-per', f).closest('.f').hidden = k === 'adv' || k === 'itref';
         $('[data-axkh]', f).textContent = T('kh_' + k) + (k === 'adv' || k === 'itref' ? ' ' + T(ownerTo() === 'drw' ? 'todrw' : 'tooca') : '');
@@ -212,7 +212,7 @@
     HEADS4.forEach(function (h) { cols.forEach(function (c) { var e = $('#ax-g-' + h + '-' + c, form), v = e ? r2(num(e.value)) : 0; if (v) (o[h] = o[h] || {})[c] = v; }); });
     return o;
   }
-  var ENK = { gst: 'GST paid (challan PMT-06)', tds: 'TDS paid', tcs: 'TCS paid', adv: 'Advance or self-assessment tax', gstref: 'GST refund received', itref: 'Income-tax refund received' };
+  var ENK = { gst: 'GST paid (challan PMT-06)', tds: 'TDS paid', tcs: 'TCS paid', pf: 'PF paid (ECR challan)', esi: 'ESI paid', pt: 'Professional tax paid', adv: 'Advance or self-assessment tax', gstref: 'GST refund received', itref: 'Income-tax refund received' };
   function gstsetName(d) { return T('setfor', { p: d.label || d.per || '' }); }
 
   /* ---------- WP-3: write-off of a bill's balance ---------- */

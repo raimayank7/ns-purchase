@@ -215,21 +215,25 @@
 
   /* ---------- cash book, bank book, day book ---------- */
   var bk = 'cash';
-  var ACC = { sales: 'Sales', 'sales-return': 'Sales returns', purchases: 'Purchases', 'purchase-return': 'Purchase returns', cash: 'Cash', bank: 'Bank', 'chq-in': 'Cheques received (not cleared)', 'chq-out': 'Cheques issued (not cleared)',
+  var ACC = { 'sal-payable': 'Salary payable', 'pf-payable': 'PF payable', 'esi-payable': 'ESI payable', 'pt-payable': 'Professional tax payable', 'gstcash-igst': 'GST cash ledger: IGST', 'gstcash-cgst': 'GST cash ledger: CGST', 'gstcash-sgst': 'GST cash ledger: SGST', 'gstcash-cess': 'GST cash ledger: cess', sales: 'Sales', 'sales-return': 'Sales returns', purchases: 'Purchases', 'purchase-return': 'Purchase returns', cash: 'Cash', bank: 'Bank', 'chq-in': 'Cheques received (not cleared)', 'chq-out': 'Cheques issued (not cleared)',
     'gst-out-cgst': 'Output CGST', 'gst-out-sgst': 'Output SGST', 'gst-out-utgst': 'Output UTGST', 'gst-out-igst': 'Output IGST', 'gst-in-cgst': 'Input CGST', 'gst-in-sgst': 'Input SGST', 'gst-in-igst': 'Input IGST',
     'gst-rcm-payable': 'GST payable (reverse charge)', 'gst-adv': 'GST paid on advances', 'tds-receivable': 'TDS receivable', 'tds-payable': 'TDS payable', 'round-off': 'Round off', opening: 'Opening balances', 'p:cash-customer': 'Cash customer', 'p:unknown': 'Creditors (unnamed)' };
   function accName(a, d) {
     if (ACC[a]) return ACC[a];
     if (a.indexOf('p:') === 0) return B.partyName(d) || a.slice(2);
     if (a.indexOf('exp:') === 0) { var n = d.type === 'exp' ? d.cat : ((d.lines || []).filter(function (l) { return key(l.head || 'Miscellaneous') === a.slice(4); })[0] || {}).head; return (n || a.slice(4)) + ' (expense)'; }
-    return a;
+    var N = window.NSPL && NSPL.NAMES && NSPL.NAMES[a]; if (N) return N[0];
+    var px = a.split(':')[0], rest = a.slice(px.length + 1), cap = function (x) { return String(x || '').replace(/(^|\s)\S/g, function (c) { return c.toUpperCase(); }); };
+    var PX = { cap: 'Capital', drw: 'Drawings', loan: 'Loan from', od: 'Bank overdraft', given: 'Loan given to', fa: 'Fixed asset', inc: '', ocl: '', oca: '', sadv: 'Advance to', dexp: '', iexp: '' };
+    if (rest && PX[px] != null) return (PX[px] ? PX[px] + ': ' : '') + cap(rest);
+    return cap(a.replace(/[-:]/g, ' '));
   }
   A.accName = accName;
   function particulars(d) {
     if (d.type === 'contra') return d.from === 'bank' ? 'Cash withdrawn from bank' : 'Cash deposited in bank';
     if (d.type === 'ob' && (d.side === 'cash' || d.side === 'bank')) return d.side === 'bank' ? 'Opening bank balance' : 'Opening cash in hand';
     if (d.type === 'advadj') return A.enName(d) + ' ' + d.rv + (d.bill ? ' > ' + d.bill : '') + (d.pname ? ' · ' + d.pname : '');   /* GST of an advance used by a bill or refund (round C) */
-    var p = B.partyName(d); return A.enName(d) + (d.no ? ' ' + d.no : '') + (p ? ' · ' + p : d.cat ? ' · ' + d.cat : '');
+    var p = B.partyName(d); return A.enName(d) + (d.no ? ' ' + d.no : '') + (p ? ' · ' + p : d.type === 'fa' && d.name ? ' · ' + d.name : d.cat ? ' · ' + d.cat : '');   /* an asset by its name, not its kind code (F2 re-check) */
   }
   var bkArg = '';
   A.addSection('books', function (a) {
