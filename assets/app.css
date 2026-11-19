@@ -683,3 +683,7 @@ tr.rp-cur>*{background:color-mix(in srgb,var(--accent,#0E746A) 14%,transparent)!
 @media (max-width:480px){[data-pane] .btn.sm{white-space:normal;max-width:100%;text-align:center}}
 /* very small phones (320 px): New document and Settings each take a whole row, so the New box is not cut to "+ Nev" */
 @media (max-width:360px){.bizbar .newdoc{flex:1 1 100%}.bizbar>.btn{flex:1 1 100%;max-width:100%}}
+/* Masters gateway, tidy (19 Nov 2026): every line the same three parts (name, count, Create) in one column; a list page has a path back and one Go to box */
+.ms-gw{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}.ms-card{padding:14px 16px}.ms-card h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--soft)}
+.ms-list li{display:grid;grid-template-columns:1fr auto;min-height:44px}.ms-list li>a{min-width:0}.ms-list .btn.sm{justify-self:end}
+.ms-crumb{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:.1rem 0 1rem}.ms-crumb>a{color:var(--accent,#0E746A)}.ms-crumb .ms-goto{margin-inline-start:auto}.ms-crumb select{min-height:36px;width:auto}
