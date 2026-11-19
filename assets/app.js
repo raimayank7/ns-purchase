@@ -121,6 +121,7 @@
     var title = frameTitle(site, rest);
     var pane = $('[data-pane]'), sh = shelfEl(), box = curBox();
     document.documentElement.classList.add('app-in', 'app-frame-on');
+    document.documentElement.classList.toggle('app-maker', !/^(my|page|web)$/.test(site));   /* a document maker: full screen (desk.css) */
     if (box && box.getAttribute('data-url') === url && !sh.hidden) return;
     /* the App's own title row (Back + what is open), then the document: no second website, no new tab */
     pane.innerHTML = '<div class="pane-hd fr-hd"><button type="button" class="btn sm fr-back" data-fback>' + esc(T('back')) + '</button><h2>' + esc(title) + '</h2></div>';
@@ -263,7 +264,7 @@
     /* one cash screen: where the cash, bank and day book screen (money.js) is on hand, #cash and #cash/bank open it */
     if (cur === 'cash' && EXT.books && (!DOOR || DOOR.indexOf('books') >= 0)) { cur = 'books'; arg = B.isBank(arg) ? arg : 'cash'; }
     if (cur === 'do' && window.NSVDocs && NSVDocs.claim(arg)) { trail.pop(); history.replaceState(null, '', '#' + (backTo || 'home')); route(); return; }
-    if (cur !== 'do') { backTo = h; document.documentElement.classList.remove('app-frame-on'); shelve(); }
+    if (cur !== 'do') { backTo = h; document.documentElement.classList.remove('app-frame-on', 'app-maker'); shelve(); }
     if (DOOR && DOOR.indexOf(cur) < 0 && cur !== 'st') { cur = DOOR[0]; arg = ''; }
     show(true);
   }

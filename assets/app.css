@@ -687,3 +687,26 @@ tr.rp-cur>*{background:color-mix(in srgb,var(--accent,#0E746A) 14%,transparent)!
 .ms-gw{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}.ms-card{padding:14px 16px}.ms-card h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--soft)}
 .ms-list li{display:grid;grid-template-columns:1fr auto;min-height:44px}.ms-list li>a{min-width:0}.ms-list .btn.sm{justify-self:end}
 .ms-crumb{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:.1rem 0 1rem}.ms-crumb>a{color:var(--accent,#0E746A)}.ms-crumb .ms-goto{margin-inline-start:auto}.ms-crumb select{min-height:36px;width:auto}
+/* Capital and loans: the type of entry and New entry on one line (19 Nov 2026) */
+.fr-kinds{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.fr-kinds label{font-weight:600}.fr-kinds select{width:auto;max-width:100%;min-height:40px}
+/* the business name once (owner 19 Nov 2026: "some places carry the business name multiple places"): on a computer the title bar's business
+   button switches it and the status bar shows it, so the Business box above each screen is not repeated */
+@media (min-width:901px){html.mb-on:has(.hd .bz-chip:not([hidden])) .bizbar{display:none}}   /* at 900 px and less the title bar hides its business button, so the box stays */
+/* voucher tools (vtools.js, 19 Nov 2026): saved-voucher moves in the title row, party balance, cash in hand, day name */
+.vt-nav{display:flex;align-items:center;gap:4px;margin-inline-start:auto;order:9;flex-wrap:wrap}.vt-nav .btn{min-width:34px}.vt-pos{font-size:.8rem;padding:0 6px;white-space:nowrap}
+.vt-find{width:7.5em;min-height:32px;padding:2px 8px;font-size:.85rem}
+.vt-bal{display:block;margin-top:3px;font-weight:600;font-size:.82rem;color:var(--soft)}.vt-bal.dr{color:var(--accent,#0E746A)}.vt-bal.cr{color:#b45309}
+.vt-cash{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0 0 10px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:.88rem;background:var(--surface2,rgba(127,127,127,.06))}
+.vt-day{display:block;margin-top:2px;font-size:.75rem}
+@media print{.vt-nav,.vt-bal,.vt-cash,.vt-day{display:none!important}}
+/* Masters > Ledgers details strip (19 Nov 2026) */
+.ms-strip{position:sticky;bottom:0;margin-top:8px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 -4px 14px rgba(0,0,0,.12);font-size:.85rem;z-index:2}
+.ms-sn{font-size:.95rem}.ms-sb{display:flex;flex-wrap:wrap;gap:4px 18px;margin-top:4px}.ms-sb small{color:var(--soft)}
+.ms-tbl tr[data-msi]{cursor:default}.ms-tbl tr.ms-cur td{background:var(--surface2,rgba(127,127,127,.1))}.ms-tbl tr[data-msi]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media print{.ms-strip{display:none!important}}
+/* party ledger print choices (19 Nov 2026) */
+.lg-opts{margin:8px 0}.lg-optl{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 0}
+.lg-novt .lg-cvt,.lg-novn .lg-cvn{display:none}
+@media print{.lg-half{font-size:9pt}.lg-half .lg-tbl td,.lg-half .lg-tbl th{padding:2px 4px}}
+/* sales and purchase analysis by month (19 Nov 2026) */
+.tbl-scroll{overflow-x:auto}.sm-mx td:first-child,.sm-mx th:first-child{position:sticky;inset-inline-start:0;background:var(--bg-2,var(--surface,#fff));z-index:1}.sm-mx th,.sm-mx td{white-space:nowrap}

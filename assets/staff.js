@@ -233,12 +233,15 @@
     }).join('') : '<p class="soft">' + esc(F('noloans')) + '</p>');
   }
   var BTN = { sal: [['slip', 'newslip'], ['emp', 'empnew']], emp: [['emp', 'empnew'], ['give', 'advgive']], adv: [['give', 'advgive'], ['back', 'advback']], loan: [['loan', 'loannew']] };
+  A.stfTabs = tabList;   /* which payroll parts are switched on: the menu shows only those (desk.js) */
   A.addSection('stf', function (arg) {
     var cur = tabList().indexOf(arg) >= 0 ? arg : 'sal';
     var body = EXT[cur] ? EXT[cur].html() : cur === 'emp' ? empHtml() : cur === 'adv' ? advHtml() : cur === 'loan' ? loanHtml() : salHtml();
-    return '<div class="pane-hd"><h2>' + esc(A.T('stf')) + '</h2><div class="quick">' + (BTN[cur] || []).map(function (b, i) {
+    /* no tab row: each part is its own menu entry (Payroll Masters, Vouchers, Reports, Statutory), so the heading names the part (owner 19 Nov 2026) */
+    var PH = { sal: 'v_salreg', run: 'v_payrun', emp: 'v_emp', heads: 'v_payheads', att: 'v_att', leave: 'v_leave', pf: 'v_pf', esi: 'v_esi', tax: 'v_saltds', year: 'v_bonus', adv: 'v_adv', loan: 'v_sloan' };
+    return '<div class="pane-hd"><h2>' + esc(PH[cur] ? NS.t('desk.' + PH[cur]) : A.T('stf')) + '</h2><div class="quick">' + (BTN[cur] || []).map(function (b, i) {
       return b[0] === 'slip' ? '<a class="btn' + (i ? '' : ' primary') + '" data-sfopen href="' + esc(slipUrl()) + '">+ ' + esc(F(b[1])) + '</a>' : '<button type="button" class="btn' + (i ? '' : ' primary') + '" data-sfnew="' + b[0] + '">+ ' + esc(F(b[1])) + '</button>';
-    }).join('') + '</div></div>' + tabs(cur) + body;
+    }).join('') + '</div></div>' + body;
   }, function (pane) {
     var hm = /^#stf\/(\w+)/.exec(location.hash); if (hm && EXT[hm[1]] && EXT[hm[1]].bind) EXT[hm[1]].bind(pane);
     $$('[data-sfopen]', pane).forEach(function (a) { a.addEventListener('click', function (e) { if (A.openUrl && A.openUrl(a.href)) e.preventDefault(); }); });

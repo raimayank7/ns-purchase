@@ -121,7 +121,7 @@
       period() +
       (view === 'all' ? '<div class="lg-vt" role="group" aria-label="' + esc(T('lg_vt')) + '"><span class="soft">' + esc(T('lg_vt')) + '</span> <button type="button" class="btn sm" data-vt="" aria-pressed="' + !types.length + '">' + esc(T('all')) + '</button>' +
         VT.map(function (v) { return '<button type="button" class="btn sm" data-vt="' + v + '" aria-pressed="' + (types.indexOf(v) >= 0) + '">' + esc(T('lg_vt_' + v)) + '</button>'; }).join('') + '</div>' +
-        (types.length ? '<p class="soft">' + esc(T('lg_filtered')) + '</p>' : '') : '') + '</div>' +
+        (types.length ? '<p class="soft">' + esc(T('lg_filtered')) + '</p>' : '') + lgOptBox() : '') + '</div>' +
       (view === 'bills' ? '<p class="soft">' + esc(T('lg_billsh', { d: A.ldate(r[1]) })) + '</p>' : '') +
       (view === 'letter' ? '<p class="soft">' + esc(T('lg_letterh', { p: p.name, d: A.ldate(r[1]) })) + '</p><label class="chk"><input type="checkbox" data-withst' + (withStmt ? ' checked' : '') + '> ' + esc(T('lg_stmt')) + '</label>' : '') +
       (view === 'items' ? (function () { var S = itemSums(ents); return (itemsTable(S.sale, T('lg_sold', { p: p.name })) + itemsTable(S.buy, T('lg_bought', { p: p.name }))) || '<p class="soft">' + esc(T('lg_noitems')) + '</p>'; })() :
@@ -145,6 +145,7 @@
       });
     });
     var pv = $('[data-lgprev]', pane); if (pv) pv.addEventListener('click', function () { shown = !shown; A.show(); });
+    $$('[data-lgo]', pane).forEach(function (c) { c.addEventListener('change', function () { var o = lgOpt(); o[c.getAttribute('data-lgo')] = c.checked ? 1 : 0; lgOptSave(o); shown = true; A.show(); var d = $('.lg-opts', pane); setTimeout(function () { var d2 = document.querySelector('.lg-opts'); if (d2) d2.open = true; }, 30); }); });   /* print choices: the preview shows the change at once */
     /* Print / PDF pressed before the preview: open the ledger page first, then print or make the PDF */
     var lp = $('[data-lgprint]', pane); if (lp) lp.addEventListener('click', function () { if (shown) { window.print(); return; } shown = true; A.show(); setTimeout(function () { window.print(); }, 350); });
     var lf = $('[data-lgpdf]', pane); if (lf && !shown) lf.addEventListener('click', function (e) { e.stopImmediatePropagation(); shown = true; A.show(); setTimeout(function () { var b = $('[data-pane] [data-lgpdf]'); if (b) b.click(); }, 350); }, true);
@@ -194,15 +195,26 @@
     return out.sort(function (a, b) { return a.name.localeCompare(b.name); });
   }
 
+  /* print choices of the party ledger (Evershine): kept in this browser */
+  var LGO_DEF = { open: 1, narr: 1, vtype: 1, vno: 1, lasty: 0, pageno: 1, half: 0 };
+  function lgOpt() { try { return Object.assign({}, LGO_DEF, JSON.parse(localStorage.getItem('ns-lgopt') || '{}')); } catch (e) { return Object.assign({}, LGO_DEF); } }
+  function lgOptSave(o) { try { localStorage.setItem('ns-lgopt', JSON.stringify(o)); } catch (e) {} }
+  function lgOptBox() {
+    var o = lgOpt(), c = function (k, l) { return '<label class="chk"><input type="checkbox" data-lgo="' + k + '"' + (o[k] ? ' checked' : '') + '> ' + esc(l) + '</label>'; };
+    return '<details class="more lg-opts"><summary>Print choices</summary><div class="lg-optl">' + c('open', 'Opening balance') + c('narr', 'Narration') + c('vtype', 'Voucher type') + c('vno', 'Voucher no.') +
+      c('lasty', 'Add last year') + c('pageno', 'Page numbers') + c('half', 'Half page (A5)') + '</div></details>';
+  }
   function ledgerSheet(k, p, r, vt) {
+    var O = lgOpt(); if (O.lasty && r[0]) r = [(+r[0].slice(0, 4) - 1) + r[0].slice(4), r[1]];   /* add last year: from the same day a year earlier */
     var S = B.ledger(A.mine(), A.bizName(), k, r[0], r[1], vt);
-    return '<div class="stsheet sh" dir="ltr" data-sheet>' + bizHead('PARTY LEDGER', '<br>' + esc(p.name) + addrLines(p.rec) + '<br>' + A.ldate(r[0]) + ' to ' + A.ldate(r[1]) +
+    var pg = (O.half ? '@page{size:A5}' : '') + (O.pageno ? '@page{@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:9pt}}' : '');
+    return '<div class="stsheet sh' + (O.half ? ' lg-half' : '') + (O.vtype ? '' : ' lg-novt') + (O.vno ? '' : ' lg-novn') + '" dir="ltr" data-sheet>' + (pg ? '<style media="print">' + pg + '</style>' : '') + bizHead('PARTY LEDGER', '<br>' + esc(p.name) + addrLines(p.rec) + '<br>' + A.ldate(r[0]) + ' to ' + A.ldate(r[1]) +
         (vt && vt.length ? '<br><span class="soft">Only: ' + esc(vt.map(function (v) { return VTEN[v]; }).join(', ')) + '</span>' : '')) +
-      '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Particulars</th><th>Voucher type</th><th>Voucher no.</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th><th class="noprint"></th></tr></thead><tbody>' +
-      '<tr class="lg-ob"><td>' + A.ldate(r[0]) + '</td><td colspan="3">Opening balance</td><td class="n"></td><td class="n"></td><td class="n">' + enBal(S.open) + '</td><td class="noprint"></td></tr>' +
+      '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Particulars</th><th class="lg-cvt">Voucher type</th><th class="lg-cvn">Voucher no.</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th><th class="noprint"></th></tr></thead><tbody>' +
+      (O.open ? '' : '<!--') + '<tr class="lg-ob"><td>' + A.ldate(r[0]) + '</td><td colspan="3">Opening balance</td><td class="n"></td><td class="n"></td><td class="n">' + enBal(S.open) + '</td><td class="noprint"></td></tr>' + (O.open ? '' : '-->') +
       S.rows.map(function (x) {
-        var nr = narrOf(x.d);
-        return '<tr data-k="' + esc(x.d.id) + '"><td>' + A.ldate(x.date) + '</td><td>' + esc(oppText(x.d, 'p:' + k)) + (nr ? '<br><span class="soft lg-narr">' + esc(nr) + '</span>' : '') + '</td><td>' + esc(A.enName(x.d)) + (x.d.ref ? ' <span class="soft">(' + esc(x.d.ref) + ')</span>' : '') + '</td><td>' + esc(x.d.no || x.d.billNo || '') + '</td>' +
+        var nr = O.narr ? narrOf(x.d) : '';
+        return '<tr data-k="' + esc(x.d.id) + '"><td>' + A.ldate(x.date) + '</td><td>' + esc(oppText(x.d, 'p:' + k)) + (nr ? '<br><span class="soft lg-narr">' + esc(nr) + '</span>' : '') + '</td><td class="lg-cvt">' + esc(A.enName(x.d)) + (x.d.ref ? ' <span class="soft">(' + esc(x.d.ref) + ')</span>' : '') + '</td><td class="lg-cvn">' + esc(x.d.no || x.d.billNo || '') + '</td>' +
           '<td class="n">' + (x.dr ? money(x.dr, false) : '') + '</td><td class="n">' + (x.cr ? money(x.cr, false) : '') + '</td><td class="n">' + enBal(x.bal) + '</td>' +
           '<td class="noprint"><button type="button" class="btn sm ib" data-view="' + esc(x.d.id) + '" title="' + esc(T('open')) + '" aria-label="' + esc(T('open')) + '">' + NS.icSvg('eye') + '</button></td></tr>'; }).join('') +
       (S.rows.length ? '' : '<tr><td colspan="8" class="soft">No entries in this period.</td></tr>') +
@@ -285,7 +297,7 @@
   A.addSection('grp', function () {
     var G = A.groups(), sel = A.grp(), r = A.range(), today = NS.today(), D = A.mine(), biz = A.bizName(), P = B.parties(D, biz);
     var gid = function (k) { return A.gidOf(k, P); }, own = B.groupsOf(G, 'party').length;
-    var hd = '<div class="pane-hd"><h2>' + esc(T('grp')) + '</h2>' + seg('gtab', [['sum', T('lg_sum')], ['out', T('lg_out')], ['top', T('lg_top')]].concat(A.routeBody ? [['route', NS.t('rtb.tab')]] : []), gtab) + '</div>' +
+    var hd = '<div class="pane-hd"><h2>' + esc(T('grp')) + '</h2></div>' + seg('gtab', [['sum', T('lg_sum')], ['out', T('lg_out')], ['top', T('lg_top')]].concat(A.routeBody ? [['route', NS.t('rtb.tab')]] : []), gtab) +
       '<div class="tools-row">' + A.grpSel() + (A.routeSel ? A.routeSel() : '') + ((gtab === 'out' || gtab === 'route') ? seg('gside', [['recv', T('recv')], ['pay', T('pay')]], gside) : gtab === 'top' ? '<label><span>' + esc(T('lg_by')) + '</span> <select data-topby>' +
         ['sales', 'buys', 'recv', 'pay'].map(function (x) { return '<option value="' + x + '"' + (x === topBy ? ' selected' : '') + '>' + esc(T('lg_by_' + x)) + '</option>'; }).join('') + '</select></label>' : '') + '</div>' +
       (gtab !== 'out' && gtab !== 'route' ? period() : '') +
@@ -324,6 +336,7 @@
     return hd + (own ? '' : '<p class="note">' + esc(T('lg_nogroups')) + ' <a href="' + A.myUrl('#party') + '">' + esc(NS.t('my.t.party')) + ' ›</a></p>') +
       '<div class="tbl-wrap"><div class="lg-print"><div class="stsheet sh lg-rep" data-sheet>' + bizHead(gtab === 'route' ? NS.t('rtb.tab') : T('lg_' + gtab), '<br>' + esc(sub) + (sel ? '<br>' + esc(T('lg_group')) + ': ' + esc(A.gname(B.groupTree(G).filter(function (g) { return g.id === sel; })[0] || { id: sel, name: sel })) : '')) + body + '</div></div></div>';
   }, function (pane) {
+    var hdr = $('.pane-hd', pane), la = $('.lg-acts', pane); if (hdr && la && !hdr.contains(la)) { var h2 = $('h2', hdr); hdr.insertBefore(la, h2 ? h2.nextSibling : hdr.firstChild); }   /* Print / Share PDF / Excel on the heading line, as on every report (19 Nov 2026) */
     wirePeriod(pane);
     $$('[data-gtab]', pane).forEach(function (b) { b.addEventListener('click', function () { gtab = b.getAttribute('data-gtab'); A.show(); }); });
     $$('[data-gside]', pane).forEach(function (b) { b.addEventListener('click', function () { gside = b.getAttribute('data-gside'); A.show(); }); });
@@ -439,6 +452,14 @@
     if (by === 'month') return { lvl: 'month', rows: smAgg(flat, function (x) { return x.date.slice(0, 7); }).sort(function (a, b) { return a.k.localeCompare(b.k); }) };
     var cfd = /^cf:/.test(by) && window.NSCF && NSCF.get(by.slice(3)), cfv = function (x) { return cfd ? NSCF.fmt(cfd, x.d.cf && x.d.cf[cfd.id]) || '—' : ''; };
     if (cfd) return { lvl: 'cf', first: cfd.label, rows: smAgg(flat, function (x) { return key(cfv(x)); }, cfv).sort(function (a, b) { return b.tot - a.tot; }) };   /* sales by a custom field, e.g. by Site (ERP Round 2) */
+    /* analysis: a row per party or item, a column per month (taxable value, returns taken off) */
+    if (by === 'pm' || by === 'im') {
+      var mx = {}, ms = {};
+      var put = function (k, lab, ym, v, q, u) { var r = mx[k] || (mx[k] = { k: k, label: lab, m: {}, q: {}, tot: 0, qty: 0, unit: u || '' }); r.m[ym] = (r.m[ym] || 0) + v; r.tot += v; if (q) { r.q[ym] = (r.q[ym] || 0) + q; r.qty += q; } ms[ym] = 1; };
+      if (by === 'pm') flat.forEach(function (x) { var lab = x.party || 'Cash'; put(key(lab), lab, x.date.slice(0, 7), x.tx); });
+      else D.forEach(function (d) { var sg = /ret$/.test(B.role(d)) ? -1 : 1; (d.items || []).forEach(function (it) { var nm = String(it.desc || '').trim(); if (nm) put(key(nm), nm, (d.date || '').slice(0, 7), sg * lineAmt(it), sg * num(it.qty || 0), it.unit); }); });
+      return { lvl: 'mx', first: by === 'pm' ? 'Party' : 'Item', months: Object.keys(ms).sort(), rows: Object.keys(mx).map(function (k) { return mx[k]; }).sort(function (a, b) { return b.tot - a.tot; }) };
+    }
     if (by === 'party') return { lvl: 'party', rows: smAgg(flat, function (x) { return key(x.party || 'Cash'); }, function (x) { return x.party || 'Cash'; }).sort(function (a, b) { return b.tot - a.tot; }) };
     var lines = [];
     D.forEach(function (d) { var R = B.role(d), sg = /ret$/.test(R) ? -1 : 1; (d.items || []).forEach(function (it) { var a = lineAmt(it), g = a * num(it.gst) / 100; lines.push({ id: d.id, name: String(it.desc || '').trim(), hsn: String(it.hsn || '').trim() || '(no HSN)', n: 0, tx: sg * a, gst: sg * g, tot: sg * (a + g), qty: sg * num(it.qty || 0), unit: it.unit || '' }); }); });
@@ -450,10 +471,17 @@
   function smHtml(side, arg) {
     var sec = side === 'sale' ? 'ssum' : 'psum', R = smRows(side, arg || ''), title = T(side === 'sale' ? 'cr_ssum' : 'cr_psum');
     var crumbs = arg ? '<p class="cr-drill"><a href="#' + sec + '">' + esc(T('cr_allm')) + '</a>' + (arg.length === 10 ? ' › <a href="#' + sec + '/' + arg.slice(0, 7) + '">' + esc(monthName(arg.slice(0, 7))) + '</a> › <b>' + esc(A.ldate(arg)) + '</b>' : ' › <b>' + esc(monthName(arg.slice(0, 7))) + '</b>' + (/\/reg$/.test(arg) ? '' : ' · <a href="#' + sec + '/' + arg + '/reg">' + esc(NS.t('rp.regmonth')) + ' ›</a>')) + '</p>' : '';
-    var bar = '<div class="lg-bar">' + (arg ? '' : '<label><span>' + esc(T('cr_by')) + '</span> <select data-smby>' + ['month', 'party', 'item', 'hsn', 'reg'].map(function (x) { return '<option value="' + x + '"' + (smBy[side] === x ? ' selected' : '') + '>' + esc(x === 'reg' ? NS.t('rp.reg') : T('cr_by_' + x)) + '</option>'; }).join('') + cfByOpts(side) + '</select></label>') + period() + '</div>' + cfBar('reg', CFT[side === 'sale' ? 'sale' : 'buy']);
+    var bar = '<div class="lg-bar">' + (arg ? '' : '<label><span>' + esc(T('cr_by')) + '</span> <select data-smby>' + ['month', 'party', 'item', 'hsn', 'pm', 'im', 'reg'].map(function (x) { return '<option value="' + x + '"' + (smBy[side] === x ? ' selected' : '') + '>' + esc(x === 'reg' ? NS.t('rp.reg') : T('cr_by_' + x)) + '</option>'; }).join('') + cfByOpts(side) + '</select></label>') + period() + '</div>' + cfBar('reg', CFT[side === 'sale' ? 'sale' : 'buy']);
     var hd = '<div class="pane-hd"><h2>' + esc(title) + '</h2></div>' + crumbs + bar + '<p class="soft">' + esc(T('cr_h_sum')) + '</p>' + acts('sm');
     if (R.lvl === 'bill') return hd + '<label class="chk no-print"><input type="checkbox" data-smcol' + (smCol ? ' checked' : '') + '> ' + esc(NS.t('rp.colh')) + '</label>' +
       sheet(side === 'sale' ? 'Sales register' : 'Purchase register', rng() + (arg ? '<br>' + esc(arg.length === 10 ? A.ldate(arg) : monthName(arg.slice(0, 7))) : ''), regTable(side, R.docs));
+    if (R.lvl === 'mx') {
+      var mt = {}, gt = 0, mm = function (v) { return v ? money(v, false) : ''; };
+      var mxb = R.rows.length ? '<div class="tbl-scroll"><table class="tbl st lg-tbl sm-tbl sm-mx"><thead><tr><th>' + R.first + '</th>' + R.months.map(function (k) { return '<th class="n"><a href="#' + sec + '/' + k + '">' + esc(new Date(+k.slice(0, 4), +k.slice(5) - 1, 1).toLocaleString('en-IN', { month: 'short' }) + ' ' + k.slice(2, 4)) + '</a></th>'; }).join('') + '<th class="n">Total</th></tr></thead><tbody>' +
+        R.rows.map(function (r) { gt += r.tot; return '<tr><td>' + esc(r.label) + (r.qty ? ' <span class="soft">(' + esc(String(m2(r.qty))) + (r.unit ? ' ' + esc(r.unit) : '') + ')</span>' : '') + '</td>' + R.months.map(function (k) { mt[k] = (mt[k] || 0) + (r.m[k] || 0); return '<td class="n">' + mm(r.m[k]) + '</td>'; }).join('') + '<td class="n"><b>' + money(r.tot, false) + '</b></td></tr>'; }).join('') +
+        '</tbody><tfoot><tr><th>Total</th>' + R.months.map(function (k) { return '<th class="n">' + money(mt[k] || 0, false) + '</th>'; }).join('') + '<th class="n">' + money(gt, false) + '</th></tr></tfoot></table></div>' : '<p class="soft">' + esc(T('none')) + '</p>';
+      return hd + sheet((side === 'sale' ? 'Sales' : 'Purchase') + ' analysis: ' + R.first.toLowerCase() + ' by month', rng() + '<br>Taxable value, returns taken off', mxb);
+    }
     var first = R.first || { month: 'Month', day: 'Date', party: 'Party', item: 'Item', hsn: 'HSN / SAC' }[R.lvl], tt = { n: 0, tx: 0, gst: 0, tot: 0 };
     var body = R.rows.length ? '<table class="tbl st lg-tbl sm-tbl"><thead><tr><th>' + first + '</th>' + (R.lvl === 'item' ? '<th class="n">Quantity</th>' : '<th class="n">Bills</th>') + '<th class="n">Taxable value</th><th class="n">GST</th><th class="n">Total</th></tr></thead><tbody>' +
       R.rows.map(function (r) {
@@ -472,6 +500,9 @@
       var pb = $('[data-smpdf]', pane); if (pb) pb.addEventListener('click', function () { pdf(pane, (side === 'sale' ? 'Sales summary ' : 'Purchase summary ') + A.range()[1], T(side === 'sale' ? 'cr_ssum' : 'cr_psum')); });
       var xb = $('[data-smxl]', pane); if (xb) xb.addEventListener('click', function () {
         var R = smRows(side, arg || ''); if (R.lvl === 'bill') { if (window.NSRep) regXl(side, R.docs, side === 'sale' ? 'Sales register' : 'Purchase register'); return; }
+        if (R.lvl === 'mx') { var xr = [[(side === 'sale' ? 'Sales' : 'Purchase') + ' analysis by month (taxable value)', A.range()[0] + ' to ' + A.range()[1]], [R.first].concat(R.months.map(monthName), ['Total'])];
+          R.rows.forEach(function (r) { xr.push([r.label].concat(R.months.map(function (k) { return m2(r.m[k] || 0); }), [m2(r.tot)])); });
+          NS.xlsx(fileName(A.bizName()) + (side === 'sale' ? '-sales-analysis-' : '-purchase-analysis-') + A.range()[1] + '.xlsx', [{ name: 'Analysis', rows: xr }]); return; }
         var rows = [[(side === 'sale' ? 'Sales' : 'Purchase') + ' summary', A.range()[0] + ' to ' + A.range()[1]], [R.first || R.lvl, R.lvl === 'item' ? 'Quantity' : 'Bills', 'Taxable value', 'GST', 'Total']];
         R.rows.forEach(function (r) { rows.push([R.lvl === 'month' ? monthName(r.k) : r.label, R.lvl === 'item' ? m2(r.qty) : r.n, m2(r.tx), m2(r.gst), m2(r.tot)]); });
         NS.xlsx(fileName(A.bizName()) + (side === 'sale' ? '-sales-summary-' : '-purchase-summary-') + A.range()[1] + '.xlsx', [{ name: 'Summary', rows: rows }]);
