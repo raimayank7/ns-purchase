@@ -75,9 +75,8 @@
   function today() { return NS.today(); }
   function sellerCopy() { var s = JSON.parse(JSON.stringify(A.biz() || {})); delete s.id; delete s.created; delete s.updated; return s; }
   function nextNo(type, pre, date) {
-    var fy = NS.fy(date), max = 0;
-    A.mine().forEach(function (d) { if (d.type !== type || NS.fy(d.date) !== fy) return; var x = String(d.no || '').match(/(\d+)\s*$/); if (x) max = Math.max(max, +x[1]); });
-    return pre + '/' + fy.slice(2, 4) + '-' + fy.slice(5) + '/' + String(max + 1).padStart(3, '0');
+    var x = NS.nextNo(A.mine(), { type: type, date: date, cfg: A.cfg ? A.cfg() : {}, def: pre, width: 3, fy: true });   /* one numbering engine (core.js, ERP A-6) */
+    return x.manual ? x.head + String(x.n).padStart(x.width, '0') + x.suffix : x.no;
   }
   function closed(iso) { var m = A.closedMsg ? A.closedMsg(iso) : ''; if (m) NS.toast(m, 'bad'); return !!m; }
   var MODES = ['cash', 'upi', 'cheque', 'bank', 'card', 'other'];
@@ -85,7 +84,7 @@
   function inp(id, v, o) { o = o || {}; return '<input id="' + id + '" value="' + esc(v == null ? '' : v) + '"' + (o.type ? ' type="' + o.type + '"' : '') + (o.mode ? ' inputmode="' + o.mode + '" dir="ltr"' : ' dir="auto"') + (o.req ? ' required' : '') + (o.list ? ' list="' + o.list + '"' : '') + ' autocomplete="off">'; }
   function sel(id, v, opts) { return '<select id="' + id + '">' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(v) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'; }
   function modeOpts() { return MODES.map(function (x) { return [x, A.T('m_' + x)]; }); }
-  function partyNames() { var o = {}; NS.forBiz(A.data().party, A.biz()).forEach(function (p) { o[key(p.name)] = p.name; }); return Object.keys(o).map(function (k) { return o[k]; }).sort(); }
+  function partyNames() { var o = {}; NS.active(NS.forBiz(A.data().party, A.biz())).forEach(function (p) { o[key(p.name)] = p.name; }); return Object.keys(o).map(function (k) { return o[k]; }).sort(); }
   function dl(id, list) { return '<datalist id="' + id + '">' + list.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>'; }
 
   /* a dialog of its own (like more.js) */
@@ -103,10 +102,14 @@
     $('[data-cancel]', form).addEventListener('click', function () { dlg.close(); });
     onSave = save;
     if (wire) wire(form);
+    if (A.bankWire) A.bankWire(form);   /* several banks: the Bank account choice follows the mode */
     dlg.showModal();
     var f1 = $('input:not([type=hidden]):not([type=date]),select', form); if (f1) f1.focus();
   }
   function val(id) { var e = $('#' + id, form); return e ? (e.type === 'checkbox' ? e.checked : e.value.trim()) : ''; }
+  /* several banks (ERP masters step 3): the Bank account choice and saving it as d.bacct */
+  function bankF(id, cur, mode) { return A.bankFld ? A.bankFld(id, cur, mode) : ''; }
+  function bankSet(d, id) { if (A.setBacct) A.setBacct(d, A.bankVal(form, id)); return d; }
   function saved(d) { return NSStore.put('doc', d).then(function () { dlg.close(); NS.toast(A.T('saved')); A.show(); }); }
 
   /* ---------- WP-2: other income ---------- */
@@ -118,7 +121,7 @@
       '<div class="f wide hd-help"><p class="soft" data-axinfo aria-live="polite"></p><label class="hd-new" data-axnew hidden><span>' + esc(tl('newq')) + '</span> ' + sel('ax-htype', 'oinc', [['oinc', tl('t_oinc')], ['dinc', tl('t_dinc')]]) + '</label></div>' +
       fld('ax-amt', T('amt'), inp('ax-amt', r.amount, { mode: 'decimal', req: 1 })) +
       fld('ax-tds', T('tds'), inp('ax-tds', r.tds, { mode: 'decimal' }), { hint: T('tdsh') }) +
-      fld('ax-mode', A.T('mode'), sel('ax-mode', r.mode, modeOpts())) +
+      fld('ax-mode', A.T('mode'), sel('ax-mode', r.mode, modeOpts())) + bankF('ax-bank', r.bacct, 'ax-mode') +
       fld('ax-payer', T('payer'), inp('ax-payer', r.payer || '', { list: 'ax-parties' }) + dl('ax-parties', partyNames())) +
       fld('ax-ref', A.T('ref'), inp('ax-ref', r.ref || '', { mode: 'text' })) +
       fld('ax-note', A.T('note'), inp('ax-note', r.notes || ''), { wide: 1 }) + '</div><p class="acx-sum" data-axsum aria-live="polite"></p>',
@@ -131,6 +134,7 @@
       var h = H.find(head), job = !h ? addCustom(head, val('ax-htype')) : Promise.resolve();
       var d = Object.assign(rec ? JSON.parse(JSON.stringify(rec)) : { type: 'oinc', no: nextNo('oinc', 'OI', date) }, { date: date, seller: sellerCopy(), head: head, amount: amt, tds: tds, mode: val('ax-mode'),
         payer: val('ax-payer'), ref: val('ax-ref'), notes: val('ax-note'), total: r2(amt + tds) });
+      bankSet(d, 'ax-bank');
       d.narr = [h ? h.en : head, d.payer ? 'from ' + d.payer : '', d.notes].filter(Boolean).join(' · ');
       job.then(function () { return saved(d); });
     }, function (f) {
@@ -150,7 +154,7 @@
 
   /* ---------- section: other income and taxes ---------- */
   /* ---------- WP-4: pay tax ---------- */
-  var HEADS4 = ['igst', 'cgst', 'sgst', 'cess'], MIN4 = ['tax', 'int', 'pen', 'fee', 'oth'], TAXK = ['gst', 'tds', 'tcs', 'pf', 'esi', 'pt', 'adv', 'gstref', 'itref'];
+  var HEADS4 = ['igst', 'cgst', 'sgst', 'cess'], MIN4 = ['tax', 'int', 'pen', 'fee', 'oth'], TAXK = ['gst', 'tds', 'tcs', 'pf', 'esi', 'pt', 'lwf', 'adv', 'gstref', 'itref'];
   var HNAME = { igst: 'IGST', cgst: 'CGST', sgst: 'SGST/UTGST', cess: 'Cess' };
   var TDSSEC = ['194C', '194J', '194I', '194H', '194A', '194Q', '192'];
   function ownerTo() { var b = A.biz() || {}, t = b.btype || 'prop'; return t === 'prop' ? 'drw' : 'oca'; }
@@ -161,11 +165,16 @@
       '<p class="soft f wide" data-axkh aria-live="polite"></p>' +
       fld('ax-date', A.T('date'), inp('ax-date', r.date, { type: 'date', req: 1 })) +
       fld('ax-per', T('per'), inp('ax-per', r.period || '', { type: 'month' }), { hint: T('perh') }) +
-      fld('ax-mode', A.T('mode'), sel('ax-mode', r.mode, modeOpts())) +
+      fld('ax-mode', A.T('mode'), sel('ax-mode', r.mode, modeOpts())) + bankF('ax-bank', r.bacct, 'ax-mode') +
       fld('ax-ref', T('cin'), inp('ax-ref', r.ref || '', { mode: 'text' })) + '</div>' +
       '<fieldset data-axgst><legend>' + esc(T('gstl')) + '</legend><div class="acx-tax" data-axgrid></div></fieldset>' +
       '<div class="fg" data-axtds>' + fld('ax-sec', T('sec'), inp('ax-sec', r.sec ? H.tdsLabel(r.sec) : '', { list: 'ax-secs' }) + dl('ax-secs', TDSSEC.map(H.tdsLabel))) +
       fld('ax-tax', T('taxamt'), inp('ax-tax', r.tax || '', { mode: 'decimal' })) + fld('ax-int', T('int'), inp('ax-int', r['int'] || '', { mode: 'decimal' })) + fld('ax-fee', T('fee'), inp('ax-fee', r.fee || '', { mode: 'decimal' })) + '</div>' +
+      /* ERP round 2 S-22: challan details of a TDS / TCS payment, used by the TDS returns working (tdsret.js) */
+      '<fieldset data-axch><legend>' + esc(T('ch_l')) + '</legend><div class="fg">' + fld('ax-bsr', T('ch_bsr'), inp('ax-bsr', r.ch && r.ch.bsr || '', { mode: 'numeric' }), { hint: T('ch_bsrh') }) +
+      fld('ax-chno', T('ch_no'), inp('ax-chno', r.ch && r.ch.serial || '', { mode: 'numeric' })) + fld('ax-chdate', T('ch_date'), inp('ax-chdate', r.ch && r.ch.date || '', { type: 'date' }), { hint: T('ch_dateh') }) +
+      fld('ax-minor', T('ch_minor'), sel('ax-minor', r.ch && r.ch.minor || '200', [['200', T('ch_200')], ['400', T('ch_400')]])) +
+      '<label class="chk f wide"><input type="checkbox" id="ax-chsal"' + (r.ch && r.ch.sal ? ' checked' : '') + '> ' + esc(T('ch_sal')) + '</label></div></fieldset>' +
       '<div class="fg" data-axadv>' + fld('ax-amt', A.T('amount'), inp('ax-amt', r.amount || '', { mode: 'decimal' })) + '</div>' +
       '<div class="fg">' + fld('ax-note', A.T('note'), inp('ax-note', r.notes || ''), { wide: 1 }) + '</div><p class="acx-sum" data-axsum aria-live="polite"></p>',
     function () {
@@ -174,9 +183,16 @@
       if (closed(date) || rec && closed(rec.date)) return;
       var d = Object.assign(rec ? JSON.parse(JSON.stringify(rec)) : { type: 'taxpay', no: nextNo('taxpay', 'TX', date) }, { kind: k, date: date, seller: sellerCopy(), mode: val('ax-mode'), ref: val('ax-ref'), period: k === 'adv' || k === 'itref' ? '' : val('ax-per'), notes: val('ax-note') });
       ['gst', 'sec', 'tax', 'int', 'fee', 'amount', 'to'].forEach(function (x) { delete d[x]; });
+      bankSet(d, 'ax-bank');
       if (k === 'gst' || k === 'gstref') d.gst = readGrid(k);
-      else if (/^(tds|tcs|pf|esi|pt)$/.test(k)) { var m = /^(tds|tcs)$/.test(k) && /(19\d\w*|206\w*)/.exec(val('ax-sec')); d.sec = /^(tds|tcs)$/.test(k) ? (m ? m[1] : val('ax-sec')) : ''; d.tax = r2(num(val('ax-tax'))); d['int'] = r2(num(val('ax-int'))); d.fee = r2(num(val('ax-fee'))); }
+      else if (/^(tds|tcs|pf|esi|pt|lwf)$/.test(k)) { var m = /^(tds|tcs)$/.test(k) && /(19\d\w*|206\w*)/.exec(val('ax-sec')); d.sec = /^(tds|tcs)$/.test(k) ? (m ? m[1] : val('ax-sec')) : ''; d.tax = r2(num(val('ax-tax'))); d['int'] = r2(num(val('ax-int'))); d.fee = r2(num(val('ax-fee'))); }
       else { d.amount = r2(num(val('ax-amt'))); d.to = ownerTo(); }
+      if (/^(tds|tcs)$/.test(k)) {   /* S-22: challan identification (BSR code 7 digits, serial 5 digits) */
+        var bsr = val('ax-bsr').replace(/\s/g, ''), chn = val('ax-chno').replace(/\s/g, '');
+        if (bsr && !/^\d{7}$/.test(bsr)) { NS.toast(T('ch_bad'), 'bad'); return; }
+        d.ch = { bsr: bsr, serial: chn, date: val('ax-chdate') || date, minor: val('ax-minor'), sal: $('#ax-chsal') ? $('#ax-chsal').checked : false };
+        if (rec && rec.alloc) d.alloc = rec.alloc;
+      } else delete d.ch;
       d.total = NSBooks.taxPay(d).total;
       if (!(d.total > 0)) { NS.toast(A.T('need', { f: A.T('amount') }), 'bad'); return; }
       d.narr = [ENK[k], d.period ? 'for ' + d.period : '', d.sec ? 'section 393 (old ' + d.sec + ')' : '', d.ref, d.notes].filter(Boolean).join(' · ');
@@ -195,7 +211,7 @@
         var k = val('ax-kind');
         if (k !== shown) { shown = k; if (k === 'gst' || k === 'gstref') grid(k); }
         $('[data-axgst]', f).hidden = !(k === 'gst' || k === 'gstref');
-        $('[data-axtds]', f).hidden = !/^(tds|tcs|pf|esi|pt)$/.test(k); $('#ax-sec', f).closest('.f').hidden = !(k === 'tds' || k === 'tcs');
+        $('[data-axtds]', f).hidden = !/^(tds|tcs|pf|esi|pt|lwf)$/.test(k); $('[data-axch]', f).hidden = !(k === 'tds' || k === 'tcs'); $('#ax-sec', f).closest('.f').hidden = !(k === 'tds' || k === 'tcs');
         $('[data-axadv]', f).hidden = !(k === 'adv' || k === 'itref');
         $('#ax-per', f).closest('.f').hidden = k === 'adv' || k === 'itref';
         $('[data-axkh]', f).textContent = T('kh_' + k) + (k === 'adv' || k === 'itref' ? ' ' + T(ownerTo() === 'drw' ? 'todrw' : 'tooca') : '');
@@ -212,7 +228,7 @@
     HEADS4.forEach(function (h) { cols.forEach(function (c) { var e = $('#ax-g-' + h + '-' + c, form), v = e ? r2(num(e.value)) : 0; if (v) (o[h] = o[h] || {})[c] = v; }); });
     return o;
   }
-  var ENK = { gst: 'GST paid (challan PMT-06)', tds: 'TDS paid', tcs: 'TCS paid', pf: 'PF paid (ECR challan)', esi: 'ESI paid', pt: 'Professional tax paid', adv: 'Advance or self-assessment tax', gstref: 'GST refund received', itref: 'Income-tax refund received' };
+  var ENK = { gst: 'GST paid (challan PMT-06)', tds: 'TDS paid', tcs: 'TCS paid', pf: 'PF paid (ECR challan)', esi: 'ESI paid', pt: 'Professional tax paid', lwf: 'Labour welfare fund paid', adv: 'Advance or self-assessment tax', gstref: 'GST refund received', itref: 'Income-tax refund received' };
   function gstsetName(d) { return T('setfor', { p: d.label || d.per || '' }); }
 
   /* ---------- WP-3: write-off of a bill's balance ---------- */
@@ -355,13 +371,13 @@
   function menu() {
     var nav = $('.hub-nav'), app = $('#app'); if (!nav || !app || app.getAttribute('data-secs') || $('[data-sec="acx"]', nav)) return;
     var at = $('[data-sec="money"]', nav), a = NS.el('a', { href: '#acx', 'data-sec': 'acx' }, '<span>' + esc(A.T('acx')) + '</span>');
-    if (at && at.nextSibling) nav.insertBefore(a, at.nextSibling); else nav.appendChild(a);
+    if (at && at.parentNode) at.parentNode.insertBefore(a, at.nextSibling); else nav.appendChild(a);   /* F2-14 */
   }
   function startUi() {
     menu();
     new MutationObserver(domChanged).observe($('#app') || document.body, { childList: true, subtree: true }); domChanged();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startUi); else startUi();
-  A.acx = { forms: FORMS, open: open, val: val, fld: fld, inp: inp, sel: sel, modeOpts: modeOpts, sellerCopy: sellerCopy, nextNo: nextNo, closed: closed, saved: saved, T: T };
+  A.acx = { forms: FORMS, open: open, val: val, fld: fld, bankF: bankF, bankSet: bankSet, inp: inp, sel: sel, modeOpts: modeOpts, sellerCopy: sellerCopy, nextNo: nextNo, closed: closed, saved: saved, T: T };
 })();
 

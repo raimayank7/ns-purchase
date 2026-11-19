@@ -13,7 +13,8 @@
   var XL = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'];
   var WANT = '';   /* where the cursor goes after the table is drawn again (see the keys below) */
   var COLS = ['date', 'desc', 'ref', 'dr', 'cr', 'amt', 'type', 'bal'];
-  var BS = null, RULES = null, filt = 'todo', busy = false;
+  var BS = null, RULES = null, filt = 'todo', busy = false, acct = 'bank';   /* acct: which bank the statement is from (several banks) */
+  function bankAcct() { var L = A.banks ? A.banks() : []; if (!L.some(function (x) { return x.k === acct; })) acct = 'bank'; return acct; }
   /* BS = { name, rows, map, header, lines, keys, edits: { key: { kind, name, billId, from, post } }, sug: suggestions } */
 
   function bizKey() { return key(A.bizName()); }
@@ -21,7 +22,7 @@
   function loadRules() { return NSStore.meta('bankrules').then(function (m) { RULES = m && typeof m === 'object' ? m : {}; }).catch(function () { RULES = {}; }); }
   function saveRules(list) { RULES = RULES || {}; RULES[bizKey()] = list; return NSStore.meta('bankrules', RULES).catch(function () {}); }
   function heads() { var H = window.NSHeads; return H ? { exp: H.list(['dexp', 'iexp']).map(function (h) { return H.label(h); }), inc: H.list(['oinc', 'dinc']).map(function (h) { return H.label(h); }) } : { exp: [], inc: [] }; }
-  function partyNames() { var o = {}; NS.forBiz(A.data().party, A.biz()).forEach(function (p) { o[key(p.name)] = p.name; }); B.parties(A.mine(), A.bizName()); return Object.keys(o).map(function (k) { return o[k]; }).sort(); }
+  function partyNames() { var o = {}; NS.active(NS.forBiz(A.data().party, A.biz())).forEach(function (p) { o[key(p.name)] = p.name; }); B.parties(A.mine(), A.bizName()); return Object.keys(o).map(function (k) { return o[k]; }).sort(); }
 
   /* ---------- reading ---------- */
   function readFile(file) {
@@ -46,7 +47,7 @@
   function ctx() {
     var docs = A.mine(), dates = BS.lines.map(function (l) { return l.date; }).sort(), from = dates[0] || '', to = dates[dates.length - 1] || '';
     return { lines: BS.lines, parties: partyNames(), bills: B.bills(A.data().doc, A.bizName()).bills.map(function (b) { return { id: b.id, no: b.no, date: b.date, party: b.party, side: b.side, left: b.left }; }),
-      rules: rules(), done: I.doneKeys(docs), book: from ? K.bookLines(docs, A.bizName(), from, to) : [] };
+      rules: rules(), done: I.doneKeys(docs), book: from ? K.bookLines(docs, A.bizName(), from, to, bankAcct()) : [] };
   }
   function entries() {
     var c = ctx(), sug = I.suggest(c);
@@ -71,7 +72,7 @@
 
   function post(list) {
     if (busy) return; busy = true;
-    var c = ctx(), o = { seller: sellerCopy(), file: BS.name || '', bills: c.bills, no: nextNoFn() }, recs = [], made = [], newParties = {}, skipped = 0;
+    var c = ctx(), o = { seller: sellerCopy(), file: BS.name || '', bills: c.bills, no: nextNoFn(), bacct: bankAcct() }, recs = [], made = [], newParties = {}, skipped = 0;
     list.forEach(function (e) {
       var l = BS.lines[e.i];
       if (A.closedMsg && A.closedMsg(l.date)) { skipped++; return; }
@@ -125,7 +126,7 @@
     var tiles = '<div class="tiles"><div class="tile"><span>' + esc(BI('t_lines')) + '</span><b>' + E.length + '</b></div><div class="tile ok"><span>' + esc(BI('t_ready')) + '</span><b>' + ready.length + '</b></div><div class="tile' + (rev.length ? ' warn' : '') + '"><span>' + esc(BI('t_review')) + '</span><b>' + rev.length + '</b></div><div class="tile"><span>' + esc(BI('t_skip')) + '</span><b>' + skip + '</b></div></div>';
     var H = heads();
     return head + '<p class="sb-note">' + esc(BI('from', { f: BS.name, n: BS.lines.length, a: NS.fmtDate(BS.lines[0].date), b: NS.fmtDate(BS.lines[BS.lines.length - 1].date) })) + '</p>' + '<details class="br-cols"><summary>' + esc(BI('cols')) + '</summary>' + colsHtml() + '</details>' + tiles +
-      '<div class="tools-row"><label>' + esc(BI('show')) + ' <select data-bifilt>' + [['todo', 'f_todo'], ['ready', 'f_ready'], ['review', 'f_review'], ['all', 'f_all']].map(function (x) { return '<option value="' + x[0] + '"' + (filt === x[0] ? ' selected' : '') + '>' + esc(BI(x[1])) + '</option>'; }).join('') + '</select></label></div>' +
+      '<div class="tools-row">' + (A.banks && A.banks().length > 1 ? '<label>' + esc(A.T('bankacct')) + ' <select data-biacct>' + A.banks().map(function (x) { return '<option value="' + esc(x.k) + '"' + (x.k === bankAcct() ? ' selected' : '') + '>' + esc(A.bankLabel(x)) + '</option>'; }).join('') + '</select></label> ' : '') + '<label>' + esc(BI('show')) + ' <select data-bifilt>' + [['todo', 'f_todo'], ['ready', 'f_ready'], ['review', 'f_review'], ['all', 'f_all']].map(function (x) { return '<option value="' + x[0] + '"' + (filt === x[0] ? ' selected' : '') + '>' + esc(BI(x[1])) + '</option>'; }).join('') + '</select></label></div>' +
       '<p class="hint">' + esc(BI('table_h')) + '</p><div class="tbl-wrap"><table class="tbl bi-t"><thead><tr><th></th><th>' + esc(BI('c_date')) + '</th><th class="l">' + esc(BI('c_desc')) + '</th><th class="n">' + esc(BI('wd')) + '</th><th class="n">' + esc(BI('dep')) + '</th><th class="l">' + esc(BI('what')) + '</th></tr></thead><tbody>' +
       (shown.length ? shown.map(function (e) { return rowHtml(e, bills); }).join('') : '<tr><td colspan="6" class="soft">' + esc(BI('none')) + '</td></tr>') + '</tbody></table></div>' +
       '<datalist id="bi-parties">' + partyNames().map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist><datalist id="bi-heads">' + H.exp.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist><datalist id="bi-inc">' + H.inc.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
@@ -133,6 +134,7 @@
   }
   A.addSection('bimp', function () { if (!RULES) { loadRules().then(function () { if (/^#bimp/.test(location.hash)) A.show(); }); return '<div class="pane-hd"><h2>' + esc(A.T('bimp')) + '</h2></div><p class="soft">…</p>'; } return html(); }, function (pane) {
     var fi = $('#bi-file', pane); if (fi) fi.addEventListener('change', function () { if (fi.files[0]) readFile(fi.files[0]); fi.value = ''; });
+    var ba = $('[data-biacct]', pane); if (ba) ba.addEventListener('change', function () { acct = ba.value; A.show(); });
     $$('[data-bicol]', pane).forEach(function (s) { s.addEventListener('change', function () { var m = Object.assign({}, BS.map); m[s.getAttribute('data-bicol')] = s.value === '' ? null : +s.value; setRows(BS.rows, BS.name, m); }); });
     var ft = $('[data-bifilt]', pane); if (ft) ft.addEventListener('change', function () { filt = ft.value; A.show(); });
     function rowOf(el) { return el.getAttribute('data-bikind') || el.getAttribute('data-biname') || el.getAttribute('data-bifrom') || el.getAttribute('data-bibill'); }
@@ -165,7 +167,7 @@
   function menu() {
     var nav = $('.hub-nav'), app = $('#app'); if (!nav || !app || app.getAttribute('data-secs') || $('[data-sec="bimp"]', nav)) return;
     var at = $('[data-sec="itx"]', nav) || $('[data-sec="stf"]', nav) || $('[data-sec="money"]', nav), a = NS.el('a', { href: '#bimp', 'data-sec': 'bimp' }, '<span>' + esc(A.T('bimp')) + '</span>');
-    if (at && at.nextSibling) nav.insertBefore(a, at.nextSibling); else nav.appendChild(a);
+    if (at && at.parentNode) at.parentNode.insertBefore(a, at.nextSibling); else nav.appendChild(a);   /* F2-14 */
   }
   function start() { menu(); loadRules(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();

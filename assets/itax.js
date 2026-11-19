@@ -60,6 +60,8 @@
     if (C.senior) msg.push(I('m_senior'));
     else if (a.below) msg.push(I('m_below', { n: money(a.due) }));
     if (C.pres) msg.push(I('m_pres'));
+    if (v.pres === 'ad' && num(v.turnover) > 20000000) msg.push(I('m_adlim'));   /* s.58, old 44AD (F3-14) */
+    if (v.pres === 'ada' && num(v.turnover) > 5000000) msg.push(I('m_adalim'));
     if (R.surchargeWarn) msg.push(I('m_sur'));
     if (fy.start < IT.fyOf(today()).start) msg.push(I('m_past'));
     if (a.payable && !C.pres && v.pres === 'none' && C.bus && fy.start === IT.fyOf(today()).start && !bk.full) msg.push(I('m_season'));

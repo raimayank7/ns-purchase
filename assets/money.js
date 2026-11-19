@@ -25,15 +25,24 @@
   function foot() { return NS.creditLine('st-ft'); }
   function dates() {
     var r = A.range();
-    return '<div class="tools-row"><label>' + esc(T('from')) + ' <input type="date" data-stfrom value="' + r[0] + '"></label><label>' + esc(T('to')) + ' <input type="date" data-stto value="' + r[1] + '"></label></div>';
+    var P = NS.periodPresets ? NS.periodPresets(NS.today()) : {}, on = NS.periodPre ? NS.periodPre(r[0], r[1]) : 'custom';
+    var pre = NS.periodPresets ? '<label><span>' + esc(T('lg_period')) + '</span> <select data-mpre>' + Object.keys(P).concat(['custom']).map(function (k) { return '<option value="' + k + '"' + (k === on ? ' selected' : '') + '>' + esc(T('lg_p_' + k)) + '</option>'; }).join('') + '</select></label>' : '';
+    return '<div class="tools-row lg-period">' + pre + '<label>' + esc(T('from')) + ' <input type="date" data-stfrom value="' + r[0] + '"></label><label>' + esc(T('to')) + ' <input type="date" data-stto value="' + r[1] + '"></label></div>';
   }
+  function eye(id) { return '<button type="button" class="btn sm ib" data-view="' + esc(id) + '" title="' + esc(T('open')) + '" aria-label="' + esc(T('open')) + '">' + NS.icSvg('eye') + '</button>'; }
+  /* day book options (R-5 / R-17): one line per voucher or every posting, narration, voucher type and party filter; this browser only */
+  var DBK = 'ns-rep-day', dbo = (function () { var o = null; try { o = JSON.parse(localStorage.getItem(DBK) || 'null'); } catch (e) {} return Object.assign({ det: true, narr: true, vt: '', q: '' }, o || {}); })();
+  function dbSave() { try { localStorage.setItem(DBK, JSON.stringify({ det: dbo.det, narr: dbo.narr, vt: dbo.vt })); } catch (e) {} }
+  var DBVT = ['sales', 'receipts', 'notes', 'purchases', 'payments', 'journal', 'opening'];
   function outBtns() {
-    return '<button type="button" class="btn" data-m-print>' + esc(T('print')) + '</button><button type="button" class="btn" data-m-pdf>' + esc(T('pdf')) + '</button><button type="button" class="btn" data-m-csv>' + esc(T('csv')) + '</button>';
+    return '<button type="button" class="btn" data-m-print>' + esc(T('print')) + '</button><button type="button" class="btn" data-m-pdf>' + esc(T('pdf')) + '</button>' + (NS.xlsx ? '<button type="button" class="btn" data-m-xl>' + esc(T('lg_xl')) + '</button>' : '') + '<button type="button" class="btn" data-m-csv>' + esc(T('csv')) + '</button>';
   }
   var CSV = null, PDFNAME = '';
   function wireOut(pane) {
     var p = $('[data-m-print]', pane), f = $('[data-m-pdf]', pane), c = $('[data-m-csv]', pane);
     if (p) p.addEventListener('click', function () { window.print(); });
+    var mp = $('[data-mpre]', pane); if (mp) mp.addEventListener('change', function () { var P = NS.periodPresets(NS.today())[mp.value]; if (P) { A.range(P[0], P[1]); A.show(); } });
+    var xb = $('[data-m-xl]', pane); if (xb) xb.addEventListener('click', function () { if (CSV && NS.xlsx) NS.xlsx(PDFNAME.replace(/[^\w\- ]+/g, '').replace(/\s+/g, '-').toLowerCase() + '.xlsx', [{ name: PDFNAME.slice(0, 30), rows: CSV }]); });
     if (f) f.addEventListener('click', function () { NS.sharePdf($$('[data-sheet]', pane), PDFNAME, 'a4', PDFNAME, ''); });
     if (c) c.addEventListener('click', function () { if (CSV) download(PDFNAME.replace(/[^\w\- ]+/g, '').replace(/\s+/g, '-').toLowerCase() + '.csv', CSV); });
   }
@@ -67,16 +76,17 @@
   }
   A.addSection('preg', function () {
     var r = A.range(), list = purchases(), S = { taxable: 0, cgst: 0, sgst: 0, igst: 0, total: 0 };
-    CSV = [['Date', 'Supplier', 'Supplier GSTIN', 'Type', 'Bill no.', 'Taxable value', 'CGST', 'SGST', 'IGST', 'Total']];
+    CSV = [['Date', 'Supplier', 'Supplier GSTIN', 'Type', 'Bill no.', 'Taxable value', 'CGST', 'SGST', 'IGST', 'Total', 'Landed cost added to stock']];
+    var LC = window.NSStock && NSStock.landed ? NSStock.landed(A.mine(), A.data().item, A.bizName()) : {};   /* ERP round 2, I-14: freight and other cost added to the goods' cost */
     var body = list.map(function (d) {
       var t = B.itemTotals(d), sg = d.type === 'pbill' && d.kind === 'return' || d.type === 'note' && d.kind === 'debit' ? -1 : 1, tot = d.type === 'self' ? r2(t.taxable + t.cgst + t.sgst + t.igst) : t.total;
       ['taxable', 'cgst', 'sgst', 'igst'].forEach(function (k) { S[k] = r2(S[k] + sg * t[k]); }); S.total = r2(S.total + sg * tot);
       var ty = d.type === 'self' ? 'Self invoice (RCM)' : d.type === 'note' ? (d.kind === 'debit' ? 'Debit note' : 'Credit note') : sg < 0 ? 'Return' : 'Bill', sup = B.partyName(d), g = d.buyer && d.buyer.gstin || '';
-      CSV.push([d.date, sup, g, ty, d.no || '', sg * t.taxable, sg * t.cgst, sg * t.sgst, sg * t.igst, sg * tot]);
+      CSV.push([d.date, sup, g, ty, d.no || '', sg * t.taxable, sg * t.cgst, sg * t.sgst, sg * t.igst, sg * tot, LC[d.id] || '']);
       var acts = (d.type === 'pbill' ? '<button type="button" class="btn sm" data-edit="' + d.id + '">' + esc(T('edit')) + '</button>' : '<a class="btn sm" href="' + A.toolUrl(d.type === 'note' ? (d.kind === 'debit' ? 'debit-note' : 'credit-note') : 'self-invoice') + '?open=' + encodeURIComponent(d.id) + '">' + esc(T('open')) + '</a>') +
         (d.photo ? '<button type="button" class="btn sm" data-photo="' + d.id + '">' + esc(T('photo')) + '</button>' : '') +
         (sg < 0 && d.type === 'pbill' ? '<button type="button" class="btn sm" data-dn="' + d.id + '">' + esc(T('dn')) + '</button>' : '');
-      return '<tr><td>' + A.ldate(d.date) + '</td><td>' + esc(sup) + (g ? '<br><span class="soft mono">' + esc(g) + '</span>' : '') + '</td><td>' + esc(ty) + ' ' + esc(d.no || '') + '<div class="acts no-print">' + acts + '</div></td>' +
+      return '<tr><td>' + A.ldate(d.date) + '</td><td>' + esc(sup) + (g ? '<br><span class="soft mono">' + esc(g) + '</span>' : '') + '</td><td>' + esc(ty) + ' ' + esc(d.no || '') + (LC[d.id] ? '<br><span class="soft">Landed cost +' + money(LC[d.id], false) + '</span>' : '') + '<div class="acts no-print">' + acts + '</div></td>' +
         ['taxable', 'cgst', 'sgst', 'igst'].map(function (k) { return '<td class="n">' + m(sg * t[k]) + '</td>'; }).join('') + '<td class="n"><b>' + m(sg * tot) + '</b></td></tr>';
     }).join('');
     PDFNAME = 'Purchase register ' + r[0] + ' to ' + r[1];
@@ -219,65 +229,95 @@
     'gst-out-cgst': 'Output CGST', 'gst-out-sgst': 'Output SGST', 'gst-out-utgst': 'Output UTGST', 'gst-out-igst': 'Output IGST', 'gst-in-cgst': 'Input CGST', 'gst-in-sgst': 'Input SGST', 'gst-in-igst': 'Input IGST',
     'gst-rcm-payable': 'GST payable (reverse charge)', 'gst-adv': 'GST paid on advances', 'tds-receivable': 'TDS receivable', 'tds-payable': 'TDS payable', 'round-off': 'Round off', opening: 'Opening balances', 'p:cash-customer': 'Cash customer', 'p:unknown': 'Creditors (unnamed)' };
   function accName(a, d) {
+    if (B.isBank(a)) return B.bankName(a);   /* every bank account by its name (several banks) */
     if (ACC[a]) return ACC[a];
+    if (/^(sales|purchases):/.test(a)) return (B.ledName && B.ledName(a)) || a.slice(a.indexOf(':') + 1);   /* A-9: a named sales / purchase ledger */
     if (a.indexOf('p:') === 0) return B.partyName(d) || a.slice(2);
-    if (a.indexOf('exp:') === 0) { var n = d.type === 'exp' ? d.cat : ((d.lines || []).filter(function (l) { return key(l.head || 'Miscellaneous') === a.slice(4); })[0] || {}).head; return (n || a.slice(4)) + ' (expense)'; }
+    if (a.indexOf('exp:') === 0) { var n = d.type === 'exp' ? d.cat : ((d.lines || []).filter(function (l) { return key(l.head || 'Miscellaneous') === a.slice(4); })[0] || {}).head; n = n || a.slice(4); return (window.NSPL && NSPL.proper ? NSPL.proper(n) : n) + ' (expense)'; }
     var N = window.NSPL && NSPL.NAMES && NSPL.NAMES[a]; if (N) return N[0];
-    var px = a.split(':')[0], rest = a.slice(px.length + 1), cap = function (x) { return String(x || '').replace(/(^|\s)\S/g, function (c) { return c.toUpperCase(); }); };
+    var px = a.split(':')[0], rest = a.slice(px.length + 1), cap = function (x) { return window.NSPL && NSPL.proper ? NSPL.proper(String(x || ''), A.data && A.data().doc) : String(x || '').replace(/(^|\s)\S/g, function (c) { return c.toUpperCase(); }); };
     var PX = { cap: 'Capital', drw: 'Drawings', loan: 'Loan from', od: 'Bank overdraft', given: 'Loan given to', fa: 'Fixed asset', inc: '', ocl: '', oca: '', sadv: 'Advance to', dexp: '', iexp: '' };
     if (rest && PX[px] != null) return (PX[px] ? PX[px] + ': ' : '') + cap(rest);
     return cap(a.replace(/[-:]/g, ' '));
   }
   A.accName = accName;
   function particulars(d) {
-    if (d.type === 'contra') return d.from === 'bank' ? 'Cash withdrawn from bank' : 'Cash deposited in bank';
+    if (d.type === 'contra') { var ck = B.contraKind(d), f = B.bankName(B.contraSide(d, d.from, 'cash')), t = B.bankName(B.contraSide(d, d.to, 'bank')); return ck === 'xfer' ? 'Transfer from ' + f + ' to ' + t : ck === 'wd' ? 'Cash withdrawn from ' + f : 'Cash deposited in ' + t; }
     if (d.type === 'ob' && (d.side === 'cash' || d.side === 'bank')) return d.side === 'bank' ? 'Opening bank balance' : 'Opening cash in hand';
     if (d.type === 'advadj') return A.enName(d) + ' ' + d.rv + (d.bill ? ' > ' + d.bill : '') + (d.pname ? ' · ' + d.pname : '');   /* GST of an advance used by a bill or refund (round C) */
     var p = B.partyName(d); return A.enName(d) + (d.no ? ' ' + d.no : '') + (p ? ' · ' + p : d.type === 'fa' && d.name ? ' · ' + d.name : d.cat ? ' · ' + d.cat : '');   /* an asset by its name, not its kind code (F2 re-check) */
   }
   var bkArg = '';
-  A.addSection('books', function (a) {
-    if (a !== bkArg) { bkArg = a; if (a === 'cash' || a === 'bank' || a === 'day') bk = a; }   /* #cash/bank from the dashboard tiles */
+  A.addSection('books', function (a0) {
+    var a = String(a0 || '').split('?')[0], mm = (/[?&]m=(\d{4}-\d{2})/.exec(a0 || '') || [])[1] || '';
+    if (a0 !== bkArg) { bkArg = a0; if (a === 'cash' || B.isBank(a) || a === 'day') bk = a; }   /* #cash/bank from the dashboard tiles, #cash/bank:<name> from the bank master */
+    var BL = A.banks ? A.banks() : [], one = BL.length < 2;
+    if (B.isBank(bk) && !BL.some(function (x) { return x.k === bk; })) bk = 'bank';
     var r = A.range(), D = A.mine(), sheet, title;
+    if (mm && window.NSRep) r = [mm + '-01' < r[0] ? r[0] : mm + '-01', NSRep.monthEnd(mm) > r[1] ? r[1] : NSRep.monthEnd(mm)];   /* one month of the cash and bank summary (R-19) */
     if (bk === 'day') {
       title = 'DAY BOOK';
-      var ent = B.inBooks(D, A.bizName()).filter(function (d) { return d.date >= r[0] && d.date <= r[1]; }), td = 0, tc = 0;
-      CSV = [['Date', 'Entry', 'Account', 'Debit', 'Credit']];
-      sheet = '<table class="tbl st"><thead><tr><th>Date</th><th>Entry</th><th>Account</th><th class="n">Debit</th><th class="n">Credit</th></tr></thead><tbody>' +
-        (ent.length ? ent.map(function (d) {
-          var L = B.postings(d), en = particulars(d);
-          return L.map(function (l, i) {
-            td = r2(td + l.dr); tc = r2(tc + l.cr); CSV.push([d.date, en, accName(l.a, d), l.dr || '', l.cr || '']);
-            return '<tr' + (i === 0 ? ' class="first"' : '') + '><td>' + (i === 0 ? A.ldate(d.date) : '') + '</td><td>' + (i === 0 ? esc(en) : '') + '</td><td>' + (l.cr ? '&nbsp;&nbsp;To ' : '') + esc(accName(l.a, d)) + '</td><td class="n">' + m(l.dr) + '</td><td class="n">' + m(l.cr) + '</td></tr>';
-          }).join('');
-        }).join('') : '<tr><td colspan="5">' + esc(T('none')) + '</td></tr>') +
-        '</tbody><tfoot><tr><th colspan="3">Total</th><th class="n">' + money(td, false) + '</th><th class="n">' + money(tc, false) + '</th></tr></tfoot></table>';
+      var ent = B.inBooks(D, A.bizName()).filter(function (d) { return d.date >= r[0] && d.date <= r[1] && (!dbo.vt || B.vtype(d) === dbo.vt) && (!dbo.q || String(B.partyName(d) || d.cat || '').toLowerCase().indexOf(dbo.q.toLowerCase()) >= 0); }), td = 0, tc = 0;
+      var nar = function (d) { return dbo.narr && window.NSRep ? NSRep.narr(d) : ''; };
+      if (dbo.det) {
+        CSV = [['Date', 'Entry', 'Account', 'Debit', 'Credit', 'Narration']];
+        sheet = '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Entry</th><th>Account</th><th class="n">Debit</th><th class="n">Credit</th><th class="noprint"></th></tr></thead><tbody>' +
+          (ent.length ? ent.map(function (d) {
+            var L = B.postings(d), en = particulars(d), nr = nar(d);
+            return L.map(function (l, i) {
+              td = r2(td + l.dr); tc = r2(tc + l.cr); CSV.push([d.date, en, accName(l.a, d), l.dr || '', l.cr || '', i === 0 ? nr : '']);
+              return '<tr' + (i === 0 ? ' class="first" data-k="' + esc(d.id) + '"' : '') + '><td>' + (i === 0 ? A.ldate(d.date) : '') + '</td><td>' + (i === 0 ? esc(en) + (nr ? '<br><span class="soft lg-narr">' + esc(nr) + '</span>' : '') : '') + '</td><td>' + (l.cr ? '&nbsp;&nbsp;To ' : '') + esc(accName(l.a, d)) + '</td><td class="n">' + m(l.dr) + '</td><td class="n">' + m(l.cr) + '</td><td class="noprint">' + (i === 0 ? eye(d.id) : '') + '</td></tr>';
+            }).join('');
+          }).join('') : '<tr><td colspan="6">' + esc(T('none')) + '</td></tr>') +
+          '</tbody><tfoot><tr><th colspan="3">Total</th><th class="n">' + money(td, false) + '</th><th class="n">' + money(tc, false) + '</th><th class="noprint"></th></tr></tfoot></table>';
+      } else {   /* one line per voucher: the amount and the party (Tally's condensed day book) */
+        CSV = [['Date', 'Entry', 'Voucher type', 'Amount', 'Narration']];
+        sheet = '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Entry</th><th>Voucher type</th><th class="n">Amount</th><th class="noprint"></th></tr></thead><tbody>' +
+          (ent.length ? ent.map(function (d) {
+            var v = r2(B.postings(d).reduce(function (s, l) { return s + l.dr; }, 0)), en = particulars(d), nr = nar(d); td = r2(td + v);
+            CSV.push([d.date, en, B.vtype(d), v, nr]);
+            return '<tr data-k="' + esc(d.id) + '"><td>' + A.ldate(d.date) + '</td><td>' + esc(en) + (nr ? '<br><span class="soft lg-narr">' + esc(nr) + '</span>' : '') + '</td><td>' + esc(B.vtype(d) === 'other' ? '' : T('lg_vt_' + B.vtype(d))) + '</td><td class="n">' + money(v, false) + '</td><td class="noprint">' + eye(d.id) + '</td></tr>';
+          }).join('') : '<tr><td colspan="5">' + esc(T('none')) + '</td></tr>') +
+          '</tbody><tfoot><tr><th colspan="3">Total (' + ent.length + ')</th><th class="n">' + money(td, false) + '</th><th class="noprint"></th></tr></tfoot></table>';
+      }
     } else {
-      title = bk === 'bank' ? 'BANK BOOK' : 'CASH BOOK';
+      title = B.isBank(bk) ? 'BANK BOOK' + (one ? '' : ': ' + B.bankName(bk)) : 'CASH BOOK';
       var Bk = B.book(D, A.bizName(), bk, r[0], r[1]), ti = 0, to = 0;
-      CSV = [['Date', 'Particulars', 'Reference', 'In', 'Out', 'Balance'], [r[0], 'Opening balance', '', '', '', Bk.open]];
-      sheet = '<table class="tbl st"><thead><tr><th>Date</th><th>Particulars</th><th class="n">In (Receipts)</th><th class="n">Out (Payments)</th><th class="n">Balance</th></tr></thead><tbody>' +
-        '<tr><td>' + A.ldate(r[0]) + '</td><td>Opening balance</td><td></td><td></td><td class="n">' + money(Bk.open, false) + '</td></tr>' +
+      CSV = [['Date', 'Particulars', 'Reference', 'In', 'Out', 'Balance', 'Other account', 'Narration'], [r[0], 'Opening balance', '', '', '', Bk.open]];
+      sheet = '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Particulars</th><th class="n">In (Receipts)</th><th class="n">Out (Payments)</th><th class="n">Balance</th><th class="noprint"></th></tr></thead><tbody>' +
+        '<tr><td>' + A.ldate(r[0]) + '</td><td>Opening balance</td><td></td><td></td><td class="n">' + money(Bk.open, false) + '</td><td class="noprint"></td></tr>' +
         Bk.rows.map(function (x) {
-          ti = r2(ti + x.dr); to = r2(to + x.cr); CSV.push([x.date, particulars(x.d), x.d.ref || '', x.dr || '', x.cr || '', x.bal]);
-          return '<tr><td>' + A.ldate(x.date) + '</td><td>' + esc(particulars(x.d)) + (x.d.ref ? ' <span class="soft">(' + esc(x.d.ref) + ')</span>' : '') + '</td><td class="n">' + m(x.dr) + '</td><td class="n">' + m(x.cr) + '</td><td class="n">' + money(x.bal, false) + '</td></tr>';
+          var op = A.oppText ? A.oppText(x.d, bk) : '', nr = A.narrOf ? A.narrOf(x.d) : '';
+          ti = r2(ti + x.dr); to = r2(to + x.cr); CSV.push([x.date, particulars(x.d), x.d.ref || '', x.dr || '', x.cr || '', x.bal, op, nr]);
+          return '<tr data-k="' + esc(x.d.id) + '"><td>' + A.ldate(x.date) + '</td><td>' + esc(particulars(x.d)) + (x.d.ref ? ' <span class="soft">(' + esc(x.d.ref) + ')</span>' : '') + (op ? '<br><span class="soft">' + esc(op) + '</span>' : '') + (nr ? '<br><span class="soft lg-narr">' + esc(nr) + '</span>' : '') + '</td><td class="n">' + m(x.dr) + '</td><td class="n">' + m(x.cr) + '</td><td class="n">' + money(x.bal, false) + '</td><td class="noprint">' + eye(x.d.id) + '</td></tr>';
         }).join('') +
-        '</tbody><tfoot><tr><th colspan="2">Closing balance</th><th class="n">' + money(ti, false) + '</th><th class="n">' + money(to, false) + '</th><th class="n">' + money(Bk.close, false) + '</th></tr></tfoot></table>' +
+        '</tbody><tfoot><tr><th colspan="2">Closing balance</th><th class="n">' + money(ti, false) + '</th><th class="n">' + money(to, false) + '</th><th class="n">' + money(Bk.close, false) + '</th><th class="noprint"></th></tr></tfoot></table>' +
         (bk === 'cash' && Bk.close < -0.004 ? '<p class="st-ft"><b>Cash balance below zero: an entry is missing or wrong.</b></p>' : '');
     }
     PDFNAME = title.charAt(0) + title.slice(1).toLowerCase() + ' ' + r[0] + ' to ' + r[1];
     var A0 = B.accounts(D, A.bizName());
     return '<div class="pane-hd"><h2>' + esc(T('books')) + '</h2><div class="seg" role="group">' + [['cash', 'cashbook'], ['bank', 'bankbook2'], ['day', 'daybook']].map(function (x) {
-        return '<button type="button" class="btn sm" data-bk="' + x[0] + '" aria-pressed="' + (bk === x[0]) + '">' + esc(T(x[1])) + '</button>'; }).join('') + '</div></div>' +
-      '<div class="tiles"><div class="tile' + ((A0.cash || 0) < 0 ? ' neg' : '') + '"><span>' + esc(T('cashin')) + '</span><b>' + money(A0.cash || 0) + '</b></div><div class="tile"><span>' + esc(T('bank')) + '</span><b>' + money(A0.bank || 0) + '</b></div>' +
+        return '<button type="button" class="btn sm" data-bk="' + x[0] + '" aria-pressed="' + (x[0] === 'bank' ? B.isBank(bk) : bk === x[0]) + '">' + esc(T(x[1])) + '</button>'; }).join('') +
+        (B.isBank(bk) && !one ? '<label class="bk-pick">' + esc(T('bankacct')) + ' <select data-bkpick>' + BL.map(function (x) { return '<option value="' + esc(x.k) + '"' + (x.k === bk ? ' selected' : '') + '>' + esc(A.bankLabel(x)) + '</option>'; }).join('') + '</select></label>' : '') + '</div></div>' +
+      '<div class="tiles"><div class="tile' + ((A0.cash || 0) < 0 ? ' neg' : '') + '"><span>' + esc(T('cashin')) + '</span><b>' + money(A0.cash || 0) + '</b></div>' + (one ? '<div class="tile"><span>' + esc(T('bank')) + '</span><b>' + money(A0.bank || 0) + '</b></div>' : BL.map(function (x) { var v = A0[x.k] || 0; return '<a class="tile' + (v < 0 ? ' neg' : '') + '" href="#cash/' + esc(x.k) + '"><span>' + esc(x.name) + '</span><b>' + money(v) + '</b></a>'; }).join('')) +
         ((A0['chq-in'] || 0) ? '<div class="tile"><span>' + esc(T('inhand')) + '</span><b>' + money(A0['chq-in']) + '</b></div>' : '') + '</div>' +
       '<div class="card"><h3>' + esc(T('quick')) + '</h3><div class="quick"><button type="button" class="btn" data-form="min">+ ' + esc(T('min')) + '</button><button type="button" class="btn" data-form="mout">+ ' + esc(T('mout')) + '</button>' +
         '<button type="button" class="btn" data-form="exp">+ ' + esc(T('exp')) + '</button><button type="button" class="btn" data-form="contra">+ ' + esc(T('contra')) + '</button>' +
-        '<button type="button" class="btn" data-form="ob" data-side="' + (bk === 'bank' ? 'bank' : 'cash') + '">+ ' + esc(T(bk === 'bank' ? 's_bank' : 's_cash')) + '</button></div></div>' +
-      '<p class="soft">' + esc(T(bk === 'day' ? 'dayh' : 'cbh')) + '</p>' + dates() + '<div class="quick">' + outBtns() + '</div>' +
+        '<button type="button" class="btn" data-form="ob" data-side="' + (B.isBank(bk) ? 'bank' : 'cash') + '"' + (B.isBank(bk) && bk !== 'bank' ? ' data-bacct="' + esc(bk) + '"' : '') + '>+ ' + esc(T(B.isBank(bk) ? 's_bank' : 's_cash')) + '</button></div></div>' +
+      '<p class="soft">' + esc(T(bk === 'day' ? 'dayh' : 'cbh')) + '</p>' + dates() +
+      (mm ? '<p class="note">' + esc(NS.t('rp.onemonth', { m: A.ldate(r[0]) + ' – ' + A.ldate(r[1]) })) + ' <a href="#books/' + esc(bk) + '">' + esc(NS.t('rp.wholeper')) + ' ›</a></p>' : '') +
+      (bk === 'day' ? '<div class="tools-row lg-bar db-opts"><label><span>' + esc(T('lg_vt')) + '</span> <select data-dbvt><option value="">' + esc(T('all')) + '</option>' + DBVT.map(function (v) { return '<option value="' + v + '"' + (dbo.vt === v ? ' selected' : '') + '>' + esc(T('lg_vt_' + v)) + '</option>'; }).join('') + '</select></label>' +
+        '<label><span>' + esc(T('party')) + '</span> <input type="search" data-dbq value="' + esc(dbo.q) + '" autocomplete="off" style="width:12em"></label>' +
+        '<label class="chk"><input type="checkbox" data-dbdet' + (dbo.det ? ' checked' : '') + '> ' + esc(NS.t('rp.detailed')) + '</label><label class="chk"><input type="checkbox" data-dbnarr' + (dbo.narr ? ' checked' : '') + '> ' + esc(NS.t('rp.narr')) + '</label></div>' : '') +
+      '<div class="quick">' + outBtns() + '</div>' +
       '<div class="tbl-wrap"><div class="stsheet sh wide" data-sheet>' + head(title, A.ldate(r[0]) + ' to ' + A.ldate(r[1])) + sheet + foot() + '</div></div>';
   }, function (pane) {
     wireOut(pane);
     $$('[data-bk]', pane).forEach(function (b) { b.addEventListener('click', function () { bk = b.getAttribute('data-bk'); A.show(); }); });
+    var dv = $('[data-dbvt]', pane); if (dv) dv.addEventListener('change', function () { dbo.vt = dv.value; dbSave(); A.show(); });
+    var dq = $('[data-dbq]', pane); if (dq) dq.addEventListener('change', function () { dbo.q = dq.value.trim(); A.show(); });
+    var dd = $('[data-dbdet]', pane); if (dd) dd.addEventListener('change', function () { dbo.det = dd.checked; dbSave(); A.show(); });
+    var dn = $('[data-dbnarr]', pane); if (dn) dn.addEventListener('change', function () { dbo.narr = dn.checked; dbSave(); A.show(); });
+    var pk = $('[data-bkpick]', pane); if (pk) pk.addEventListener('change', function () { bk = pk.value; A.show(); });
   });
 })();

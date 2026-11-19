@@ -131,10 +131,12 @@
   }
 
   /* ---------- the records ----------
-     e: { kind, name, billId, from, note }, l: the statement line, o: { seller, no (function (type, prefix, date) -> next number), file, bills (open bills), mode } */
+     e: { kind, name, billId, from, note }, l: the statement line, o: { seller, no (function (type, prefix, date) -> next number), file, bills (open bills), mode,
+     bacct (which of the business's banks the statement is from: 'bank:<name>'; none = the default bank) } */
   function modeOf(l) { var t = String(l.desc + ' ' + l.ref).toLowerCase(); return /\bupi\b/.test(t) ? 'upi' : 'bank'; }
   function records(e, l, o) {
     var amt = l.cr || l.dr, mode = modeOf(l), ref = l.ref || (String(l.desc).match(/\b\d{9,16}\b/) || [''])[0] || '', note = e.note || l.desc || '', base = { app: 1, bsk: e.key, bsfile: o.file || '', seller: o.seller, date: l.date };
+    if (/^bank:/.test(o.bacct || '')) base.bacct = o.bacct;
     var bill = e.billId ? (o.bills || []).filter(function (b) { return b.id === e.billId; })[0] : null, alloc = bill ? [{ id: bill.id, no: bill.no || '', amt: Math.min(amt, bill.left) }] : [];
     if (e.kind === 'in') {
       return Object.assign({ type: 'receipt', no: o.no('receipt', 'RCT', l.date), paper: 'a4', design: 'classic', copies: 1, copyLabel: '', gstAdv: false, rate: '18', pos: '', sac: '', rv: '', rvDate: '', refDate: '', bank: '', balance: '', status: '',

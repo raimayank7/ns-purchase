@@ -66,3 +66,14 @@ html[data-theme=dark] .pr-warn{background:#4a3410;color:#f5d899}
 .pr-ch{margin:14px 0}
 .pr-tot{border-top:2px solid var(--line);font-weight:700}
 @media (max-width:620px){.pr-grid th[scope=row]{max-width:92px;overflow:hidden;text-overflow:ellipsis}.pr-c{min-width:30px;height:34px}}
+
+/* ERP round 2 payroll and TDS screens (payrun.js, tdsret.js, tdsbook.js) */
+.pw-in { width: 7.5em; min-width: 6em; text-align: right; padding: .3em .45em; }
+.pw-t td, .pw-t th { white-space: nowrap; }
+.pw-t th[scope=row] { white-space: normal; min-width: 9em; }
+.pw-tot { max-width: 36em; }
+.pw-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16em, 1fr)); gap: 1em; }
+.pw-w td.n { text-align: right; }
+.tr-bar { flex-wrap: wrap; gap: .6em 1em; }
+.tr-bar select { max-width: 100%; }
+@media (max-width: 620px) { .pw-in { width: 100%; } .pw-t td, .pw-t th { white-space: normal; } }

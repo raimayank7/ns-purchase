@@ -20,7 +20,7 @@
     var biz = A.bizName() || '';
     return Promise.all([S.list(biz), P.Store.att(), P.Store.cfg()]).then(function (r) {
       var sig = biz + '|' + r[0].map(function (e) { return e.id + ':' + (e.updated || 0); }).join(',') + '|' + JSON.stringify(r[2]).length + '|' + JSON.stringify(r[1]).length;
-      var was = ST.sig; ST.emps = r[0]; ST.att = r[1]; ST.cfg = r[2]; ST.ready = true; ST.sig = sig;
+      var was = ST.sig; ST.emps = r[0]; ST.att = r[1]; ST.cfg = r[2]; ST.ready = true; ST.sig = sig; if (P.setLeave) P.setLeave((r[2].leave || {}).types);   /* leave types are attendance marks too (T-B16) */
       if (was !== sig && /^#stf\/(att|pf|esi)/.test(location.hash) && !ST.busy) A.show();
     });
   }
@@ -48,9 +48,10 @@
 
   /* ================= attendance ================= */
   var LABEL = { P: 'P', A: 'A', H: 'H', PL: 'PL', UL: 'UL', HOL: 'HOL', WO: 'WO', NA: '·' };
+  function codeName(c) { var t = P.leaveType && P.leaveType(c); return t ? t.name : F('code_' + c); }
   function cell(e, d, rec) {
     var c = P.dayCode(rec, ST.ym, d, ST.att.cfg, e), mark = rec && rec.d && rec.d[d] ? 1 : 0;
-    return '<button type="button" class="pr-c c-' + (c || 'none') + (mark ? ' mk' : '') + '" data-e="' + esc(e.id) + '" data-d="' + d + '" title="' + esc(e.name + ' · ' + d + ' ' + (c ? F('code_' + c) : F('code_none'))) + '"' + (c === 'NA' ? ' disabled' : '') + '>' + esc(c ? LABEL[c] : '') + '</button>';
+    return '<button type="button" class="pr-c c-' + (!c ? 'none' : LABEL[c] ? c : 'PL') + (mark ? ' mk' : '') + '" data-e="' + esc(e.id) + '" data-d="' + d + '" title="' + esc(e.name + ' · ' + d + ' ' + (c ? codeName(c) : F('code_none'))) + '"' + (c === 'NA' ? ' disabled' : '') + '>' + esc(c ? LABEL[c] || c : '') + '</button>';
   }
   function sumCells(e) {
     var rec = month()[e.id], s = P.summary(rec, ST.ym, ST.att.cfg, e);
@@ -78,7 +79,7 @@
     return h + '</div><p class="soft" data-calsum>' + esc(F('calsum', { p: s.paid, d: s.days, a: s.lop })) + '</p>';
   }
   function legend() {
-    return '<p class="pr-legend">' + P.CODES.map(function (c) { return '<span class="pr-c c-' + c + '">' + LABEL[c] + '</span> ' + esc(F('code_' + c)); }).join(' · ') + '</p><p class="soft">' + esc(F('tap')) + '</p>';
+    return '<p class="pr-legend">' + P.CODES.map(function (c) { return '<span class="pr-c c-' + (LABEL[c] ? c : 'PL') + '">' + (LABEL[c] || c) + '</span> ' + esc(codeName(c)); }).join(' · ') + '</p><p class="soft">' + esc(F('tap')) + '</p>';
   }
   function settingsHtml() {
     var cfg = ST.att.cfg, hol = Object.keys(cfg.hol || {}).sort();
@@ -93,8 +94,9 @@
     var E = active();
     var tools = '<div class="acts pr-tools"><button type="button" class="btn sm' + (ST.view === 'grid' ? ' primary' : '') + '" data-view="grid">' + esc(F('v_grid')) + '</button><button type="button" class="btn sm' + (ST.view === 'cal' ? ' primary' : '') + '" data-view="cal">' + esc(F('v_cal')) + '</button>' +
       '<button type="button" class="btn sm" data-allp>' + esc(F('allp')) + '</button><button type="button" class="btn sm" data-xl>' + esc(F('exp_xl')) + '</button><button type="button" class="btn sm" data-csv>' + esc(F('exp_csv')) + '</button>' +
-      '<label class="btn sm">' + esc(F('imp')) + '<input type="file" accept=".csv,.xlsx,text/csv" data-imp hidden></label></div>';
-    var bulk = '<div class="pr-bulk"><span>' + esc(F('bulk')) + '</span> <input id="pr-bd" type="number" min="1" max="' + P.daysIn(ST.ym) + '" placeholder="' + esc(F('day')) + '" aria-label="' + esc(F('day')) + '"> <select id="pr-bc">' + P.CODES.map(function (c) { return '<option value="' + c + '">' + esc(F('code_' + c)) + '</option>'; }).join('') + '<option value="">' + esc(F('code_none')) + '</option></select> <button type="button" class="btn sm" data-bulk>' + esc(F('apply')) + '</button></div>';
+      '<label class="btn sm">' + esc(F('imp')) + '<input type="file" accept=".csv,.xlsx,text/csv" data-imp hidden></label>' +
+      (window.NSPayRun ? '<label class="btn sm" title="' + esc(NS.t('pw.punchh')) + '">' + esc(NS.t('pw.punch')) + '<input type="file" accept=".csv,.xlsx,text/csv" data-punch hidden></label>' : '') + '</div>';
+    var bulk = '<div class="pr-bulk"><span>' + esc(F('bulk')) + '</span> <input id="pr-bd" type="number" min="1" max="' + P.daysIn(ST.ym) + '" placeholder="' + esc(F('day')) + '" aria-label="' + esc(F('day')) + '"> <select id="pr-bc">' + P.CODES.map(function (c) { return '<option value="' + c + '">' + esc(codeName(c)) + '</option>'; }).join('') + '<option value="">' + esc(F('code_none')) + '</option></select> <button type="button" class="btn sm" data-bulk>' + esc(F('apply')) + '</button></div>';
     if (!E.length) return '<p class="soft">' + esc(F('intro')) + '</p>' + head() + '<p class="soft">' + esc(F('noemp')) + '</p><p><a class="btn sm" href="#stf/emp">' + esc(F('addemp')) + '</a></p>';
     return '<p class="soft">' + esc(F('intro')) + '</p>' + head() + tools + (ST.view === 'cal' ? calHtml() : gridHtml()) + legend() + bulk + '<p class="soft" data-msg aria-live="polite"></p>' + settingsHtml();
   }
@@ -122,7 +124,7 @@
     });
     $$('[data-view]', pane).forEach(function (b) { b.addEventListener('click', function () { ST.view = b.getAttribute('data-view'); A.show(); }); });
     var cs = $('#pr-cal', pane); if (cs) cs.addEventListener('change', function () { ST.calEmp = cs.value; A.show(); });
-    var ap = $('[data-allp]', pane); if (ap) ap.addEventListener('click', function () { var m = month(); active().forEach(function (e) { m[e.id] = P.fillPresent(m[e.id] || { d: {} }, ST.ym, cfg, e); }); saveAtt(); A.show(); NS.toast(F('allpdone')); });
+    var ap = $('[data-allp]', pane); if (ap) ap.addEventListener('click', function () { var m = month(); active().forEach(function (e) { m[e.id] = P.fillPresent(m[e.id] || { d: {} }, ST.ym, cfg, e, NS.today()); }); saveAtt(); A.show(); NS.toast(F('allpdone')); });
     var bk = $('[data-bulk]', pane); if (bk) bk.addEventListener('click', function () {
       var d = Math.round(num($('#pr-bd', pane).value)); if (d < 1 || d > P.daysIn(ST.ym)) { NS.toast(F('badday'), 'bad'); return; }
       var code = $('#pr-bc', pane).value; P.markDay(month(), active().map(function (e) { return e.id; }), d, code); saveAtt(); A.show(); NS.toast(F('bulkdone', { d: d }));
@@ -131,7 +133,19 @@
     function rows() { return P.sheetRows(ST.ym, active(), month(), cfg); }
     var cv = $('[data-csv]', pane); if (cv) cv.addEventListener('click', function () { dl('﻿' + P.toCsv(rows()), 'attendance-' + ST.ym + '.csv', 'text/csv'); });
     var xl = $('[data-xl]', pane); if (xl) xl.addEventListener('click', function () {
-      NS.loadLazy(['xlsx.js']).then(function () { NS.saveFile(NS.xlsx.write([['Attendance ' + ST.ym, rows()], [F('howsheet'), [[F('howhead')]].concat(P.CODES.map(function (c) { return [c + ' = ' + F('code_' + c)]; })), [90]]]), 'attendance-' + ST.ym + '.xlsx'); NS.toast(F('saved', { f: 'attendance-' + ST.ym + '.xlsx' })); }, function () { NS.toast(F('noxl'), 'bad'); });
+      NS.loadLazy(['xlsx.js']).then(function () { NS.saveFile(NS.xlsx.write([['Attendance ' + ST.ym, rows()], [F('howsheet'), [[F('howhead')]].concat(P.CODES.map(function (c) { return [c + ' = ' + codeName(c)]; })), [90]]]), 'attendance-' + ST.ym + '.xlsx'); NS.toast(F('saved', { f: 'attendance-' + ST.ym + '.xlsx' })); }, function () { NS.toast(F('noxl'), 'bad'); });
+    });
+    /* ERP round 2 (T-B14): punches exported by a biometric / face device's software: first in and last out per day make P / H / A, late marks and overtime */
+    var pu = $('[data-punch]', pane); if (pu) pu.addEventListener('change', function () {
+      var f = pu.files && pu.files[0]; if (!f) return;
+      NS.loadLazy(['xlsx.js']).then(function () { return NS.xlsx.read(f); }).then(function (rows) {
+        var r = NSPayRun.parsePunches(rows, ST.ym, active(), ST.cfg.shift ? { shift: ST.cfg.shift } : null);
+        if (r.error) { msg(pane, NS.t('pw.punchhead')); return; }
+        Object.keys(r.month).forEach(function (id) { var cur = month()[id] = month()[id] || { d: {} }; Object.assign(cur.d, r.month[id].d); cur.ot = r.month[id].ot || cur.ot; cur.late = r.month[id].late; });
+        saveAtt(); A.show();
+        NS.toast(NS.t('pw.punchok', { n: r.matched }) + (r.unknown.length ? ' ' + NS.t('pw.punchunk', { l: r.unknown.slice(0, 8).join(', ') }) : '') + (r.bad.length ? ' ' + NS.t('pw.punchbad', { n: r.bad.length }) : ''));
+      }).catch(function () { msg(pane, F('imp_fail')); });
+      pu.value = '';
     });
     var im = $('[data-imp]', pane); if (im) im.addEventListener('change', function () {
       var f = im.files && im.files[0]; if (!f) return;
@@ -175,7 +189,7 @@
     var c = ST.cfg[which], D = which === 'pf' ? P.PF : P.ESI, fields = which === 'pf' ? [['ceil', 'f_ceil'], ['epf', 'f_epf'], ['eps', 'f_eps'], ['edli', 'f_edli'], ['admin', 'f_admin'], ['adminMin', 'f_adminmin']] : [['ceil', 'f_eceil'], ['ee', 'f_ee'], ['er', 'f_er'], ['daily', 'f_daily']];
     return '<details class="card pr-set"><summary>' + esc(F('rates')) + '</summary><p class="soft">' + esc(F(which === 'pf' ? 'rates_pf' : 'rates_esi')) + '</p><div class="fg">' + fields.map(function (f) {
       return '<div class="f"><label for="pr-s-' + f[0] + '">' + esc(F(f[1])) + '</label><input id="pr-s-' + f[0] + '" data-set="' + f[0] + '" inputmode="decimal" value="' + esc(c[f[0]] != null ? c[f[0]] : D[f[0]]) + '"></div>';
-    }).join('') + '</div><button type="button" class="btn sm" data-setreset>' + esc(F('reset')) + '</button></details>';
+    }).join('') + '</div>' + (which === 'pf' ? '<p class="soft">' + esc(NS.t('pw.pf10')) + '</p>' : '') + '<button type="button" class="btn sm" data-setreset>' + esc(F('reset')) + '</button></details>';
   }
   function setBind(pane, which) {
     $$('[data-set]', pane).forEach(function (i) { i.addEventListener('change', function () { var v = num(i.value); if (v >= 0) ST.cfg[which][i.getAttribute('data-set')] = v; saveCfg().then(A.show); }); });

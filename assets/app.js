@@ -45,6 +45,7 @@
   }
   /* a link, a button or a maker asks for href: open it on an App screen. false = not an App place (the caller goes there itself) */
   function openUrl(href) {
+    if (/^(blob|data|javascript|mailto|tel|sms|whatsapp):/i.test(String(href || ''))) return false;   /* a file being saved or an app link, never a screen */
     var u; try { u = new URL(href, location.href); } catch (e) { return false; }
     if (u.origin === location.origin) {   /* the App's own addresses, asked for by a maker copy or My data */
       if (/^\/do\/[a-z0-9-]+\//.test(u.pathname)) { go(u.pathname.slice(1) + u.search + u.hash); return true; }
@@ -149,6 +150,7 @@
   var SALES = { invoice: 1, cashmemo: 1, note: 1, quote: 1, proforma: 1, so: 1, challan: 1, expinv: 1 };
   SALES.jewel = 1; SALES.garment = 1;   /* group C trade tools: their bills are in the Sales list */
   var CONVERT = { quote: ['so', 'challan', 'invoice'], proforma: ['invoice'], so: ['challan', 'invoice'], challan: ['invoice'] };
+  CONVERT.po = ['grn', 'pbill'];   /* ERP round 2 (orders.js): a purchase order becomes a receipt note or a purchase bill (open lines only) */
   var SECS = ['home', 'sales', 'buy', 'money', 'dues', 'parties', 'cash', 'st'];
   /* EXT: sections added by other files (NSApp.addSection); DOOR: the sections a door site shows (#app data-secs), first = start */
   var EXT = {}, DOOR = null, HOME = [];
@@ -159,11 +161,13 @@
      shows from memory at once and is drawn again only when the stamp changed (owner, 2026-11-11: shortcuts felt stuck) */
   var MEM = null, SIG = '', painted = false, readyFns = [];
   function sigOf(r) {
-    return r.slice(0, 4).map(function (L) { var s = 0; L.forEach(function (x) { s = (s + (x.updated || 0)) % 1e15; }); return L.length + ':' + s; }).join('|') + '|' + JSON.stringify([r[4] || 0, r[5] || 0, r[6] || 0]);
+    return r.slice(0, 4).map(function (L) { var s = 0; L.forEach(function (x) { s = (s + (x.updated || 0)) % 1e15; }); return L.length + ':' + s; }).join('|') + '|' + JSON.stringify([r[4] || 0, r[5] || 0, r[6] || 0, r[7] || 0]);
   }
   function whenReady(fn) { if (MEM) fn(); else readyFns.push(fn); }
+  var linked = false;   /* ERP Round 1, C-1: once per App start, vouchers with no business id get the id of the one business their seller name matches */
   function load() {
-    return Promise.all(['biz', 'party', 'item', 'doc'].map(function (s) { return NSStore.list(s); }).concat([NSStore.meta('settings'), NSStore.meta('groups'), NSStore.meta('followups')])).then(function (r) {
+    if (!linked && NSStore.linkBiz) { linked = true; return NSStore.linkBiz().then(load, load); }
+    return Promise.all(['biz', 'party', 'item', 'doc'].map(function (s) { return NSStore.list(s); }).concat([NSStore.meta('settings'), NSStore.meta('groups'), NSStore.meta('followups'), NSStore.meta('banks')])).then(function (r) {
       apply(r);
       var s = sigOf(r), ch = s !== SIG; MEM = r; SIG = s;   /* stamped after apply: its one-time settings copy is part of it */
       readyFns.splice(0).forEach(function (f) { try { f(); } catch (e) {} });
@@ -171,9 +175,9 @@
     });
   }
   function apply(r) {
-      C = { biz: r[0], party: r[1], item: r[2], doc: r[3] }; CFG = r[4] || {}; GRP = r[5] || {}; FU = r[6] || {};
+      C = { biz: r[0], party: r[1], item: r[2], doc: r[3] }; CFG = r[4] || {}; GRP = r[5] || {}; FU = r[6] || {}; BANKS = r[7] || {};
       NS.bizCache = C.biz;
-      if (NS.cfgSplit(CFG, C.biz)) NSStore.meta('settings', CFG).catch(function () {});   /* settings per business: one-time copy */
+      if (NS.cfgSplit(CFG, C.biz)) (NS.loadCfg ? NS.loadCfg() : NSStore.meta('settings', CFG)).catch(function () {});   /* settings per business: one-time copy. ERP Round 2: saved from a fresh read (NS.loadCfg splits and saves it), never the copy read at load, which could undo a settings save made a moment before */
       var RAW = CFG;
       var want = NS.curBiz();   /* this tab's business (another tab switching business never moves it) */
       BIZ = C.biz.filter(function (b) { return b.id === want; })[0] || C.biz.filter(function (b) { return b.id === CFG.defBiz; })[0] || C.biz[0] || null; if (BIZ && BIZ.id && BIZ.id !== want) try { sessionStorage.setItem('ns-app-biz', BIZ.id); } catch (e) {}
@@ -183,10 +187,41 @@
       }
       CFG = NS.cfgFor(RAW, BIZ, C.biz);   /* the settings of this tab's business */
       if (window.NSStock && NSStock.valuation) NSStock.valuation(CFG.stockValue);   /* FIFO or weighted average, My data › Settings */
+      B.setBanks(banks());   /* names of this business's bank accounts in every report */
+      if (B.setBillwise) { B.setBillwise(bizName(), CFG.billwise); B.setItemLedgers(C.item.reduce(function (o, m) { if (m && m.desc && (m.sl || m.pl)) o[m.desc] = { sl: m.sl || '', pl: m.pl || '' }; return o; }, {})); }   /* ERP Round 2: strict bill-wise (A-12), item sales / purchase ledgers (A-9) */
       bizChip();
   }
   function bizName() { return BIZ ? BIZ.name : ''; }
-  function mine() { var b = key(bizName()); return C.doc.filter(function (d) { return key(d.seller && d.seller.name) === b; }); }
+  /* the vouchers of this tab's business: by business id (C-1), else by the seller's name */
+  function mine() { var b = key(bizName()), id = BIZ && BIZ.id; return C.doc.filter(function (d) { return id && d.bizId ? d.bizId === id : key(d.seller && d.seller.name) === b; }); }
+  /* ---------- bank accounts of the business (ERP masters step 3) ----------
+     The bank on the business record is the default bank (account 'bank'); extra banks live in data home meta 'banks' =
+     { <business id>: [{ id, name, acc, ifsc, branch }] } and post to NSBooks.bankKey(name). A money entry keeps its bank in d.bacct.
+     The "Bank account" choice shows only when the business has two or more banks and the payment mode goes through a bank. */
+  var BANKS = {};
+  function banks(b) {
+    return B.bankList(b || BIZ, BANKS, T('bankdef'));
+  }
+  function bankLabel(x) { var a = String(x.acc || '').replace(/\s/g, ''); return x.name + (a ? ' · ' + (a.length > 4 ? '…' + a.slice(-4) : a) : ''); }
+  /* the select; '' when the business has one bank. mode: id of the payment mode select it follows ('' = always shown) */
+  function bankFld(id, cur, mode, label) {
+    var L = banks(); if (L.length < 2) return '';
+    var v = L.some(function (x) { return x.k === cur; }) ? cur : 'bank';
+    return '<div class="f" data-bankf="' + id + '"' + (mode ? ' data-bankmode="' + mode + '"' : '') + '><label for="' + id + '">' + esc(label || T('bankacct')) + '</label>' +
+      '<select id="' + id + '" name="' + id + '">' + L.map(function (x) { return '<option value="' + esc(x.k) + '"' + (x.k === v ? ' selected' : '') + '>' + esc(bankLabel(x)) + '</option>'; }).join('') + '</select></div>';
+  }
+  /* show each bank choice only for a mode that goes through a bank (UPI, bank transfer, cheque, card...) */
+  function bankSync(root) {
+    $$('[data-bankf]', root).forEach(function (f) {
+      var m = f.getAttribute('data-bankmode'), s = m && $('#' + m, root);
+      if (s) f.hidden = B.moneyAcct(s.value) !== 'bank' || !!(s.closest('.f') && s.closest('.f').hidden);
+    });
+  }
+  /* the bank key to save ('' = the default bank, or the field is hidden / not there) */
+  function bankVal(root, id) { var f = $('[data-bankf="' + id + '"]', root), s = f && !f.hidden && $('#' + id, root); return s && s.value !== 'bank' && B.isBank(s.value) ? s.value : ''; }
+  /* forms of other files (acctx.js X.open): keep the bank choice in step with the mode (one listener per form element) */
+  function bankWire(root) { if (!root) return; bankSync(root); if (root._bkw) return; root._bkw = 1; root.addEventListener('change', function () { bankSync(root); }); }
+  function setBacct(d, v) { if (v) d.bacct = v; else delete d.bacct; return d; }
   function sellerCopy() { var s = JSON.parse(JSON.stringify(BIZ || {})); delete s.id; delete s.created; delete s.updated; return s; }
   function docName(d) {
     var ty = d.type || 'invoice';
@@ -195,7 +230,7 @@
     if (ty === 'receipt') return T(d.kind === 'adv' ? 'd_adv' : d.kind === 'ref' ? 'd_ref' : 'd_receipt');
     if (ty === 'voucher') return T(d.forBill ? 'd_voucher' : 'd_vexp');
     if (ty === 'pbill') return T(d.kind === 'return' ? 'd_pret' : 'd_pbill');
-    if (ty === 'contra') return T(d.from === 'bank' ? 'd_withdraw' : 'd_deposit');
+    if (ty === 'contra') { var ck = B.contraKind(d); return T(ck === 'xfer' ? 'd_xfer' : ck === 'wd' ? 'd_withdraw' : 'd_deposit'); }
     /* shop and trade kits and slips have no app.d_ name: use the maker's own name (never a raw key) */
     var k = 'app.d_' + ty, v = NS.t(k);
     return v !== k ? v : NS.t(KITNAME[ty] || 'Doc.' + ty);
@@ -211,6 +246,7 @@
   function catCode(c) { var h = window.NSHeads && NSHeads.find(c); return !h || h.custom ? c : NSHeads.APPCODE[h.id] ? h.id : h.en; }
   function fyStart(iso) { return NS.fy(iso).slice(0, 4) + '-04-01'; }
   function amountOf(d) {
+    if (d.gen && B.genTotal) return B.genTotal(d);   /* A-10 */
     var R = B.role(d);
     if (R === 'in' || R === 'refund' || R === 'exp' || R === 'ob' || R === 'contra' || B.bounced(d) && d.type === 'receipt') return num(d.amount);
     if (B.bounced(d)) return r2((d.lines || []).reduce(function (a, l) { return a + num(l.amt); }, 0));
@@ -225,12 +261,13 @@
     if (trail.length > 1 && trail[trail.length - 2] === h) trail.pop(); else if (trail[trail.length - 1] !== h) trail.push(h);
     cur = p[0] === 'do' && !DOOR ? 'do' : SECS.indexOf(p[0]) >= 0 || EXT[p[0]] ? p[0] : 'home'; arg = p.slice(1).join('/');
     /* one cash screen: where the cash, bank and day book screen (money.js) is on hand, #cash and #cash/bank open it */
-    if (cur === 'cash' && EXT.books && (!DOOR || DOOR.indexOf('books') >= 0)) { cur = 'books'; arg = arg === 'bank' ? 'bank' : 'cash'; }
+    if (cur === 'cash' && EXT.books && (!DOOR || DOOR.indexOf('books') >= 0)) { cur = 'books'; arg = B.isBank(arg) ? arg : 'cash'; }
+    if (cur === 'do' && window.NSVDocs && NSVDocs.claim(arg)) { trail.pop(); history.replaceState(null, '', '#' + (backTo || 'home')); route(); return; }
     if (cur !== 'do') { backTo = h; document.documentElement.classList.remove('app-frame-on'); shelve(); }
     if (DOOR && DOOR.indexOf(cur) < 0 && cur !== 'st') { cur = DOOR[0]; arg = ''; }
     show(true);
   }
-  function go(h) { location.hash = h; }
+  function go(h) { if (/^do\//.test(h) && window.NSVDocs && NSVDocs.claim(h.slice(3))) return; location.hash = h; }   /* step 4: documents open as voucher screens (vdocs.js) */
   var showSeq = 0;
   function show(focus, soft) {
     $$('[data-sec]').forEach(function (b) { var on = b.getAttribute('data-sec') === (cur === 'st' ? 'parties' : cur); b.setAttribute('aria-current', on ? 'page' : 'false'); });
@@ -269,7 +306,7 @@
       if (focus) { var h2 = $('h2', pane); if (h2) { h2.tabIndex = -1; h2.focus({ preventScroll: true }); } }
   }
   function labels() {
-    $$('[data-sec]').forEach(function (b) { var k = 'app.' + b.getAttribute('data-sec'), w = NS.t(k); if (w !== k) $('span', b).textContent = w; });   /* no app.<sec> word (cadoc, b2...): the label keeps its own data-i18n */
+    $$('[data-sec]').forEach(function (b) { var k = 'app.' + b.getAttribute('data-sec'), w = NS.t(k), sp = $('span', b); if (w !== k && sp && !sp.hasAttribute('data-erp')) sp.textContent = w; });   /* data-erp: the accounting name the menu gave it (desk.js) */   /* no app.<sec> word (cadoc, b2...): the label keeps its own data-i18n */
     $$('[data-t]').forEach(function (e) { e.textContent = T(e.getAttribute('data-t')); });
     /* the guide exists in every language: point its link at the one on screen */
     var L = NS.lang ? NS.lang() : 'en';
@@ -307,7 +344,7 @@
     Object.keys(P).forEach(function (k) { if (P[k].bal > 0) recv += P[k].bal; else pay -= P[k].bal; });
     var bw = B.bills(D, bizName()).bills.filter(function (b) { return b.side === 'recv'; }).sort(function (a, b) { return a.date.localeCompare(b.date); }).slice(0, 6);
     var tiles = [['today', sales(function (x) { return x === today; }), '#sales'], ['month', sales(function (x) { return x.slice(0, 7) === mon; }), '#sales'],
-      ['recv', r2(recv), '#dues'], ['pay', r2(pay), '#dues/pay'], ['cashin', A.cash || 0, '#cash'], ['bank', A.bank || 0, '#cash/bank']];
+      ['recv', r2(recv), '#dues'], ['pay', r2(pay), '#dues/pay'], ['cashin', A.cash || 0, '#cash'], ['bank', bankSum(A), '#cash/bank']];
     var recent = D.filter(function (d) { return B.role(d); }).sort(function (a, b) { return (b.date || '').localeCompare(a.date || '') || (b.updated || 0) - (a.updated || 0); }).slice(0, 8);
     var cf = cashFlow(D, mon), owe = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return p.bal > 0.004; }).sort(function (a, b) { return b.bal - a.bal; }).slice(0, 5);
     /* every part carries data-dash (and each tile data-tile) so the person can arrange the Dashboard (dash.js) */
@@ -340,6 +377,7 @@
       var ty = d.type || 'invoice', site = (d.type === 'note' && d.kind === 'debit' ? 'debit-note' : SITEOF[ty]), appMade = d.app || /^(pbill|exp|ob|contra)$/.test(ty), pills = '';
       if (left[d.id] != null) pills = left[d.id] <= 0.004 ? '<span class="pill ok">' + esc(T('paid')) + '</span>' : left[d.id] < amountOf(d) - 0.004 ? '<span class="pill warn">' + esc(T('left', { a: money(left[d.id]) })) + '</span>' : '<span class="pill warn">' + esc(T('unpaid')) + '</span>';
       if (d.nextNo) pills += ' <span class="pill">' + esc(T('made', { x: d.nextNo })) + '</span>';
+      if (d.cancelled && NS.cxPill) pills += NS.cxPill(d);   /* A-3 */
       if (B.bounced(d)) pills += ' <span class="pill bad">' + esc(T('c_bounce')) + '</span>';
       else if (d.mode === 'cheque' && d.chq && d.chq.st && d.chq.st !== 'ok') pills += ' <span class="pill warn">' + esc(T('c_' + d.chq.st)) + '</span>';
       if (d.status === 'inv' && d.invNo) pills += ' <span class="pill ok">' + esc(T('made', { x: d.invNo })) + '</span>';
@@ -349,17 +387,18 @@
       var xed = !appMade && XEDIT.test(ty) && (ty !== 'stk' || /^(move|make|jobout|jobin)$/.test(d.kind || ''));   /* stock counts and adjustments are changed on the stock site */
       if ((appMade && ty !== 'cashmemo') || xed) acts.push(ib('data-edit="' + d.id + '"', 'edit', T('edit')));
       /* a document made in a maker (invoice, quotation...) is changed there: the button says Edit; the App's own receipts keep Open (to print) */
-      if (docUrl(d) && (!site || !appMade || /^(receipt|voucher|cashmemo)$/.test(ty))) acts.push('<a class="btn sm ib" href="' + docUrl(d) + '" title="' + esc(T(appMade ? 'print' : 'edit')) + '" aria-label="' + esc(T(appMade ? 'print' : 'edit')) + '">' + NS.icSvg(appMade ? 'print' : 'edit') + '</a>');
+      if (docUrl(d) && (!site || !appMade || /^(receipt|voucher|cashmemo)$/.test(ty))) acts.push('<a class="btn sm ib" href="' + docUrl(d) + (appMade ? '&amp;print=1' : '') + '" title="' + esc(T(appMade ? 'print' : 'edit')) + '" aria-label="' + esc(T(appMade ? 'print' : 'edit')) + '">' + NS.icSvg(appMade ? 'print' : 'edit') + '</a>');
       /* a document made in a maker: Print opens it there and prints at once */
       if (docUrl(d) && !appMade) acts.push('<a class="btn sm ib" href="' + docUrl(d) + '&amp;print=1" title="' + esc(T('print')) + '" aria-label="' + esc(T('print')) + '">' + NS.icSvg('print') + '</a>');
       if (left[d.id] > 0.004 && (ty === 'invoice' || ty === 'cashmemo')) acts.push('<button type="button" class="btn sm" data-form="min" data-for="' + d.id + '">' + esc(T('recpay')) + '</button>');
       if (left[d.id] > 0.004 && ty === 'pbill') acts.push('<button type="button" class="btn sm" data-form="mout" data-for="' + d.id + '">' + esc(T('recpay')) + '</button>');
       if (CONVERT[ty] && !opts.noconv) acts.push('<select class="sm conv" data-conv="' + d.id + '" aria-label="' + esc(T('convert')) + ' ' + esc(d.no || '') + '"><option value="">' + esc(T('convert')) + '…</option>' +
-        CONVERT[ty].map(function (x) { return '<option value="' + x + '">' + esc(T(x === 'invoice' ? 'makeinv' : x === 'so' ? 'makeso' : 'makedc')) + '</option>'; }).join('') + '</select>');
+        CONVERT[ty].map(function (x) { return '<option value="' + x + '">' + esc(x === 'grn' || x === 'pbill' ? NS.t(x === 'grn' ? 'or.mk_grn' : 'or.mk_pbill') : T(x === 'invoice' ? 'makeinv' : x === 'so' ? 'makeso' : 'makedc')) + '</option>'; }).join('') + '</select>');
       if (window.NSReuse && ty === 'pbill' && d.kind !== 'return' && d.items && d.items.length) acts.push(ib('data-reorder="' + d.id + '"', 'repeat', NS.t('cap.again_order')));
       if (window.NSReuse && /^(invoice|cashmemo)$/.test(ty) && docUrl(d) && d.items && d.items.length) acts.push('<a class="btn sm ib" href="' + docUrl(d).replace('open=', 'copy=') + '" title="' + esc(NS.t('cap.again_sale')) + '" aria-label="' + esc(NS.t('cap.again_sale')) + '">' + NS.icSvg('repeat') + '</a>');
       if ((ty === 'invoice' || ty === 'cashmemo') && B.partyName(d)) acts.push(ib('data-rowwa="' + d.id + '"', 'wa', T('rwa'), 'wa'));
       if (ty === 'exp') acts.push(ib('data-vprint="' + d.id + '"', 'print', T('print')));
+      if (NS.cxBtn && d.no && (d.cancelled || B.role(d))) acts.push(NS.cxBtn(d, 'btn sm ib'));   /* A-3: Cancel voucher / Undo cancel */
       if (appMade || xed) acts.push(ib('data-del="' + d.id + '"', 'trash', T('del'), 'danger'));
       return '<li><div class="ln"><span><b>' + esc(docName(d)) + ' ' + esc(d.no || d.billNo || (ty === 'exp' && d.vno) || '') + '</b> ' + pills + '<span class="soft"> · <span class="nw">' + ldate(d.date) + '</span>' + (B.partyName(d) ? ' · ' + esc(B.partyName(d)) : d.cat ? ' · ' + esc(catName(d.cat)) : '') + '</span></span>' +
         '<b class="amt">' + money(amountOf(d)) + '</b></div><div class="acts">' + acts.join('') + '</div></li>';
@@ -387,12 +426,17 @@
       searchBar(['all', 'unpaid', 'paid']) + rowsHtml(list.slice(0, 200), { left: L });
   }
   function moneyHtml() {
-    var list = mine().filter(function (d) { return d.type === 'receipt' || d.type === 'voucher' && d.forBill || d.type === 'ob'; }).filter(match).sort(byDate);
+    var list = mine().filter(function (d) { return d.type === 'receipt' || d.type === 'voucher' && d.forBill || d.type === 'ob' || d.type === 'contra'; }).filter(match).sort(byDate);
     return '<div class="pane-hd"><h2>' + esc(T('money')) + '</h2><div class="quick"><button type="button" class="btn primary" data-form="min">+ ' + esc(T('min')) + '</button><button type="button" class="btn" data-form="mout">+ ' + esc(T('mout')) + '</button><button type="button" class="btn" data-form="ob">+ ' + esc(T('ob')) + '</button></div></div>' +
       searchBar() + rowsHtml(list.slice(0, 200));
   }
 
   var stFrom = '', stTo = '';
+  /* the report period: one for every report (NS.period, ERP review R-3); f / t change it */
+  function range(f, t) {
+    if (NS.period) { if (f || t) NS.periodSet(f, t); var p = NS.period(); stFrom = p.from; stTo = p.to; return [stFrom, stTo]; }
+    if (f) stFrom = f; if (t) stTo = t; if (!stTo) stTo = NS.today(); if (!stFrom) stFrom = fyStart(stTo); return [stFrom, stTo];
+  }
   /* follow-ups on dues: when a party was last reminded and the date it promised to pay (data home meta 'followups', per business) */
   var FU = {};
   function fuKey(k) { return (BIZ && BIZ.id || '') + '|' + k; }
@@ -442,12 +486,14 @@
     if (!ph) NS.toast(T('nophone', { p: B.partyName(d) }));
     window.open('https://wa.me/' + (ph.length >= 11 ? ph : '') + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');
   }
+  /* what is in every bank account together (several banks: ERP masters step 3) */
+  function bankSum(A) { return r2(Object.keys(A).reduce(function (s, k) { return B.isBank(k) ? s + A[k] : s; }, 0)); }
   /* cash and bank movement of a month, contra transfers and opening balances left out */
   function cashFlow(D, mon) {
     var o = { inn: 0, out: 0 };
     B.inBooks(D, bizName()).forEach(function (d) {
       if (d.type === 'contra' || d.type === 'ob' || (d.date || '').slice(0, 7) !== mon) return;
-      B.postings(d).forEach(function (l) { if (l.a === 'cash' || l.a === 'bank') { o.inn += l.dr; o.out += l.cr; } });
+      B.postings(d).forEach(function (l) { if (l.a === 'cash' || B.isBank(l.a)) { o.inn += l.dr; o.out += l.cr; } });
     });
     return { inn: r2(o.inn), out: r2(o.out), net: r2(o.inn - o.out) };
   }
@@ -462,12 +508,12 @@
       var a = B.ageing(list, today, true), tot = r2(a[0] + a[1] + a[2] + a[3]);
       return { k: k, name: by[k].name, a: a, tot: tot, phone: phoneOf(k, P), late: B.overdue(list, today), lim: num(pm.climit), over: num(pm.climit) && side === 'recv' && tot > num(pm.climit) };
     })
-      .filter(function (r) { return (!q || r.name.toLowerCase().indexOf(q.toLowerCase()) >= 0) && grpKeep(r.k, P); }).sort(function (a, b) { return b.tot - a.tot; });
+      .filter(function (r) { return (!q || r.name.toLowerCase().indexOf(q.toLowerCase()) >= 0) && grpKeep(r.k, P) && (!window.NSCF || NSCF.partyPass(r.k, 'dues')); }).sort(function (a, b) { return b.tot - a.tot; });
     var tot = [0, 0, 0, 0]; rows.forEach(function (r) { r.a.forEach(function (v, i) { tot[i] = r2(tot[i] + v); }); });
     var advs = Object.keys(R.advances).filter(function (k) { return R.advances[k][side] > 0.004; });
     return '<div class="pane-hd"><h2>' + esc(T('dues')) + '</h2><div class="seg" role="group"><a class="btn sm" href="#dues" aria-pressed="' + (side === 'recv') + '">' + esc(T('recv')) + '</a><a class="btn sm" href="#dues/pay" aria-pressed="' + (side === 'pay') + '">' + esc(T('pay')) + '</a></div></div>' +
       '<div class="tiles">' + ['a0', 'a1', 'a2', 'a3'].map(function (x, i) { return '<div class="tile' + (i === 3 && tot[3] ? ' warn' : '') + '"><span>' + rng(esc(T(x))) + '</span><b>' + money(tot[i]) + '</b></div>'; }).join('') + '</div>' +
-      (window.NSApp && NSApp.duesExtra ? NSApp.duesExtra(side) : '') + searchBar() + '<div class="tools-row">' + grpSel() + (window.NSApp && NSApp.routeSel ? NSApp.routeSel() : '') + (side === 'recv' && rows.length ? '<button type="button" class="btn sm" data-fuall>' + esc(T('fu_pickall')) + '</button><button type="button" class="btn sm wa" data-fubulk>' + esc(T('fu_bulk')) + '</button>' : '') + '</div>' +
+      (window.NSApp && NSApp.duesExtra ? NSApp.duesExtra(side) : '') + searchBar() + '<div class="tools-row">' + grpSel() + (window.NSApp && NSApp.routeSel ? NSApp.routeSel() : '') + (window.NSCF ? NSCF.filterBar('dues', ['party']) : '') + (side === 'recv' && rows.length ? '<button type="button" class="btn sm" data-fuall>' + esc(T('fu_pickall')) + '</button><button type="button" class="btn sm wa" data-fubulk>' + esc(T('fu_bulk')) + '</button>' : '') + '</div>' +
       (rows.length ? '<div class="tbl-wrap"><table class="tbl dues-t"><thead><tr><th>' + esc(T('party')) + '</th>' + ['a0', 'a1', 'a2', 'a3'].map(function (x) { return '<th class="n">' + rng(esc(T(x))) + '</th>'; }).join('') + '<th class="n">' + esc(T('totaldue')) + '</th><th class="n">' + esc(NS.t('b1.late')) + '</th><th></th></tr></thead><tbody>' +
         rows.map(function (r) {
           return '<tr><th scope="row">' + (side === 'recv' && r.phone ? '<input type="checkbox" class="fu-pick" data-fupick="' + esc(r.k) + '"' + (r.late ? ' data-late' : '') + ' aria-label="' + esc(T('fu_pick', { p: r.name })) + '"> ' : '') + '<a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (window.NSApp && NSApp.routeTag ? NSApp.routeTag(r.k) : '') + (side === 'recv' ? fuLine(r.k) : '') + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v, i) { return '<td class="n' + (v ? '' : ' nil') + '" data-l="' + rng(esc(T('a' + i))) + '">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
@@ -486,11 +532,11 @@
   }
 
   function partiesHtml() {
-    var P = B.parties(mine(), bizName()), list = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return (!q || p.name.toLowerCase().indexOf(q.toLowerCase()) >= 0) && grpKeep(p.key, P); })
+    var P = B.parties(mine(), bizName()), list = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return (!q || p.name.toLowerCase().indexOf(q.toLowerCase()) >= 0) && grpKeep(p.key, P) && (!window.NSCF || NSCF.partyPass(p.key, 'parties')); })
       .sort(function (a, b) { return Math.abs(b.bal) - Math.abs(a.bal); });
     var gmap = {}; B.groupTree(GRP).forEach(function (g) { gmap[g.id] = g; });
     return '<div class="pane-hd"><h2>' + esc(T('parties')) + '</h2><div class="quick">' + (DOOR ? '' : '<a class="btn" href="#grp">' + esc(T('grp')) + '</a>') + '<a class="btn" href="' + myUrl('#party') + '">' + esc(NS.t('my.t.party')) + ' ›</a></div></div>' + searchBar() +
-      '<div class="tools-row">' + grpSel() + (window.NSApp && NSApp.routeSel ? NSApp.routeSel() : '') + '</div>' +
+      '<div class="tools-row">' + grpSel() + (window.NSApp && NSApp.routeSel ? NSApp.routeSel() : '') + (window.NSCF ? NSCF.filterBar('parties', ['party']) : '') + '</div>' +
       (list.length ? '<ul class="rows">' + list.map(function (p) {
         var g = gmap[gidOf(p.key, P)];
         return '<li><a href="#st/' + encodeURIComponent(p.key) + '"><b>' + esc(p.name) + '</b><span class="soft">' + (g ? esc(gname(g)) + ' · ' : '') + esc(NS.t(p.bal > 0.004 ? 'ux.p.recv' : p.bal < -0.004 ? 'ux.p.pay' : 'ux.p.nil')) + '</span></a>' +
@@ -522,8 +568,8 @@
 
   /* ---------- cash and bank ---------- */
   function cashHtml() {
-    var acct = arg === 'bank' ? 'bank' : 'cash', today = NS.today();
-    if (!stTo) stTo = today; if (!stFrom) stFrom = fyStart(today);
+    var acct = B.isBank(arg) ? arg : 'cash', today = NS.today();
+    range();
     var Bk = B.book(mine(), bizName(), acct, stFrom, stTo);
     return '<div class="pane-hd"><h2>' + esc(T('cash')) + '</h2><div class="seg" role="group"><a class="btn sm" href="#cash" aria-pressed="' + (acct === 'cash') + '">' + esc(T('cashbook')) + '</a><a class="btn sm" href="#cash/bank" aria-pressed="' + (acct === 'bank') + '">' + esc(T('bankbook')) + '</a></div></div>' +
       '<p class="soft">' + esc(T('cbh')) + '</p>' +
@@ -544,11 +590,12 @@
     if (qi) qi.addEventListener('input', function () { q = qi.value; var pos = qi.selectionStart; show().then(function () { var n = $('[data-q]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }); });
     $$('[data-filt]', pane).forEach(function (b) { b.addEventListener('click', function () { filt = b.getAttribute('data-filt'); show(); }); });
     $$('[data-grp]', pane).forEach(function (g) { g.addEventListener('change', function () { grp = g.value; show(); }); });
-    $$('[data-stfrom],[data-stto]', pane).forEach(function (i) { i.addEventListener('change', function () { if (i.hasAttribute('data-stfrom')) stFrom = i.value; else stTo = i.value; show(); }); });
+    $$('[data-stfrom],[data-stto]', pane).forEach(function (i) { i.addEventListener('change', function () { if (i.hasAttribute('data-stfrom')) range(i.value); else range('', i.value); show(); }); });
     pane.addEventListener('click', onClick);
     $$('[data-conv]', pane).forEach(function (s) { s.addEventListener('change', function () {
       if (!s.value) return;
       var v = s.value, src = C.doc.filter(function (x) { return x.id === s.getAttribute('data-conv'); })[0];
+      if ((v === 'grn' || v === 'pbill') && window.NSOrd && NSOrd.makeFrom) { s.value = ''; NSOrd.makeFrom(s.getAttribute('data-conv'), v); return; }
       var go = function () { var u = toolUrl(SITEOF[v]) + '?from=' + encodeURIComponent(s.getAttribute('data-conv')); if (!openUrl(u)) location.href = u; };
       /* already converted once: ask before making a second one (round C) */
       if (src && src.nextNo) { s.value = ''; (NS.ask ? NS.ask(T('convagain', { x: src.nextNo })) : Promise.resolve(confirm(T('convagain', { x: src.nextNo })))).then(function (ok) { if (ok) go(); }); return; }
@@ -561,7 +608,7 @@
     if (b.hasAttribute('data-reorder')) { var od = C.doc.filter(function (x) { return x.id === b.getAttribute('data-reorder'); })[0], dr = od && NSReuse.orderAgain(od); if (dr) { dr.date = NS.today(); openForm('pbill', { draft: dr, after: function (form) { var n = document.createElement('div'); n.className = 'scan-note'; n.setAttribute('role', 'note'); n.textContent = NS.t('cap.reorder_note', { p: B.partyName(od), d: ldate(od.date) }); form.insertBefore(n, form.firstChild); } }); } }
     else if (b.hasAttribute('data-scan') && window.NSApp && NSApp.scan) NSApp.scan();
     else if (b.hasAttribute('data-quick')) quickEntry(b.getAttribute('data-quick'));
-    else if (b.hasAttribute('data-form')) openForm(b.getAttribute('data-form'), { forId: b.getAttribute('data-for'), party: b.getAttribute('data-party'), mode: b.getAttribute('data-mode'), side: b.getAttribute('data-side') || '' });
+    else if (b.hasAttribute('data-form')) openForm(b.getAttribute('data-form'), { forId: b.getAttribute('data-for'), party: b.getAttribute('data-party'), mode: b.getAttribute('data-mode'), side: b.getAttribute('data-side') || '', bacct: b.getAttribute('data-bacct') || '' });
     else if (b.hasAttribute('data-photo') || b.hasAttribute('data-view')) viewDoc(b.getAttribute('data-view') || b.getAttribute('data-photo'));
     else if (b.hasAttribute('data-vwprint')) printHtml($('.vw-body', b.closest('dialog')).innerHTML);
     else if (b.hasAttribute('data-edit')) { var d = C.doc.filter(function (x) { return x.id === b.getAttribute('data-edit'); })[0]; if (d && !(window.NSApp.editX && NSApp.editX(d))) openForm(formOf(d), { rec: d }); }
@@ -609,7 +656,7 @@
       });
       bzDlg.addEventListener('keydown', function (e) {
         var its = $$('[data-bizgo]', bzDlg), i = its.indexOf(document.activeElement);
-        if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) { if (its[+e.key - 1]) { e.preventDefault(); setBiz(its[+e.key - 1].getAttribute('data-bizgo')); } }
+        if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) { if (its[+e.key - 1]) { e.preventDefault(); e.stopPropagation(); setBiz(its[+e.key - 1].getAttribute('data-bizgo')); } }   /* not also the menu screen of that number (F7-8) */
         else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); (its[(i + (e.key === 'ArrowDown' ? 1 : its.length - 1)) % its.length] || its[0]).focus(); }
       });
     }
@@ -629,10 +676,16 @@
   var PRE = null;
   function vnoNext(date) {
     if (PRE && PRE.k === 'vno') return PRE.no;
-    var fy = NS.fy(date), short = fy.slice(2, 4) + '-' + fy.slice(5), c = CFG.exp || {}, digits = Math.min(6, Math.max(1, +((CFG.invoice || {}).digits) || 3)), max = 0;
-    var pre = String(c.prefix != null && c.prefix !== '' ? c.prefix : 'EXP').replace(/[^A-Za-z0-9\/\-]/g, '');
-    mine().forEach(function (d) { if (d.type !== 'exp' || NS.fy(d.date) !== fy) return; var m = String(d.vno || '').match(/(\d+)\s*$/); if (m) max = Math.max(max, +m[1]); });
-    return (pre ? pre + '/' : '') + short + '/' + (function () { try { return localStorage.getItem('ns-sf-tag') || ''; } catch (e) { return ''; } })() + String(max + 1).padStart(digits, '0');
+    return nxAuto(NS.nextNo(vnoDocs(), nxApp('exp', 'EXP', date)));   /* one numbering engine (core.js, ERP A-6) */
+  }
+  /* these App screens have no number box: a 'manual' series still gets the next number here */
+  function nxAuto(x) { return x.manual ? x.head + String(x.n).padStart(x.width, '0') + x.suffix : x.no; }
+  /* App expenses keep our own voucher number in vno (no is the supplier's bill no.) */
+  function vnoDocs() { return mine().filter(function (d) { return d.type === 'exp'; }).map(function (d) { return { id: d.id, type: 'exp', no: d.vno, date: d.date, seller: d.seller, vt: d.vt }; }); }
+  /* the engine's options for an App voucher of this business (type, default prefix, date); receipts keep refund vouchers out of their series */
+  function nxApp(type, pre, date) {
+    var tag = ''; try { tag = localStorage.getItem('ns-sf-tag') || ''; } catch (e) {}
+    return { type: type, seller: null, date: date, cfg: CFG, def: pre, tag: tag, match: type === 'receipt' ? function (d) { return d.kind !== 'ref'; } : null };
   }
   var ENMODE = { cash: 'Cash', upi: 'UPI', cheque: 'Cheque', bank: 'Bank transfer', card: 'Card', dd: 'Demand draft', other: 'Other', credit: 'On credit (not paid yet)' };
   function voucherSheet(d) {
@@ -641,7 +694,7 @@
     var title = back ? 'ADVANCE RETURN RECEIPT' : sadv ? 'STAFF ADVANCE VOUCHER' : 'EXPENSE VOUCHER';
     var row = function (k, v) { return v ? '<tr><th scope="row">' + esc(k) + '</th><td>' + v + '</td></tr>' : ''; };
     var line = '<span class="vch-blank"></span>';
-    return '<div class="stsheet sh vch" dir="ltr" lang="en" data-sheet>' +
+    return '<div class="stsheet sh vch" dir="ltr" lang="en" data-sheet>' + (d.cancelled ? '<div class="stamp cx-stamp">CANCELLED</div>' : '') +
       '<div class="st-hd"><div><b class="vch-biz">' + esc(b.name || '') + '</b>' + (b.addr ? '<br>' + esc(b.addr).replace(/\n/g, '<br>') : '') + ([b.city, b.pin].filter(Boolean).length ? '<br>' + esc([b.city, b.pin].filter(Boolean).join(' - ')) : '') +
         (b.phone ? '<br>Phone ' + esc(b.phone) : '') + (b.gstin ? '<br>GSTIN ' + esc(b.gstin) : '') + '</div>' +
       '<div class="r"><b class="vch-ttl">' + title + '</b><br>No. ' + (esc(sadv ? d.no || '' : d.vno || '') || line) + '<br>Date ' + ldate(d.date) + '</div></div>' +
@@ -651,6 +704,7 @@
       row('Bill no.', !sadv && d.no ? esc(d.no) : '') +
       row(back ? 'Received by' : 'Paid by', esc(ENMODE[d.mode] || d.mode || '') + (d.ref ? ' · ' + esc(d.ref) : '')) +
       row('Amount', '<b class="vch-amt">' + NS.money(amt) + '</b>' + (!sadv && num(d.gst) ? ' <span class="soft">(includes GST at ' + esc(d.gst) + '%)</span>' : '') + '<br>' + esc(NS.inWords(amt))) +
+      (window.NSCF ? ['meta', 'foot'].map(function (w) { return NSCF.printRows(d, NSCF.list(), '', w).map(function (r) { return row(r[0], esc(r[1])); }).join(''); }).join('') : '') +   /* custom fields (ERP Round 2) */
       '</tbody></table>' +
       '<p class="vch-rcv">' + (back ? 'Received the above amount.' : d.mode === 'credit' ? 'The above amount is payable.' : 'Received the above amount' + (sadv ? ' as advance. It may be adjusted against my salary / wages.' : '.')) + '</p>' +
       '<div class="vch-sign"><div>Prepared by</div><div>Approved by</div><div>' + (!back && d.mode === 'cash' && amt > 5000 ? '<span class="vch-stamp">Revenue stamp</span>' : '') +
@@ -704,11 +758,13 @@
     var note = d.notes || d.narr || d.note || '';
     if (note) h += '<p class="vw-note"><b>' + esc(T('vw_note')) + ':</b> ' + esc(note) + '</p>';
     if (d.photo) h += '<h3>' + esc(T('photo')) + '</h3><img class="vw-photo" src="' + esc(d.photo) + '" alt="' + esc(T('photo')) + '">';
+    if (d.cancelled) h = '<p class="cx-line" role="note">CANCELLED' + (d.cancelled.why ? ': ' + esc(d.cancelled.why) : '') + '</p>' + h;   /* A-3 */
     var acts = '';
     if ((appMade && ty !== 'cashmemo') || xed) acts += '<button type="button" class="btn primary" data-edit="' + d.id + '" data-close-box>' + esc(T('edit')) + '</button>';
+    if (NS.cxBtn && d.no && (d.cancelled || B.role(d))) acts += NS.cxBtn(d, 'btn').replace('<button ', '<button data-close-box ');
     if (url && !appMade) acts += '<a class="btn primary" href="' + url + '" data-close-box>' + esc(T('edit')) + '</a>';
     if (url && !appMade) acts += '<a class="btn" href="' + url + '&amp;print=1" data-close-box>' + esc(T('print')) + '</a>';
-    if (url && appMade) acts += '<a class="btn" href="' + url + '" data-close-box>' + esc(T('print')) + '</a>';
+    if (url && appMade) acts += '<a class="btn" href="' + url + '&amp;print=1" data-close-box>' + esc(T('print')) + '</a>';   /* F1-12 */
     else if (/^(exp|sadv)$/.test(ty)) acts += '<button type="button" class="btn" data-vprint="' + d.id + '">' + esc(T('print')) + '</button>';
     else if (!url) acts += '<button type="button" class="btn" data-vwprint>' + esc(T('print')) + '</button>';
     var dlg = $('#vw-dlg');
@@ -740,7 +796,7 @@
       img.src = u;
     });
   }
-  function formOf(d) { return d.type === 'jv' ? 'jv' : (d.type || 'invoice') === 'invoice' ? 'sale' : d.type === 'contra' ? 'contra' : d.type === 'exp' ? 'exp' : d.type === 'ob' ? 'ob' : d.type === 'pbill' ? (d.kind === 'return' ? 'pret' : 'pbill') : d.type === 'receipt' ? 'min' : 'mout'; }
+  function formOf(d) { if (window.NSVDocs && NSVDocs.mine(d)) return 'vdoc'; return d.type === 'jv' ? 'jv' : (d.type || 'invoice') === 'invoice' ? 'sale' : d.type === 'contra' ? 'contra' : d.type === 'exp' ? 'exp' : d.type === 'ob' ? 'ob' : d.type === 'pbill' ? (d.kind === 'return' ? 'pret' : 'pbill') : d.type === 'receipt' ? 'min' : 'mout'; }
 
   function delRec(id) {
     var d = C.doc.filter(function (x) { return x.id === id; })[0]; if (!d) return;
@@ -777,16 +833,13 @@
   function modeOpts(credit) { return (credit ? [['credit', T('m_credit')]] : []).concat(MODES.map(function (m) { return [m, T('m_' + m)]; })); }
   function partyList(role) {
     var seen = {}, out = [];
-    C.party.forEach(function (p) { if (!role || !p.role || p.role === role || p.role === 'both') { seen[key(p.name)] = 1; out.push(p.name); } });
+    C.party.forEach(function (p) { if (p.inactive) { seen[key(p.name)] = 1; return; } if (!role || !p.role || p.role === role || p.role === 'both') { seen[key(p.name)] = 1; out.push(p.name); } });   /* no longer used: not offered */
     mine().forEach(function (d) { var n = B.partyName(d); if (n && !seen[key(n)]) { seen[key(n)] = 1; out.push(n); } });
     return '<datalist id="dl-party">' + out.sort().map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>';
   }
   function nextNo(type, pre, date) {
     if (PRE && PRE.k === type) return PRE.no;
-    var fy = NS.fy(date), short = fy.slice(2, 4) + '-' + fy.slice(5), c = CFG[type] || {}, digits = Math.min(6, Math.max(1, +((CFG.invoice || {}).digits) || 3)), max = 0;
-    pre = String(c.prefix != null && c.prefix !== '' ? c.prefix : pre).replace(/[^A-Za-z0-9\/\-]/g, '');
-    mine().forEach(function (d) { if (d.type !== type || NS.fy(d.date) !== fy) return; var m = String(d.no || '').match(/(\d+)\s*$/); if (m) max = Math.max(max, +m[1]); });
-    return (pre ? pre + '/' : '') + short + '/' + (function () { try { return localStorage.getItem('ns-sf-tag') || ''; } catch (e) { return ''; } })() + String(max + 1).padStart(digits, '0');
+    return nxAuto(NS.nextNo(mine(), nxApp(type, pre, date)));   /* one numbering engine (core.js, ERP A-6) */
   }
 
   var andPrint = false;
@@ -795,11 +848,13 @@
     /* F1-11: a journal or other record with its own editor opens there (Ctrl K, Open, Edit), never in the money forms */
     if (o.rec && window.NSApp.editX && kind === 'jv' && NSApp.editX(o.rec)) return;
     if (kind === 'jv') { location.hash = 'b2jv'; return; }
+    if (o.rec && o.rec.gen && window.NSApp.editX && NSApp.editX(o.rec)) return;
+    if ((kind === 'genr' || kind === 'genp') && window.NSApp.genForm) { NSApp.genForm(kind === 'genr' ? 'rcpt' : 'pymt'); return; }   /* A-10: side menu / Go to */   /* A-10: a general receipt / payment opens in its own form */
     /* the entry window is parked with typing in it (multitasking): go back to it, or let it go and start the new one */
     if (dlg && NS.vsParked && NS.vsParked(dlg)) { NS.ask(NS.t('desk.parkq'), { ok: NS.t('desk.parkback'), no: NS.t('desk.parkdrop') }).then(function (y) { if (y) NS.vsResume(dlg); else { NS.vsDrop(dlg); openForm(kind, o); } }); return; }
-    if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); if (F && F._sent && Date.now() - F._sent < 1000) return; if (F) F._sent = Date.now();   /* a double click or two Ctrl+S save once (F3-1) */ andPrint = !!(e.submitter && e.submitter.hasAttribute('data-andprint')); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); dlg.addEventListener('close', function () { if (dlg._parking) return; PRE = null; NSStore.sfRelease(); }); }
+    if (!dlg) { dlg = $('#app-form'); form = $('form', dlg); form.addEventListener('submit', function (e) { e.preventDefault(); if (F && F._sent && !NS.okRetry && Date.now() - F._sent < 1000) return; if (F) F._sent = Date.now();   /* a double click or two Ctrl+S save once (F3-1) */ andPrint = e.submitter && e.submitter.hasAttribute('data-andshare') ? 'share' : !!(e.submitter && e.submitter.hasAttribute('data-andprint')); submit(); }); form.addEventListener('input', onFormInput); form.addEventListener('change', onFormInput); dlg.addEventListener('close', function () { if (dlg._parking) return; PRE = null; NSStore.sfRelease(); }); }
     var rec = o.rec || null, today = NS.today(), h = '';
-    F = { kind: kind, rec: rec, forId: o.forId, biz: bizName() }; if (dlg) { dlg.setAttribute('data-kind', kind); dlg.removeAttribute('data-dirty'); }
+    F = { kind: kind, rec: rec, forId: o.forId, biz: bizName(), conv: o.conv || null }; if (dlg) { dlg.setAttribute('data-kind', kind); dlg.removeAttribute('data-dirty'); }
     var forDoc = o.forId && C.doc.filter(function (d) { return d.id === o.forId; })[0];
     var party = rec ? B.partyName(rec) : o.party || (o.draft && o.draft.buyer ? o.draft.buyer.name : '') || (forDoc ? B.partyName(forDoc) : '');
     if (kind === 'min' || kind === 'mout') {
@@ -809,10 +864,12 @@
         fld('f-party', T(out ? 'supp' : 'cust'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList(out ? 'supplier' : 'customer')) +
         fld('f-amt', T('amount'), inp('f-amt', amt, { mode: 'decimal', ltr: 1, req: 1 })) +
         fld('f-mode', T('mode'), sel('f-mode', rec ? rec.mode : o.mode || (BIZ && /^(shop|resto|pharma)$/.test(BIZ.kind || '') ? 'cash' : 'upi'), modeOpts())) +   /* shops are paid in cash mostly (round C) */
+        bankFld('f-bank', rec && rec.bacct, 'f-mode') +
         fld('f-ref', T('ref'), inp('f-ref', rec ? rec.ref : '', { ltr: 1 })) +
         chqFields(out, rec && rec.chq) + '</div>' +
         /* the bills come right after the amount; TDS, discount and note fold away (round C: the bill list was below the fold) */
-        '<fieldset class="alloc"><legend>' + esc(T('against')) + '</legend><p class="soft">' + esc(T('againsth')) + '</p><div data-alloc></div><p class="soft" data-advleft></p></fieldset>' +
+        '<fieldset class="alloc"' + (NS.bizMode(BIZ, CFG).billwise ? '' : ' hidden') + '><legend>' + esc(T('against')) + '</legend><p class="soft">' + esc(T('againsth')) + '</p><div data-alloc></div><p class="soft" data-advleft></p></fieldset>' +
+        (NS.bizMode(BIZ, CFG).billwise ? '' : '<p class="soft">' + esc(NS.t('cf.bwoff')) + '</p>') +   /* C-9: bill-wise off, the oldest bills are settled by themselves */
         '<details class="more"' + (rec && (num(rec.tds) || num(rec.tdsRate) || num(rec.disc)) ? ' open' : '') + '><summary>' + esc(T('mmore')) + '</summary><div class="fg">' +
         (out ? fld('f-tds', T('tdsout'), inp('f-tds', rec ? rec.tdsRate : '', { mode: 'decimal', ltr: 1 }), { hint: T('tdsouth') }) + fld('f-tdsx', NS.t('uf.tdsa'), inp('f-tdsx', '', { mode: 'decimal', ltr: 1 }))
           : fld('f-tds', T('tdsin'), inp('f-tds', rec ? rec.tds : '', { mode: 'decimal', ltr: 1 }), { hint: T('tdsinh') }) + fld('f-tdsx', NS.t('uf.tdsr'), inp('f-tdsx', '', { mode: 'decimal', ltr: 1 }))) +
@@ -821,20 +878,24 @@
     } else if (kind === 'pbill' || kind === 'pret' || kind === 'sale') {
       var r = rec || o.draft || { date: today, items: [{ desc: '', hsn: '', qty: 1, rate: '', gst: o.quick ? qeGst() : 18 }], round: !(o.quick && qeP().round === false), buyer: { name: party } };   /* o.draft: a purchase bill read from a photo (billscan.js), not saved until confirmed */
       var pm = C.party.filter(function (p) { return key(p.name) === key(party); })[0] || {}, sale = kind === 'sale';
+      var bm = NS.bizMode(BIZ, CFG); F.acctMode = !bm.inv; F.noGstCol = sale && !bm.gst; F.noBatch = !bm.batch;   /* ERP C-9: features change what the entry screen asks for */
       if (sale && !rec) { r.no = F.autoNo = NS.nextInvNo(C.doc, bizName(), today, CFG); r.noGst = /^(comp|unreg)$/.test(BIZ.reg || '') || !String(BIZ.gstin || '').trim();   /* no GSTIN: a bill of supply, never GST (F1-7) */ r.round = (CFG.invoice || {}).round !== false; }
       h = '<div class="fg">' + fld('f-party', T(sale ? 'cust' : 'supp'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList(sale ? 'customer' : 'supplier')) +
         fld('f-gstin', sale ? T('qe_gstin') : T('gstin'), inp('f-gstin', (r.buyer && r.buyer.gstin) || pm.gstin || '', { ltr: 1 })) +
         fld('f-state', sale ? T('qe_state') : T('state'), sel('f-state', (r.buyer && r.buyer.state) || pm.state || (BIZ.state || ''), [['', '—']].concat(NS.STATES.map(function (s) { return [s[0], s[0] + ' · ' + NS.stateLoc(s[0])]; })))) +
         fld('f-no', T(kind === 'pret' ? 'billno' : sale ? 'qe_no' : 'sno'), inp('f-no', r.no || '', { ltr: 1, req: kind !== 'pret' })) +
         fld('f-date', T('date'), inp('f-date', r.date, { type: 'date', req: 1 })) +
-        (kind === 'pret' ? fld('f-orig', T('origno'), inp('f-orig', r.orig && r.orig.no || '', { ltr: 1 })) : fld('f-due', T('due'), inp('f-due', r.due || '', { type: 'date' }))) +
-        (window.NSApp.gdField && !sale ? NSApp.gdField(r.gd) : '') + '</div>' +
+        (kind === 'pret' ? fld('f-orig', T('origno'), inp('f-orig', r.orig && r.orig.no || '', { ltr: 1, list: 'dl-pborig' }) + '<datalist id="dl-pborig">' + mine().filter(function (x) { return x.type === 'pbill' && x.kind !== 'return' && x.no; }).sort(byDate).slice(0, 300).map(function (x) { return '<option value="' + esc(x.no) + '" label="' + esc(B.partyName(x) + ' · ' + NS.fmtDate(x.date)) + '">'; }).join('') + '</datalist>') : fld('f-due', T('due'), inp('f-due', r.due || '', { type: 'date' }))) +
+        (window.NSApp.gdField && !sale && bm.godown ? NSApp.gdField(r.gd) : '') + (window.NSApp.ledFld && kind !== 'pret' ? NSApp.ledFld(sale ? 'sl' : 'pl', sale ? r.sl : r.pl) : '') + '</div>' +
         '<fieldset><legend>' + esc(T('items')) + '</legend><div data-lines></div><button type="button" class="btn sm" data-addline>' + esc(T('addline')) + '</button>' +
         '<label class="chk"><input type="checkbox" id="f-nogst"' + (r.noGst ? ' checked' : '') + '> ' + esc(T(sale ? 'qe_nogst' : 'nogst')) + '</label><label class="chk"><input type="checkbox" id="f-round"' + (r.round !== false ? ' checked' : '') + '> ' + esc(T('round')) + '</label>' +
+        (sale ? '' : '<label class="chk">' + esc(NS.t('ms.itc')) + ' <select id="f-pitc">' + [['ok', 'ms.itc_ok'], ['blocked', 'ms.itc_blocked'], ['ineligible', 'ms.itc_inel']].map(function (o) { return '<option value="' + o[0] + '"' + ((r.itc || 'ok') === o[0] ? ' selected' : '') + '>' + esc(NS.t(o[1])) + '</option>'; }).join('') + '</select></label>') +   /* r1-gst S-5: credit of the whole bill (lines keep their own) */
+        (sale || kind !== 'pbill' ? '' : '<label class="chk">' + esc(NS.t('or.lcby')) + ' <select id="f-lcby">' + [['', 'or.lcby_v'], ['qty', 'or.lcby_q'], ['none', 'or.lcby_n']].map(function (o) { return '<option value="' + o[0] + '"' + ((r.lcBy || '') === o[0] ? ' selected' : '') + '>' + esc(NS.t(o[1])) + '</option>'; }).join('') + '</select></label>') +   /* ERP round 2, I-14: freight lines and charges into the goods' cost */
         '<div class="sum" data-sum></div></fieldset>' +
-        (kind === 'pbill' && !rec ? '<div class="fg">' + fld('f-mode', T('paidnow'), sel('f-mode', (o.quick && qeMode('pbill')) || 'credit', modeOpts(true)), { hint: T('paidnowh') }) + '</div>' : '') +
+        '<div class="fg">' + fld('f-narr', NS.t('bw.narr'), inp('f-narr', r.narr || ''), { wide: 1, hint: NS.t('bw.narrh') }) + '</div>' +   /* A-26 (r2-billwise): narration for the books */
+        (kind === 'pbill' && !rec ? '<div class="fg">' + fld('f-mode', T('paidnow'), sel('f-mode', (o.quick && qeMode('pbill')) || 'credit', modeOpts(true)), { hint: T('paidnowh') }) + bankFld('f-bank', '', 'f-mode') + '</div>' : '') +
         (sale && !rec ? shipDisp() : '') +
-        (sale && !rec ? '<div class="fg">' + fld('f-mode', T('qe_recv'), sel('f-mode', (o.quick && qeMode('sale')) || (/^(shop|resto|pharma)$/.test(BIZ.kind || '') ? 'cash' : 'credit'), modeOpts(true)), { hint: T('qe_recvh') }) + '</div>' : '') +
+        (sale && !rec ? '<div class="fg">' + fld('f-mode', T('qe_recv'), sel('f-mode', (o.quick && qeMode('sale')) || (/^(shop|resto|pharma)$/.test(BIZ.kind || '') ? 'cash' : 'credit'), modeOpts(true)), { hint: T('qe_recvh') }) + bankFld('f-bank', '', 'f-mode') + '</div>' : '') +
         (sale ? '' : '<div class="fg"><div class="f wide"><label for="f-photo">' + esc(T('photo')) + '</label><input type="file" id="f-photo" accept="image/*"><small class="soft">' + esc(T('photoh')) + '</small><div class="photo-pv" data-photo-pv></div></div></div>');
       F.lines = JSON.parse(JSON.stringify(r.items)); F.photo = r.photo || '';
       if (sale && !party && BIZ.state) h = h.replace('<option value="' + BIZ.state + '">', '<option value="' + BIZ.state + '" selected>');
@@ -844,6 +905,7 @@
         fld('f-cat', T('cat'), inp('f-cat', catName(x.cat || ''), { req: 1, list: 'dl-cat' }) + '<datalist id="dl-cat">' + EXP.map(function (k) { return '<option value="' + esc(T('ex_' + k)) + '">'; }).join('') + '</datalist>') +
         fld('f-amt', T('amount'), inp('f-amt', x.amount || '', { mode: 'decimal', ltr: 1, req: 1 })) +
         fld('f-mode', T('paidhow'), sel('f-mode', x.mode, modeOpts(true))) +   /* we pay an expense: not the customer's "how did he pay" (round C) */
+        bankFld('f-bank', x.bacct, 'f-mode') +
         fld('f-party', T('payee'), inp('f-party', B.partyName(x), { list: 'dl-party' }) + partyList('supplier')) +
         fld('f-no', T('billno'), inp('f-no', x.no || '', { ltr: 1 })) +
         fld('f-gst', T('incgst'), sel('f-gst', x.gst || '', [['', '—'], ['5', '5%'], ['12', '12%'], ['18', '18%'], ['40', '40%']])) +
@@ -856,31 +918,45 @@
         fld('f-phone', T('phone'), inp('f-phone', (C.party.filter(function (p) { return key(p.name) === key(party); })[0] || {}).phone || '', { mode: 'tel', ltr: 1 })) +
         fld('f-desc', T('given'), inp('f-desc', ''), { wide: 1 }) + fld('f-due', T('due'), inp('f-due', '', { type: 'date' })) + '</div>';
     } else if (kind === 'contra') {
-      var cx = rec || { date: today, from: 'cash' };
+      var cx = rec || { date: today, from: 'cash' }, ck = rec ? B.contraKind(rec) : 'dep', many = banks().length > 1;
+      var cb1 = ck === 'xfer' ? B.contraSide(cx, cx.from, 'cash') : B.bankOf(cx), cb2 = ck === 'xfer' ? B.contraSide(cx, cx.to, 'bank') : (banks()[1] || {}).k;
       h = '<p class="soft">' + esc(T('contrah')) + '</p><div class="fg">' + fld('f-date', T('date'), inp('f-date', cx.date, { type: 'date', req: 1 })) +
-        fld('f-dir', T('contra'), sel('f-dir', cx.from, [['cash', T('d_deposit')], ['bank', T('d_withdraw')]])) +
+        fld('f-dir', T('contra'), sel('f-dir', ck === 'xfer' ? 'xfer' : ck === 'wd' ? 'bank' : 'cash', [['cash', T('d_deposit')], ['bank', T('d_withdraw')]].concat(many || ck === 'xfer' ? [['xfer', T('d_xfer')]] : []))) +
+        bankFld('f-bank', cb1, '') + bankFld('f-bank2', cb2, '', T('bankto')) +
         fld('f-amt', T('amount'), inp('f-amt', cx.amount || '', { mode: 'decimal', ltr: 1, req: 1 })) +
         fld('f-ref', T('ref'), inp('f-ref', cx.ref || '', { ltr: 1 })) + fld('f-note', T('note'), inp('f-note', cx.notes || ''), { wide: 1 }) + '</div>';
+    } else if (kind === 'vdoc') {   /* challan, quotation, order, note, cash memo, self / export invoice (vdocs.js) */
+      F.vd = NSVDocs.make(o, F); h = F.vd.html; F.lines = F.vd.lines; F.photo = ''; F.acctMode = !NS.bizMode(BIZ, CFG).inv; F.noBatch = !NS.bizMode(BIZ, CFG).batch;   /* ERP C-9 */
     } else if (kind === 'ob') {
       var ob = rec || { date: fyStart(today), side: 'recv' };
       h = '<p class="soft">' + esc(T('obh')) + '</p><div class="fg">' + fld('f-side', T('side'), sel('f-side', o.side || ob.side, [['recv', T('s_recv')], ['pay', T('s_pay')], ['cash', T('s_cash')], ['bank', T('s_bank')]])) +
+        bankFld('f-bank', o.bacct || ob.bacct, '') +
         fld('f-party', T('party'), inp('f-party', party, { req: 1, list: 'dl-party' }) + partyList()) +
         fld('f-amt', T('amount'), inp('f-amt', ob.amount || '', { mode: 'decimal', ltr: 1, req: 1 })) +
-        fld('f-date', T('date'), inp('f-date', ob.date, { type: 'date', req: 1 })) + '</div>';
+        fld('f-date', T('date'), inp('f-date', ob.date, { type: 'date', req: 1 })) + '</div>' + (window.NSApp.obGrid ? NSApp.obGrid.html(ob) : '');   /* A-13: opening bills one by one */
     }
-    $('[data-form-title]', dlg).textContent = (o.quick ? T('qe_title') + ' · ' : '') + T(kind === 'sale' ? 'qe_sale' : kind) + (rec && rec.no ? ' ' + rec.no : '') + (C.biz.length > 1 && bizName() ? ' · ' + bizName() : '');
+    $('[data-form-title]', dlg).textContent = (o.quick ? T('qe_title') + ' · ' : '') + (F.vd ? F.vd.title : T(kind === 'sale' ? 'qe_sale' : kind)) + (rec && rec.no ? ' ' + rec.no : '') + (C.biz.length > 1 && bizName() ? ' · ' + bizName() : '');
+    if (window.NSApp.formTail) h += NSApp.formTail(kind, rec) || '';   /* ERP round 2: other files add parts to a form (tdsbook.js: TDS on purchase bills and expenses) */
     F.quick = !!o.quick; dlg.classList.toggle('qe-on', F.quick);
     if (F.quick) h = '<div class="qe-tabs" role="tablist">' + QE.map(function (q, i) { return '<button type="button" role="tab" class="btn sm' + (q === kind ? ' primary' : '') + '" aria-selected="' + (q === kind) + '" data-qe="' + q + '" aria-keyshortcuts="Alt+' + (i + 1) + '">' + esc(T(q === 'sale' ? 'qe_sale' : q)) + (i < 5 ? ' <kbd>Alt ' + (i + 1) + '</kbd>' : '') + '</button>'; }).join('') + '<button type="button" class="btn sm qe-cus-btn" data-qecus data-ic="gear">' + esc(T('qe_cus')) + '</button></div><p class="soft qe-keys">' + esc(T('qe_keys')) + '</p>' + h;   /* two businesses: the form names the one it saves to */
+    if (window.NSCF) h += NSCF.appBlock(kind, F, rec || o.draft || F.vd && F.vd.base);   /* custom fields of this voucher type (ERP Round 2, B-1) */
     form.innerHTML = '<span data-of hidden></span>' + h + '<div class="dlg-foot"><button type="submit" class="btn primary">' + esc(T('save')) + '</button>' +
-      (kind === 'exp' ? '<button type="submit" class="btn" data-andprint data-ic="print">' + esc(T('save')) + ' + ' + esc(T('print')) + '</button>' : '') + '<button type="button" class="btn" data-close>' + esc(T('cancel')) + '</button></div>';
+      (kind === 'exp' || kind === 'vdoc' ? '<button type="submit" class="btn" data-andprint data-ic="print">' + esc(T('save')) + ' + ' + esc(T('print')) + '</button>' : '') +
+      (kind === 'vdoc' ? '<button type="submit" class="btn" data-andshare data-ic="share">' + esc(T('save')) + ' + ' + esc(NS.t('b.share')) + '</button>' : '') + '<button type="button" class="btn" data-close>' + esc(T('cancel')) + '</button></div>';
     $('[data-close]', form).addEventListener('click', function () { NS.vsLeave(); });
     var al = $('[data-addline]', form);
     if (al) al.addEventListener('click', function () { F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form).checked ? 0 : F.quick ? qeGst() : 18 }); drawLines(); });
     if (F.lines) drawLines();
     if (kind === 'min' || kind === 'mout') { tdsPair('f-tds'); drawAlloc(true); chqShow(); }
     if (kind === 'ob') obShow();
+    if (kind === 'contra') contraShow();
+    bankSync(form);
     if (F.lines) drawPhoto();
+    if (F.vd) F.vd.wire(form);
+    if (kind === 'sale') NS.subPick($('#f-no', form), { type: 'invoice', cfg: function () { return CFG; }, get: function () { return F.vt || (F.rec && F.rec.vt) || ''; }, saved: function () { return !!F.rec; },   /* A-7: invoice sub-types */
+      set: function (id) { F.vt = id; var n = $('#f-no', form); if (n && n.value === F.autoNo) n.value = F.autoNo = NS.nextInvNo(C.doc, bizName(), $('#f-date', form).value || today, CFG, id); } });
     if (o.after) o.after(form, F);   /* billscan.js marks the fields it was unsure about */
+    if (window.NSApp.formWire) NSApp.formWire(kind, form, F);
     $$('[data-qe]', form).forEach(function (b) { b.addEventListener('click', function () { openForm(b.getAttribute('data-qe'), { quick: 1 }); }); });
     var qc = $('[data-qecus]', form); if (qc) qc.addEventListener('click', qeCustomize);
     var so = $('#f-shipon', form); if (so) so.addEventListener('change', function () { $('#f-shipbox', form).hidden = !so.checked; if (so.checked) $('#f-shname', form).focus(); });
@@ -914,13 +990,23 @@
   function obShow() {   /* cash in hand / bank balance: no party */
     var p = $('#f-party', form), own = /^(cash|bank)$/.test($('#f-side', form).value);
     p.closest('.f').hidden = own; p.required = !own; if (own) p.value = '';
+    var bf = $('[data-bankf="f-bank"]', form); if (bf) bf.hidden = $('#f-side', form).value !== 'bank';
+    var og = $('[data-obgrid]', form); if (og) og.hidden = own;
+  }
+  /* contra: one bank for a deposit or withdrawal, "from" and "to" banks for a bank to bank transfer */
+  function contraShow() {
+    var dir = $('#f-dir', form).value, b1 = $('[data-bankf="f-bank"]', form), b2 = $('[data-bankf="f-bank2"]', form);
+    if (b1) { $('label', b1).textContent = T(dir === 'xfer' ? 'bankfrom' : 'bankacct'); }
+    if (b2) b2.hidden = dir !== 'xfer';
   }
   function onFormInput(e) {
     var id = e.target.id || '';
     if (id === 'f-mode' || id === 'f-cst') chqShow();
+    if (id === 'f-mode') bankSync(form);
+    if (id === 'f-dir' && F.kind === 'contra') contraShow();
     if (id === 'f-side' && $('#f-party', form) && F.kind === 'ob') obShow();
     if (id === 'f-photo') { if (e.type === 'change' && e.target.files[0]) shrinkPhoto(e.target.files[0]).then(function (u) { F.photo = u; drawPhoto(); }).catch(function () { NS.toast(T('photobad'), 'bad'); }); return; }
-    if (F.lines && e.target.hasAttribute('data-li')) { var i = +e.target.getAttribute('data-li'), k = e.target.getAttribute('data-lk'); F.lines[i][k] = e.target.value; if (k === 'desc') fillItem(i); drawSum(); return; }
+    if (F.lines && e.target.hasAttribute('data-li')) { var i = +e.target.getAttribute('data-li'), k = e.target.getAttribute('data-lk'), was = F.lines[i][k]; F.lines[i][k] = e.target.value; if (k === 'desc') fillItem(i); if (k === 'unit' && e.type === 'change') unitRate(i, was); drawSum(); return; }
     if (F.lines && /f-(nogst|round|state)/.test(id)) drawSum();
     /* the first two digits of a GSTIN are the supplier's state code */
     if (id === 'f-gstin') { var st = e.target.value.trim().slice(0, 2); if (/^\d\d$/.test(st) && NS.stateName(st)) { $('#f-state', form).value = st; drawSum(); } }
@@ -978,20 +1064,27 @@
     var sp = window.NSReuse && $('#f-party', form) ? NSReuse.partyRate(C.party.filter(function (p) { return key(p.name) === key($('#f-party', form).value); })[0], F.lines[i].desc) : null;   /* this supplier's own price list (My data) */
     if (!m && sp == null) return; m = m || {};
     /* a line switched to another saved item takes that item's HSN, rate and unit (P1-6: the old item's values stayed); edits to the same item are kept */
-    var L = F.lines[i], sr = F.kind === 'sale' ? m.rate || m.prate : m.prate || m.rate, fresh = !!m.desc && LFROM.get(L) !== key(m.desc); if (fresh) LFROM.set(L, key(m.desc));
-    if (fresh || !L.hsn) L.hsn = m.hsn || ''; if ((fresh || !num(L.rate)) && (sp != null || sr)) L.rate = sp != null ? sp : sr; if (m.gst !== '' && m.gst != null) L.gst = m.gst; if (m.unit && (fresh || !L.unit)) L.unit = m.unit;
+    var L = F.lines[i], sr = F.kind === 'sale' || F.vd && !F.vd.buy ? m.rate || m.prate : m.prate || m.rate, fresh = !!m.desc && LFROM.get(L) !== key(m.desc); if (fresh) LFROM.set(L, key(m.desc));
+    if (fresh || !L.hsn) L.hsn = m.hsn || ''; if ((fresh || !num(L.rate)) && (sp != null || sr)) L.rate = sp != null ? sp : sr; if (window.NSGst && m.desc && NSGst.hist(m).length) NSGst.fillLine(L, m, $('#f-date', form) ? $('#f-date', form).value : NS.today(), !(F.kind === 'sale' || F.vd && !F.vd.buy)); else if (m.gst !== '' && m.gst != null) L.gst = m.gst; if (m.unit && (fresh || !L.unit)) L.unit = m.unit;   /* r1-gst S-1, S-5: rate on the voucher date, taxability, purchase credit */
     var row = $$('[data-row]', form)[i]; if (row) { if ($('[data-lk=unit]', row)) $('[data-lk=unit]', row).value = L.unit || ''; $('[data-lk=hsn]', row).value = L.hsn; $('[data-lk=rate]', row).value = L.rate; $('[data-lk=gst]', row).value = L.gst; }
     if (row && m.track && !$('[data-lk=batch],[data-lk=serial]', row)) { drawLines(); var di = $$('[data-lk=desc]', form)[i]; if (di) { di.focus(); di.setSelectionRange(di.value.length, di.value.length); } }   /* batch / serial item (more.js) */
   }
+  function unitRate(i, was) {   /* F5-10 */
+    var L = F.lines[i], m = C.item.filter(function (x) { return key(x.desc) === key(L.desc); })[0], a = m && m.alt, per = a && num(a.per), r = num(L.rate);
+    if (!per || !r || !a.unit) return; var nu = key(L.unit), wu = key(was);
+    if (nu === key(a.unit) && wu !== nu) L.rate = String(r2(r * per)); else if (wu === key(a.unit) && nu !== wu) L.rate = String(r2(r / per)); else return;
+    var row = $$('[data-row]', form)[i], ri = row && $('[data-lk=rate]', row); if (ri) ri.value = L.rate; drawSum();
+  }
   function drawLines() {
     var box = $('[data-lines]', form);
-    var plain = !(window.NSApp.lineX && F.lines.some(function (L, i) { return NSApp.lineX(L, i, function () { return 'x'; }); }));   /* batch/serial columns: keep the labelled lines */
-    box.classList.toggle('vg', plain);
-    box.innerHTML = '<datalist id="dl-item">' + C.item.map(function (x) { return '<option value="' + esc(x.desc) + '">'; }).join('') + '</datalist>' +
-      (plain ? '<div class="line line-hd" aria-hidden="true"><span class="lc-no">#</span><span>' + esc(T('item')) + '</span><span>' + esc(T('hsn')) + '</span><span class="n">' + esc(T('qty')) + '</span><span>' + esc(NS.t('dp.uom')) + '</span><span class="n">' + esc(T('rate')) + '</span><span class="n">' + esc(NS.t('app.ldisc')) + '</span><span class="n">' + esc(T('gst')) + '</span><span class="n">' + esc(T('amount')) + '</span><span></span></div>' : '') + F.lines.map(function (L, i) {
+    var lineX = !F.noBatch && window.NSApp.lineX;   /* C-9: the batch switch */
+    var plain = !(lineX && F.lines.some(function (L, i) { return NSApp.lineX(L, i, function () { return 'x'; }); }));   /* batch/serial columns: keep the labelled lines */
+    box.classList.toggle('vg', plain); box.classList.toggle('nx-acct', !!F.acctMode); box.classList.toggle('nx-nogst', !!F.noGstCol);   /* ERP C-9 */
+    box.innerHTML = '<datalist id="dl-item">' + NS.active(C.item).map(function (x) { return '<option value="' + esc(x.desc) + '">'; }).join('') + '</datalist>' +
+      (plain ? '<div class="line line-hd" aria-hidden="true"><span class="lc-no">#</span><span>' + esc(F.acctMode ? NS.t('nx.partic') : T('item')) + '</span><span>' + esc(T('hsn')) + '</span><span class="n h-qty">' + esc(T('qty')) + '</span><span class="h-uom">' + esc(NS.t('dp.uom')) + '</span><span class="n">' + esc(F.acctMode ? NS.t('nx.value') : T('rate')) + '</span><span class="n h-disc">' + esc(NS.t('app.ldisc')) + '</span><span class="n h-gst">' + esc(T('gst')) + '</span><span class="n">' + esc(T('amount')) + '</span><span></span></div>' : '') + F.lines.map(function (L, i) {
       function c(k, lbl, o) { o = o || {}; return '<label class="lc lc-' + k + '"><span>' + esc(lbl) + '</span><input data-li="' + i + '" data-lk="' + k + '" value="' + esc(L[k] == null ? '' : L[k]) + '"' + (o.mode ? ' inputmode="' + o.mode + '" dir="ltr"' : ' dir="auto"') + (o.list ? ' list="' + o.list + '"' : '') + ' autocomplete="off"></label>'; }
       return '<div class="line" data-row>' + (plain ? '<span class="lc-no" aria-hidden="true">' + (i + 1) + '</span>' : '') + c('desc', T('item'), { list: 'dl-item' }) + c('hsn', T('hsn'), { mode: 'numeric' }) + c('qty', T('qty'), { mode: 'decimal' }) + c('unit', NS.t('dp.uom')) + c('rate', T('rate'), { mode: 'decimal' }) + c('disc', NS.t('app.ldisc'), { mode: 'decimal' }) + c('gst', T('gst'), { mode: 'decimal' }) +
-        (window.NSApp.lineX ? NSApp.lineX(L, i, c) : '') +   /* batch, expiry, serial (more.js) */
+        (lineX ? NSApp.lineX(L, i, c) : '') +   /* batch, expiry, serial (more.js) */
         (plain ? '<span class="lc-amt" data-lamt="' + i + '"></span>' : '') +
         (F.lines.length > 1 ? '<button type="button" class="icon-btn rm" data-rm="' + i + '" aria-label="' + esc(T('rmline')) + '">✕</button>' : '') + '</div>';
     }).join('');
@@ -1000,9 +1093,12 @@
   }
   function billFromForm() {
     var d = { type: 'pbill', kind: F.kind === 'pret' ? 'return' : 'bill', seller: sellerCopy(), buyer: { name: $('#f-party', form).value.trim(), gstin: $('#f-gstin', form).value.trim().toUpperCase(), state: $('#f-state', form).value },
-      no: $('#f-no', form).value.trim(), date: $('#f-date', form).value, noGst: $('#f-nogst', form).checked, round: $('#f-round', form).checked, photo: F.photo || '',
-      items: F.lines.filter(function (L) { return String(L.desc).trim() || num(L.rate); }).map(function (L) { var it = { desc: String(L.desc).trim(), hsn: String(L.hsn || '').trim(), qty: L.qty === '' ? 1 : num(L.qty), unit: L.unit || 'Nos', rate: num(L.rate), disc: num(L.disc) || '', gst: num(L.gst) };   /* L.unit: set by weigh.js when a weight was typed */ return window.NSApp.lineCopy ? NSApp.lineCopy(L, it) : it; }) };
+      no: $('#f-no', form).value.trim(), date: $('#f-date', form).value, noGst: $('#f-nogst', form).checked, round: $('#f-round', form).checked, photo: F.photo || '', itc: $('#f-pitc', form) && $('#f-pitc', form).value !== 'ok' ? $('#f-pitc', form).value : undefined,
+      items: F.lines.filter(function (L) { return String(L.desc).trim() || num(L.rate); }).map(function (L) { var it = { desc: String(L.desc).trim(), hsn: String(L.hsn || '').trim(), qty: L.qty === '' ? 1 : num(L.qty), unit: L.unit || 'Nos', rate: num(L.rate), disc: num(L.disc) || '', gst: num(L.gst) }; if (L.tk) it.tk = L.tk; if (L.itc) it.itc = L.itc;   /* L.unit: set by weigh.js when a weight was typed; r1-gst: taxability, purchase credit */ return window.NSApp.lineCopy ? NSApp.lineCopy(L, it) : it; }) };
     if ($('#f-gd', form)) d.gd = $('#f-gd', form).value;
+    if ($('#f-narr', form)) d.narr = $('#f-narr', form).value.trim();   /* A-26 */
+    if ($('#f-pl', form)) d.pl = $('#f-pl', form).value.trim();   /* A-9 */
+    if ($('#f-lcby', form)) d.lcBy = $('#f-lcby', form).value || undefined;   /* ERP round 2, I-14 */
     if ($('#f-due', form)) d.due = $('#f-due', form).value; else d.orig = { no: $('#f-orig', form).value.trim() };
     var t = B.itemTotals(d), total = r2(t.taxable + t.cgst + t.sgst + t.igst);   /* IGST when the supplier's state differs from ours */
     d.total = d.round ? Math.round(total) : total;
@@ -1040,10 +1136,14 @@
     var t = B.itemTotals(d), total = r2(t.taxable + t.cgst + t.sgst + t.igst);
     d.total = d.round ? Math.round(total) : total;
     d.tax = { taxable: t.taxable, cgst: t.cgst, sgst: t.sgst, igst: t.igst };
+    if ($('#f-sl', form)) d.sl = $('#f-sl', form).value.trim();   /* A-9: sales ledger of this bill */
+    if ($('#f-narr', form)) d.narr = $('#f-narr', form).value.trim();   /* A-26 */   /* A-9: sales ledger of this bill */
+    if (!F.rec) { if (F.vt) d.vt = F.vt; NS.vtApply(d, NS.vtCfg(CFG, 'invoice', '', F.vt)); }   /* C-11 / A-7: this voucher type's defaults and series */
+    if (F.conv) { d.fromId = F.conv.fromId; d.against = F.conv.against; d.ref = F.conv.ref || ''; if (F.conv.einv) d.einv = F.conv.einv; if (F.conv.ship) d.ship = F.conv.ship; }
     return shipDispOf(d);
   }
   function drawSum() {
-    var d = F.kind === 'sale' ? saleFromForm() : billFromForm(), t = d.tax;
+    var d = F.kind === 'sale' ? saleFromForm() : F.vd ? F.vd.build() : billFromForm(), t = d.tax;
     $$('[data-lamt]', form).forEach(function (s) { var L = F.lines[+s.getAttribute('data-lamt')] || {}, a = (L.qty === '' || L.qty == null ? 1 : num(L.qty)) * num(L.rate); a = a - a * num(L.disc) / 100; s.textContent = a ? money(a, false) : ''; });
     $('[data-sum]', form).innerHTML = '<span>' + esc(T('taxable')) + ' <b>' + money(t.taxable) + '</b></span><span>' + esc(T('tax')) + ' <b>' + money(t.cgst + t.sgst + t.igst) + '</b>' + (t.igst ? ' (IGST)' : t.cgst ? ' (CGST + SGST)' : '') + '</span><span>' + esc(T('total')) + ' <b>' + money(d.total) + '</b></span>';
   }
@@ -1064,7 +1164,12 @@
     $$('input[type=checkbox][data-al]', box).forEach(function (c) {
       c.addEventListener('change', function () {
         var amtI = $('input[data-al="' + c.getAttribute('data-al') + '"]:not([type=checkbox])', box);
-        if (!c.checked) amtI.value = ''; else { var used = sumAlloc() - num(amtI.value); amtI.value = r2(Math.max(0, Math.min(num(amtI.getAttribute('data-max')), gross - used))) || amtI.getAttribute('data-max'); }
+        if (!c.checked) amtI.value = '';
+        else {   /* an amount already typed: a ticked bill gets only what is left of it, never more than was received (19 Nov 2026) */
+          var used = sumAlloc() - num(amtI.value), typed = num($('#f-amt', form).value) > 0, room = r2(Math.max(0, Math.min(num(amtI.getAttribute('data-max')), gross - used)));
+          if (typed && room <= 0) { c.checked = false; amtI.value = ''; NS.toast(T('alfull'), 'bad'); return; }
+          amtI.value = typed ? room : amtI.getAttribute('data-max');
+        }
         /* nothing typed in the amount yet: ticking a bill fills it with what is left on the ticked bills (round C) */
         var ai = $('#f-amt', form); if (c.checked && ai && !ai.value.trim()) { ai.value = String(r2(sumAlloc())); gross = sumAlloc(); var tx = $('#f-tdsx', form); if (tx && tx.value.trim()) tdsPair('f-tdsx'); }
         advLeft();
@@ -1079,16 +1184,11 @@
   }
 
   function reserveNo(type, pre, date) {
-    var fy = NS.fy(date), short = fy.slice(2, 4) + '-' + fy.slice(5), isV = type === 'vno', c = isV ? (CFG.exp || {}) : (CFG[type] || {}), nos = [];
-    var digits = Math.min(6, Math.max(1, +((CFG.invoice || {}).digits) || 3));
-    pre = String(c.prefix != null && c.prefix !== '' ? c.prefix : pre).replace(/[^A-Za-z0-9\/\-]/g, '');
-    mine().forEach(function (d) {
-      if ((isV ? d.type !== 'exp' : d.type !== type) || NS.fy(d.date) !== fy) return;
-      var n = isV ? d.vno : d.no, m = String(n || '').match(/(\d+)\s*$/); if (m) nos.push(n);
-    });
+    var isV = type === 'vno', x = isV ? NS.nextNo(vnoDocs(), Object.assign(nxApp('exp', 'EXP', date), { tag: '' })) : NS.nextNo(mine(), Object.assign(nxApp(type, pre, date), { tag: '' }));
+    if (x.manual || x.suffix || x.series.restart !== 'year') return Promise.resolve(null);
     /* the scope is written like the makers' (slip.js, docs.js), so the App and the maker share one series */
     var scope = type === 'cashmemo' ? key(bizName()) : (isV ? 'exp' : type) + '|' + key(bizName()) + '|';
-    return NSStore.sfClaim({ scope: scope, prefix: (pre ? pre + '/' : '') + short + '/', digits: digits, nos: nos });
+    return NSStore.sfClaim({ scope: scope, prefix: x.head, digits: x.width, nos: x.nos });
   }
   function submit() {
     var k = F.kind, plan = null, date = $('#f-date', form) ? $('#f-date', form).value : '', md = $('#f-mode', form);
@@ -1109,8 +1209,10 @@
     if (miss.length) { NS.toast(T('need', { f: miss.map(function (i) { return $('label[for="' + i.id + '"]', form).textContent; }).join(', ') }), 'bad'); miss[0].focus(); return; }
     var lock = window.NSApp.closedMsg && $('#f-date', form) && (NSApp.closedMsg($('#f-date', form).value) || F.rec && NSApp.closedMsg(F.rec.date));   /* closed financial year (more.js) */
     if (lock) { NS.toast(lock, 'bad'); return; }
+    if (window.NSCF && NSCF.appTake(form, F) === false) return;   /* required custom fields; the values go on the voucher saved below */
     var rec = F.rec ? JSON.parse(JSON.stringify(F.rec)) : null, jobs = [], party = $('#f-party', form) ? $('#f-party', form).value.trim() : '', d;
     if (k === 'min' || k === 'mout') {
+      if (r2(sumAlloc()) > r2(num($('#f-amt', form).value) + (k === 'mout' ? 0 : num($('#f-tds', form).value)) + num(($('#f-disc', form) || {}).value)) + 0.004) { NS.toast(T('alover'), 'bad'); return; }   /* bills set off can never add up to more than the amount */
       var out = k === 'mout', amt = r2(num($('#f-amt', form).value)), alloc = $$('[data-alloc] input[data-al]:not([type=checkbox])', form).filter(function (i) { return num(i.value) > 0; }).map(function (i) {
         var b = C.doc.filter(function (x) { return x.id === i.getAttribute('data-al'); })[0]; return { id: i.getAttribute('data-al'), no: b ? b.no || '' : '', amt: r2(Math.min(num(i.value), num(i.getAttribute('data-max')))) }; });
       var date = $('#f-date', form).value, nos = alloc.map(function (a) { return a.no; }).filter(Boolean).join(', ');
@@ -1126,7 +1228,8 @@
           ref: $('#f-ref', form).value.trim(), against: nos, purpose: $('#f-note', form).value.trim() || (unpaidLeft > 0.004 && alloc.length ? 'Part advance' : ''), alloc: alloc });
         d.buyer = Object.assign(rec ? rec.buyer : { addr: '', phone: '', gstin: '', pan: '' }, { name: party });
       }
-      d.total = amt;
+      d.total = amt; setBacct(d, bankVal(form, 'f-bank'));
+      if ($('#f-note', form) && $('#f-note', form).value.trim()) d.narr = $('#f-note', form).value.trim(); else delete d.narr;   /* A-26: narration in the ledgers and Tally */
       var cq = chqFromForm(); if (cq) d.chq = cq; else delete d.chq;
       jobs.push(savePartyRole(party, out ? 'supplier' : 'customer'));
       return Promise.all(jobs).then(function () { return NSStore.put('doc', d); }).then(function (saved) { return markPaid(saved); }).then(done);
@@ -1136,8 +1239,9 @@
       if (!d.items.length) { NS.toast(T('need', { f: T('items') }), 'bad'); return; }
       if (rec) d = Object.assign(rec, d, { id: rec.id });
       var dup = k === 'pbill' && C.doc.filter(function (x) { return x.type === 'pbill' && x.kind !== 'return' && x.id !== (rec && rec.id) && key(x.no) === key(d.no) && key(B.partyName(x)) === key(party) && key(x.seller && x.seller.name) === key(bizName()); })[0];
-      if (dup && !window.confirm(T('samebill', { no: d.no, p: party }))) return;   /* (a check before saving the App's own entry; NS.ask is used where Save waits for an answer) */
+      if (dup && !NS.okSync(T('samebill', { no: d.no, p: party }))) return;   /* (a check before saving the App's own entry; NS.ask is used where Save waits for an answer) */
       var mode = $('#f-mode', form) ? $('#f-mode', form).value : 'credit';
+      if (window.NSApp.formSave) NSApp.formSave(k, d, form, F);
       jobs.push(savePartyRole(party, 'supplier', { gstin: d.buyer.gstin, state: d.buyer.state }));
       d.items.forEach(function (it) {
         if (!it.desc) return;
@@ -1149,9 +1253,9 @@
         if (mode === 'credit' || k !== 'pbill') return saved;
         /* paid at once: a payment entry linked to this bill */
         var v = { type: 'voucher', app: 1, forBill: true, no: nextNo('voucher', 'PV', saved.date), date: saved.date, paper: 'a4', design: 'classic', copies: 1, copyLabel: 'orig', tdsSec: '', tdsRate: '', rcm: false, rcmRate: '18', prep: '', appr: '', status: '',
-          seller: sellerCopy(), buyer: { name: party, addr: '', phone: '', gstin: saved.buyer.gstin, pan: '' }, mode: mode, ref: '', alloc: [{ id: saved.id, no: saved.no, amt: saved.total }],
-          lines: [{ desc: 'Payment against bill ' + saved.no, head: 'Supplier payment', amt: saved.total }] };
-        v.total = saved.total;
+          seller: sellerCopy(), buyer: { name: party, addr: '', phone: '', gstin: saved.buyer.gstin, pan: '' }, mode: mode, ref: '', alloc: [{ id: saved.id, no: saved.no, amt: r2(saved.total - B.tdsBk(saved)) }],
+          lines: [{ desc: 'Payment against bill ' + saved.no, head: 'Supplier payment', amt: r2(saved.total - B.tdsBk(saved)) }] };   /* TDS cut on the bill is not paid to the supplier (S-20) */
+        v.total = r2(saved.total - B.tdsBk(saved)); setBacct(v, bankVal(form, 'f-bank'));
         return NSStore.put('doc', v);
       }).then(done);
     }
@@ -1162,10 +1266,11 @@
       if (!d.items.length) { NS.toast(T('need', { f: T('items') }), 'bad'); return; }
       /* the number is checked against the saved bills NOW, not the list read when the form opened: another tab or a second person
          may have used it meanwhile (P3-6). A number the App suggested moves on to the next free one; a typed one is refused. */
-      return NSStore.list('doc').then(function (all) {
+      var smode0 = $('#f-mode', form) ? $('#f-mode', form).value : 'credit';
+      return (smode0 === 'credit' && NS.creditAsk ? NS.creditAsk(bizName(), party, d.total, d.date, F.rec && F.rec.id) : Promise.resolve()).then(function () { return NS.stockGuard ? NS.stockGuard(d, F.rec && F.rec.id) : null; }).then(function () { return NSStore.list('doc'); }).then(function (all) {   /* A-15: credit limit / overdue bills (warn or block, per party) */   /* ERP round 1: stock checks (stockguard.js) */
       var dupOf = function (no) { return all.filter(function (x) { return x.id !== d.id && (x.type || 'invoice') === 'invoice' && key(x.no) === key(no) && NS.fy(x.date) === NS.fy(d.date) && key(x.seller && x.seller.name) === key(bizName()); })[0]; };
       if (dupOf(d.no)) {
-        if (F.autoNo && d.no === F.autoNo) { var was = d.no; d.no = F.autoNo = NS.nextInvNo(all, bizName(), d.date, CFG); $('#f-no', form).value = d.no; F.renumMsg = NS.t('c.renum', { a: was, b: d.no }); }
+        if (F.autoNo && d.no === F.autoNo) { var was = d.no; d.no = F.autoNo = NS.nextInvNo(all, bizName(), d.date, CFG, d.vt); $('#f-no', form).value = d.no; F.renumMsg = NS.t('c.renum', { a: was, b: d.no }); }
         else { NS.toast(T('qe_dup', { no: d.no }), 'bad'); $('#f-no', form).focus(); throw 'dup'; }
       }
       var smode = $('#f-mode', form) ? $('#f-mode', form).value : 'credit';
@@ -1176,22 +1281,27 @@
         if (!hit) jobs.push(NSStore.put('item', { desc: it.desc, hsn: it.hsn, unit: it.unit, rate: it.rate, prate: '', gst: it.gst, kind: 'goods' }));   /* a new item learns its sale rate; a saved one keeps its price list */
       });
       return Promise.all(jobs).then(function () { return NSStore.put('doc', d); }).then(function (saved) {
-        F.savedNo = saved.no;
+        F.savedNo = saved.no; if (saved.fromId && window.NSVDocs) NSVDocs.markFrom(saved);
         if (smode === 'credit') return saved;
         /* paid at once: a receipt linked to this bill, and the bill is marked paid (as Money received does) */
         var rv = { type: 'receipt', app: 1, kind: 'pay', no: nextNo('receipt', 'RCT', saved.date), date: saved.date, paper: 'a4', design: 'classic', copies: 1, copyLabel: '', gstAdv: false, rate: '18', pos: '', sac: '', rv: '', rvDate: '', refDate: '', bank: '', balance: '', status: '',
           seller: sellerCopy(), buyer: { name: party, addr: '', phone: '', gstin: saved.buyer.gstin, pan: '' }, amount: saved.total, tds: '', disc: 0, mode: smode, ref: '', against: saved.no, purpose: '', alloc: [{ id: saved.id, no: saved.no, amt: saved.total }] };
-        rv.total = saved.total;
+        rv.total = saved.total; setBacct(rv, bankVal(form, 'f-bank'));
         return NSStore.put('doc', rv).then(markPaid);
       }).then(done);
-      }).catch(function (e) { if (e !== 'dup') throw e; });
+      }).catch(function (e) { if (e !== 'dup' && !(e && e.message === 'cancel')) throw e; });
+    }
+    if (k === 'vdoc') {
+      var how = andPrint;
+      return F.vd.save(form).then(function (saved) { if (!saved) return; F.savedNo = saved.no; F.renumMsg = F.vd.renum; done(); if (!how && NSVDocs.after) how = NSVDocs.after(saved); if (how) NSVDocs.out(saved, how === 'share' ? 'share' : 'print'); });   /* C-15: print / share after saving */
     }
     if (k === 'exp') {
       d = Object.assign(rec || { type: 'exp', app: 1 }, { date: $('#f-date', form).value, seller: sellerCopy(), cat: catCode($('#f-cat', form).value.trim()), amount: r2(num($('#f-amt', form).value)), mode: $('#f-mode', form).value,
         buyer: { name: party }, no: $('#f-no', form).value.trim(), gst: $('#f-gst', form).value, itc: $('#f-itc', form).checked, inter: $('#f-inter', form).checked, notes: $('#f-note', form).value.trim() });
-      d.total = d.amount;
+      d.total = d.amount; setBacct(d, bankVal(form, 'f-bank')); d.narr = d.notes;   /* A-26: the note is the narration in the ledgers and Tally */
       if (d.mode === 'credit' && !party) { NS.toast(T('need', { f: T('payee') }), 'bad'); $('#f-party', form).focus(); return; }
       if (party) jobs.push(savePartyRole(party, 'supplier'));
+      if (window.NSApp.formSave) NSApp.formSave(k, d, form, F);
       if (!d.vno) d.vno = vnoNext(d.date);   /* our own voucher number (the bill no. box is the supplier's), printed on the voucher */
       var pr = andPrint;
       return Promise.all(jobs).then(function () { return NSStore.put('doc', d); }).then(function (saved) { done(); if (pr) printVoucher(saved || d); });
@@ -1206,14 +1316,16 @@
       return savePartyRole(party, 'customer', { phone: ph }).then(function () { return NSStore.put('doc', d); }).then(done);
     }
     if (k === 'contra') {
-      var fr = $('#f-dir', form).value;
-      d = Object.assign(rec || { type: 'contra', app: 1, no: '' }, { date: $('#f-date', form).value, seller: sellerCopy(), from: fr, to: fr === 'cash' ? 'bank' : 'cash', amount: r2(num($('#f-amt', form).value)), ref: $('#f-ref', form).value.trim(), notes: $('#f-note', form).value.trim() });
-      d.total = d.amount;
+      var fr = $('#f-dir', form).value, b1 = $('#f-bank', form) ? $('#f-bank', form).value : 'bank', b2 = $('#f-bank2', form) ? $('#f-bank2', form).value : 'bank';
+      if (fr === 'xfer' && b1 === b2) { NS.toast(T('banksame'), 'bad'); return; }
+      d = Object.assign(rec || { type: 'contra', app: 1, no: nextNo('contra', 'CV', $('#f-date', form).value) }, { date: $('#f-date', form).value, seller: sellerCopy(), from: fr === 'xfer' ? b1 : fr, to: fr === 'xfer' ? b2 : fr === 'cash' ? 'bank' : 'cash', amount: r2(num($('#f-amt', form).value)), ref: $('#f-ref', form).value.trim(), notes: $('#f-note', form).value.trim() });
+      d.total = d.amount; setBacct(d, fr === 'xfer' ? '' : bankVal(form, 'f-bank')); d.narr = d.notes;   /* A-26 */
       return NSStore.put('doc', d).then(done);
     }
     if (k === 'ob') {
       d = Object.assign(rec || { type: 'ob', app: 1 }, { date: $('#f-date', form).value, seller: sellerCopy(), buyer: { name: /^(cash|bank)$/.test($('#f-side', form).value) ? '' : party }, side: $('#f-side', form).value, amount: r2(num($('#f-amt', form).value)) });
-      d.total = d.amount; d.no = '';
+      d.total = d.amount; d.no = ''; setBacct(d, d.side === 'bank' ? bankVal(form, 'f-bank') : '');
+      if (window.NSApp.obGrid && NSApp.obGrid.read(form, d) === false) return;
       if (!d.buyer.name) return NSStore.put('doc', d).then(done);
       return savePartyRole(party, d.side === 'pay' ? 'supplier' : 'customer').then(function () { return NSStore.put('doc', d); }).then(done);
     }
@@ -1243,7 +1355,7 @@
     }
     function draw() {
       d.innerHTML = '<div class="dlg-h"><h2>' + esc(T('qe_cus_t')) + '</h2></div><div class="dlg-b"><h3>' + esc(T('qe_cus_tabs')) + '</h3><ul class="qe-cl">' + list() + '</ul>' +
-        '<div class="fg">' + fld('qc-gst', T('qe_cus_gst'), sel('qc-gst', String(qeGst()), ['0', '0.1', '0.25', '3', '5', '12', '18', '28', '40'].map(function (r) { return [r, r + '%']; }))) +
+        '<div class="fg">' + fld('qc-gst', T('qe_cus_gst'), sel('qc-gst', String(qeGst()), ['0', '0.1', '0.25', '1.5', '3', '5', '12', '18', '40'].map(function (r) { return [r, r + '%']; }))) +
         fld('qc-sale', T('qe_cus_sale'), sel('qc-sale', qeMode('sale') || '', [['', T('qe_cus_std')]].concat(modeOpts(true)))) +
         fld('qc-pbill', T('qe_cus_pur'), sel('qc-pbill', qeMode('pbill') || '', [['', T('qe_cus_std')]].concat(modeOpts(true)))) + '</div>' +
         '<label class="chk"><input type="checkbox" id="qc-round"' + (P.round === false ? '' : ' checked') + '> ' + esc(T('qe_cus_round')) + '</label>' +
@@ -1322,11 +1434,13 @@
     newDocs: function () { return NEWDOCS.filter(function (n) { return TOOLS.some(function (x) { return x[0] === n[0]; }) || INAPP[n[0]]; }).map(function (n) { return [n[0], NS.t(n[2] || 'Doc.' + n[1])]; }); },
     mine: mine, biz: function () { return BIZ; }, bizName: bizName, data: function () { return C; }, docName: docName, catName: catName, enName: enName, amountOf: amountOf,
     rowsHtml: rowsHtml, leftMap: leftMap, searchBar: searchBar, match: match, byDate: byDate, fyStart: fyStart, toolUrl: toolUrl, myUrl: myUrl, ldate: ldate,
-    range: function (f, t) { if (f) stFrom = f; if (t) stTo = t; if (!stTo) stTo = NS.today(); if (!stFrom) stFrom = fyStart(stTo); return [stFrom, stTo]; },
+    range: range, trail: function () { return trail; }, viewDoc: function (id) { viewDoc(id); },
     markPaid: markPaid, openUrl: openUrl, siteHome: siteHome, frameAt: frameAt, docUrl: docUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },
     whatsapp: whatsapp, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
-    door: function () { return DOOR; }, whenReady: whenReady, switchBiz: switchBiz, setBiz: setBiz, printVoucher: printVoucher, quickEntry: quickEntry
+    vh: function () { return { fld: fld, inp: inp, sel: sel, partyList: partyList, savePartyRole: savePartyRole, drawLines: drawLines, drawSum: drawSum, form: function () { return form; }, cur: function () { return F; } }; },
+    door: function () { return DOOR; }, banks: banks, bankFld: bankFld, bankSync: bankSync, bankWire: bankWire, bankVal: bankVal, setBacct: setBacct, bankLabel: bankLabel, bankSum: bankSum, banksMeta: function () { return BANKS; }, whenReady: whenReady, switchBiz: switchBiz, setBiz: setBiz, printVoucher: printVoucher, quickEntry: quickEntry
   };
+  window.NSApp.redrawLines = function () { if (F && F.lines && form && form.isConnected) drawLines(); };   /* cfields.js: a line field made from the open form shows at once */
   function cardTables(root) {
     $$('table.tbl:not(.tbl-cards):not(.dues-t)', root).forEach(function (tb) {
       if (tb.closest('.stsheet')) return;
@@ -1342,6 +1456,20 @@
   /* printing an App screen (Print button or Ctrl+P): its printable sheets are copied to a clean area at the top of the page and
      only that area prints, in paper colours; the page margin is 0 so the browser adds no date, title or web address: the
      credit line inside the sheet is the only line at the bottom (owner 2026-11-18: reports printed blank) */
+  function paneSheet(pane) {
+    var c = pane.cloneNode(true), sh = document.createElement('div'), b = BIZ;
+    /* typed boxes print as their value, so a form screen keeps its figures */
+    $$('input,select,textarea', c).forEach(function (n) {
+      var t = n.type, v = n.tagName === 'SELECT' ? (n.value === '' ? '' : (n.options[n.selectedIndex] || {}).text || '') : /^(checkbox|radio)$/.test(t) ? (n.checked ? '\u2611' : '\u2610') : n.value;
+      if (/^(hidden|button|submit|reset|file|search|color|range)$/.test(t) || (!v && t !== 'checkbox' && t !== 'radio')) { n.parentNode.removeChild(n); return; }
+      var x = document.createElement('span'); x.className = 'ap-val'; x.textContent = v; n.parentNode.replaceChild(x, n);
+    });
+    $$('button,a.btn,dialog,nav,.seg,.quick,.sponsor-slot,.sponsor,.noprint,.no-print,.acts,[hidden],.tip,.help-tip,.sample-note', c).forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
+    $$('.tbl-cards', c).forEach(function (t) { t.classList.remove('tbl-cards'); });
+    sh.className = 'stsheet ap-pane';
+    sh.innerHTML = '<p class="ap-biz"><b>' + esc(b && b.name || '') + '</b> · ' + esc(NS.fmtDate(NS.today())) + '</p>' + c.innerHTML + (NS.creditLine ? NS.creditLine('st-ft') : '');
+    return sh;
+  }
   (function printArea() {
     var de = document.documentElement, st = null;
     window.addEventListener('beforeprint', function () {
@@ -1351,7 +1479,7 @@
       if (de.classList.contains('dk-print') || de.classList.contains('vch-on')) return;
       var pane = $('[data-pane]'); if (!pane || $('#app-printarea')) return;
       var src = $$('.lg-print .stsheet', pane); if (!src.length) src = $$('.stsheet', pane).filter(function (n) { return !n.closest('dialog'); });
-      if (!src.length) return;
+      if (!src.length) src = [paneSheet(pane)];   /* a screen with no sheet of its own (lists, dues, parties...): a clean copy of the screen, else it printed blank pages */
       var box = document.createElement('div'); box.id = 'app-printarea';
       src.forEach(function (n) { var c = n.cloneNode(true); c.classList.add('lg-paper'); box.appendChild(c); });
       document.body.appendChild(box); de.classList.add('ap-print');
@@ -1376,6 +1504,7 @@
     document.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('a[href]');
       if (!a || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      if (a.hasAttribute('download')) return;   /* a file download */
       if (a.hasAttribute('data-close-box')) { var bx = a.closest('dialog'); if (bx && bx.open) bx.close(); if (openUrl(a.href)) e.preventDefault(); return; }   /* My data box: "Open full data manager" = the App's own screen (#do/my/) */
       /* a link to one of our own sites opens inside the App even when it was made for a new tab (the My data box's "Open My data",
          promotion links...); other websites (sponsors, WhatsApp, the GST portal) still open on their own */

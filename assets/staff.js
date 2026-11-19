@@ -51,8 +51,10 @@
     X.open(F(r.kind === 'back' ? 'advback' : 'advgive'), '<p class="soft">' + esc(F(r.kind === 'back' ? 'advbackh' : 'advgiveh')) + '</p><div class="fg">' +
       fld('sf-date', A.T('date'), inp('sf-date', r.date, { type: 'date', req: 1 })) +
       fld('sf-emp', F('emp'), inp('sf-emp', r.emp, { req: 1, list: 'sf-emps' }) + '<datalist id="sf-emps">' + names.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>') +
-      fld('sf-amt', A.T('amount'), inp('sf-amt', r.amount, { mode: 'decimal', req: 1 })) + fld('sf-mode', A.T('mode'), sel('sf-mode', r.mode, X.modeOpts())) +
-      fld('sf-note', A.T('note'), inp('sf-note', r.notes || ''), { wide: 1 }) + '</div>',
+      fld('sf-amt', A.T('amount'), inp('sf-amt', r.amount, { mode: 'decimal', req: 1 })) + fld('sf-mode', A.T('mode'), sel('sf-mode', r.mode, X.modeOpts())) + X.bankF('sf-bank', r.bacct, 'sf-mode') +
+      fld('sf-note', A.T('note'), inp('sf-note', r.notes || ''), { wide: 1 }) + '</div>' +
+      (r.kind === 'back' ? '' : '<fieldset><legend>' + esc(F('planl')) + '</legend><p class="soft">' + esc(F('planh')) + '</p><div class="fg">' + fld('sf-pemi', F('planemi'), inp('sf-pemi', r.plan && r.plan.emi || '', { mode: 'decimal' })) +
+        fld('sf-pfrom', F('planfrom'), inp('sf-pfrom', r.plan && r.plan.from || '', { type: 'month' })) + '</div></fieldset>'),
     function () {
       var date = val('sf-date'), who = val('sf-emp'), amt = r2(num(val('sf-amt')));
       if (!date) { NS.toast(A.T('need', { f: A.T('date') }), 'bad'); return; }
@@ -60,6 +62,8 @@
       if (!(amt > 0)) { NS.toast(A.T('need', { f: A.T('amount') }), 'bad'); return; }
       if (X.closed(date) || rec && X.closed(rec.date)) return;
       var d = Object.assign(rec ? JSON.parse(JSON.stringify(rec)) : { type: 'sadv', no: X.nextNo('sadv', 'SA', date) }, { date: date, seller: X.sellerCopy(), kind: r.kind, emp: who, amount: amt, mode: val('sf-mode'), notes: val('sf-note'), total: amt });
+      X.bankSet(d, 'sf-bank');
+      var pe = r2(num(val('sf-pemi'))); if (r.kind !== 'back' && pe > 0) d.plan = { emi: pe, from: val('sf-pfrom') || date.slice(0, 7), months: Math.ceil(amt / pe) }; else delete d.plan;   /* T-B18: the salary run recovers this much a month */
       d.narr = (r.kind === 'back' ? 'Advance paid back by ' : 'Advance given to ') + who + (d.notes ? ' · ' + d.notes : '');
       X.saved(d);
     });
@@ -83,7 +87,7 @@
       fld('sf-rate', F('rate'), inp('sf-rate', r.rate, { mode: 'decimal' })) + fld('sf-months', F('months'), inp('sf-months', r.months, { mode: 'numeric' })) +
       fld('sf-emi', F('emi'), inp('sf-emi', r.emi, { mode: 'decimal' }), { hint: F('emih') }) + fld('sf-first', F('first'), inp('sf-first', r.first, { type: 'date' })) +
       '<div class="f wide"><label class="chk"><input id="sf-recv" type="checkbox"' + (r.recv ? ' checked' : '') + '> ' + esc(F('recv')) + '</label><small class="soft">' + esc(F('recvh')) + '</small></div>' +
-      fld('sf-mode', F('recvin'), sel('sf-mode', r.mode, X.modeOpts())) + fld('sf-note', A.T('note'), inp('sf-note', r.notes || ''), { wide: 1 }) + '</div><p class="acx-sum" data-sfsum aria-live="polite"></p>',
+      fld('sf-mode', F('recvin'), sel('sf-mode', r.mode, X.modeOpts())) + X.bankF('sf-bank', r.bacct, 'sf-mode') + fld('sf-note', A.T('note'), inp('sf-note', r.notes || ''), { wide: 1 }) + '</div><p class="acx-sum" data-sfsum aria-live="polite"></p>',
     function () {
       var date = val('sf-date'), who = val('sf-lender'), amt = r2(num(val('sf-amt')));
       if (!who) { NS.toast(A.T('need', { f: F('lender') }), 'bad'); return; }
@@ -92,6 +96,7 @@
       if (X.closed(date) || rec && X.closed(rec.date)) return;
       var d = Object.assign(rec ? JSON.parse(JSON.stringify(rec)) : { type: 'loan', no: X.nextNo('loan', 'LN', date) }, { date: date, seller: X.sellerCopy(), lender: who, lt: val('sf-lt'), amount: amt,
         rate: val('sf-rate'), months: val('sf-months'), emi: val('sf-emi'), first: val('sf-first'), recv: val('sf-recv'), mode: val('sf-mode'), notes: val('sf-note'), total: amt });
+      X.bankSet(d, 'sf-bank');
       d.narr = 'Loan from ' + who + (d.rate ? ' at ' + d.rate + '%' : '') + (d.months ? ' for ' + d.months + ' months' : '');
       X.saved(d);
     }, function (f) {
@@ -106,11 +111,11 @@
   function loanOf(d) { return d.loanId && byId(d.loanId); }
   function emiForm(rec, loan, row) {
     loan = loan || loanOf(rec); if (!loan) { NS.toast(F('noloan'), 'bad'); return; }
-    var r = rec || { date: row && row.date || today(), n: row && row.n || 1, principal: row ? row.principal : '', interest: row ? row.interest : '', mode: loan.mode === 'cash' ? 'cash' : 'bank' };
+    var r = rec || { date: row && row.date || today(), n: row && row.n || 1, principal: row ? row.principal : '', interest: row ? row.interest : '', mode: loan.mode === 'cash' ? 'cash' : 'bank', bacct: loan.bacct || '' };   /* the EMI leaves the bank the loan came into */
     X.open(F('payemi', { l: loan.lender }), '<p class="soft">' + esc(F('emiformh')) + '</p><div class="fg">' +
       fld('sf-n', F('instno'), inp('sf-n', r.n, { mode: 'numeric' })) + fld('sf-date', A.T('date'), inp('sf-date', r.date, { type: 'date', req: 1 })) +
       fld('sf-pr', F('principal'), inp('sf-pr', r.principal, { mode: 'decimal' })) + fld('sf-int', F('interest'), inp('sf-int', r.interest, { mode: 'decimal' })) +
-      fld('sf-mode', A.T('mode'), sel('sf-mode', r.mode, X.modeOpts())) + fld('sf-note', A.T('note'), inp('sf-note', r.notes || ''), { wide: 1 }) + '</div><p class="acx-sum" data-sfsum aria-live="polite"></p>',
+      fld('sf-mode', A.T('mode'), sel('sf-mode', r.mode, X.modeOpts())) + X.bankF('sf-bank', r.bacct, 'sf-mode') + fld('sf-note', A.T('note'), inp('sf-note', r.notes || ''), { wide: 1 }) + '</div><p class="acx-sum" data-sfsum aria-live="polite"></p>',
     function () {
       var date = val('sf-date'), pr = r2(num(val('sf-pr'))), it = r2(num(val('sf-int')));
       if (!date) { NS.toast(A.T('need', { f: A.T('date') }), 'bad'); return; }
@@ -118,6 +123,7 @@
       if (X.closed(date) || rec && X.closed(rec.date)) return;
       var d = Object.assign(rec ? JSON.parse(JSON.stringify(rec)) : { type: 'emi', no: X.nextNo('emi', 'EMI', date) }, { date: date, seller: X.sellerCopy(), loanId: loan.id, lender: loan.lender, lt: loan.lt,
         n: Math.round(num(val('sf-n'))) || 1, principal: pr, interest: it, mode: val('sf-mode'), notes: val('sf-note'), total: r2(pr + it) });
+      X.bankSet(d, 'sf-bank');
       d.narr = 'EMI ' + d.n + ' to ' + loan.lender + ': principal ' + pr + ', interest ' + it;
       X.saved(d);
     }, function (f) {
@@ -130,21 +136,46 @@
   function slips() { return A.mine().filter(function (d) { return d.type === 'salary'; }).sort(function (a, b) { return String(b.month || '').localeCompare(String(a.month || '')) || String(B.partyName(a)).localeCompare(String(B.partyName(b))); }); }
   function payForm(d) {
     X.open(F('markpaid'), '<p class="soft">' + esc(F('markpaidh', { e: B.partyName(d), m: month(d.month), n: money(B.salSplit(d).net) })) + '</p><div class="fg">' +
-      fld('sf-date', A.T('date'), inp('sf-date', d.payDate || today(), { type: 'date', req: 1 })) + fld('sf-mode', A.T('mode'), sel('sf-mode', d.payMode || 'bank', X.modeOpts())) + '</div>',
+      fld('sf-date', A.T('date'), inp('sf-date', d.payDate || today(), { type: 'date', req: 1 })) + fld('sf-mode', A.T('mode'), sel('sf-mode', d.payMode || 'bank', X.modeOpts())) + X.bankF('sf-bank', d.payBacct, 'sf-mode') + '</div>',
     function () {
       var date = val('sf-date'); if (!date) { NS.toast(A.T('need', { f: A.T('date') }), 'bad'); return; }
       if (X.closed(date)) return;
-      X.saved(Object.assign(JSON.parse(JSON.stringify(d)), { acct: true, payDate: date, payMode: val('sf-mode') }));
+      var pd = X.bankSet(Object.assign(JSON.parse(JSON.stringify(d)), { acct: true, payDate: date, payMode: val('sf-mode') }), 'sf-bank');
+      if (pd.bacct) { pd.payBacct = pd.bacct; delete pd.bacct; } else delete pd.payBacct;   /* the slip's own bacct would mean nothing: the pay keeps its bank */
+      X.saved(pd);
     });
   }
   function slipUrl(d) { return A.siteHome ? A.siteHome('salary-slip') + (d ? '?open=' + encodeURIComponent(d.id) : '?new=1') : ''; }
 
   /* ---------- the section ---------- */
   var EXT = {}; A.staffExt = EXT;   /* tabs added by other files (payroll.js: att, pf, esi) */
-  var ORDER = ['sal', 'emp', 'att', 'pf', 'esi', 'adv', 'loan'];
-  function tabList() { return ORDER.filter(function (t) { return !{ att: 1, pf: 1, esi: 1 }[t] || EXT[t]; }); }
+  var ORDER = ['sal', 'run', 'emp', 'heads', 'att', 'leave', 'pf', 'esi', 'tax', 'year', 'adv', 'loan'];   /* run, heads, tax, year: payrun.js (ERP round 2) */
+  function tabList() { return ORDER.filter(function (t) { return !{ att: 1, leave: 1, pf: 1, esi: 1, run: 1, heads: 1, tax: 1, year: 1 }[t] || EXT[t]; }); }
   function tabs(cur) {
     return '<div class="seg" role="group">' + tabList().map(function (t) { return '<a class="btn sm" href="#stf' + (t === 'sal' ? '' : '/' + t) + '" aria-pressed="' + (t === cur) + '">' + esc(F('t_' + t)) + '</a>'; }).join('') + '</div>';
+  }
+  /* ERP round 2 (S-31): PF, ESI, professional tax, LWF and TDS owed month by month from the salary slips in the accounts, less the
+     payments recorded with that month as their period (Other income and taxes › Pay tax), with the due date and a Pay button */
+  /* PF: Employees' Provident Funds Scheme, 2026 (G.S.R. 525(E), 29 Jun 2026) para 28(3) "within fifteen days of the close of every
+     month" (gazette text read 19 Nov 2026; damages para 23(1): 0.25% / 0.5% / 1% of arrears a month, at most the arrears; the
+     corrigendum G.S.R. 703(E) of 4 Aug 2026, gazette text read, changes only "less than" to "upto" in that table, nothing on the due date);
+     ESI: ESI (General) Regulations reg. 31, 15 days; TDS: Income-tax Rules 2026 rule 218(2) */
+  var DUE = { pf: 15, esi: 15, tds: 7 };
+  function dueOf(k, ym) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7); if (k === 'tds' && m === 3) return y + '-04-30'; if (!DUE[k]) return ''; var ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1; return ny + '-' + String(nm).padStart(2, '0') + '-' + String(DUE[k]).padStart(2, '0'); }
+  function statMonths() {
+    var by = {}, add = function (ym, k, v) { if (!v) return; var r = by[ym] = by[ym] || { ym: ym }; r[k] = r2((r[k] || 0) + v); };
+    slips().filter(function (d) { return d.acct && d.month; }).forEach(function (d) { var s = B.salSplit(d); add(d.month, 'pf', s.pf + s.erPf); add(d.month, 'esi', s.esi + s.erEsi); add(d.month, 'pt', s.pt); add(d.month, 'lwf', s.lwf + s.erLwf); add(d.month, 'tds', s.tds); });
+    A.mine().filter(function (d) { return d.type === 'taxpay' && d.period && /^(pf|esi|pt|lwf|tds)$/.test(d.kind) && !(d.kind === 'tds' && d.ch && !d.ch.sal); })   /* a TDS challan counts here only when it is for TDS on salary */.forEach(function (d) { add(d.period, 'paid_' + d.kind, num(d.tax)); });
+    var L = []; Object.keys(by).sort().reverse().forEach(function (ym) { ['pf', 'esi', 'pt', 'lwf', 'tds'].forEach(function (k) { var o = by[ym][k] || 0, p = by[ym]['paid_' + k] || 0; if (o || p) L.push({ ym: ym, k: k, owed: o, paid: p, left: r2(o - p), due: dueOf(k, ym) }); }); });
+    return L;
+  }
+  function statHtml() {
+    var L = statMonths().filter(function (x) { return Math.abs(x.left) > 0.5; }).slice(0, 36); if (!L.length) return '';
+    var t = today();
+    return '<div class="card"><h3>' + esc(NS.t('pw.stat')) + '</h3><div class="tbl-wrap"><table class="tbl sf-t"><thead><tr><th>' + esc(F('month')) + '</th><th>' + esc(NS.t('pw.statk')) + '</th><th class="n">' + esc(NS.t('pw.statowed')) + '</th><th class="n">' + esc(NS.t('pw.statpaid')) + '</th><th class="n">' + esc(NS.t('pw.statleft')) + '</th><th>' + esc(NS.t('pw.statdue')) + '</th><th></th></tr></thead><tbody>' +
+      L.map(function (x) { var late = x.due && t > x.due && x.left > 0; return '<tr' + (late ? ' class="pr-bad"' : '') + '><td>' + esc(month(x.ym)) + '</td><th scope="row">' + esc(NS.t('pw.k_' + x.k)) + '</th><td class="n">' + money(x.owed, false) + '</td><td class="n">' + money(x.paid, false) + '</td><td class="n"><b>' + money(x.left, false) + '</b></td><td>' + (x.due ? esc(A.ldate(x.due)) + (late ? ' <span class="pill warn">' + esc(NS.t('pw.statlate')) + '</span>' : '') : '<span class="soft">' + esc(NS.t('pw.statstate')) + '</span>') + '</td><td class="acts">' +
+        (x.left > 0 && A.acx && A.acx.forms ? '<button type="button" class="btn sm" data-sfstat="' + x.k + '|' + x.ym + '|' + x.left + '">' + esc(NS.t('pw.statpay')) + '</button>' : '') + '</td></tr>'; }).join('') +
+      '</tbody></table></div><p class="soft">' + esc(NS.t('pw.stath')) + '</p></div>';
   }
   function payables() {
     var acc = B.accounts(A.mine(), A.bizName());
@@ -155,7 +186,7 @@
   }
   function salHtml() {
     var L = slips().filter(A.match);
-    return '<p class="soft">' + esc(F('salh')) + '</p>' + payables() + A.searchBar() +
+    return '<p class="soft">' + esc(F('salh')) + '</p>' + payables() + statHtml() + A.searchBar() +
       (L.length ? '<div class="tbl-wrap"><table class="tbl sf-t"><thead><tr><th>' + esc(F('month')) + '</th><th>' + esc(F('emp')) + '</th><th class="n">' + esc(F('paiddays')) + '</th><th class="n">' + esc(F('gross')) + '</th><th class="n">' + esc(F('ded')) + '</th><th class="n">' + esc(F('net')) + '</th><th>' + esc(F('status')) + '</th><th></th></tr></thead><tbody>' +
         L.slice(0, 400).map(function (d) {
           var s = B.salSplit(d), st = !d.acct ? '<span class="pill">' + esc(F('notin')) + '</span>' : d.payDate ? '<span class="pill ok">' + esc(F('paidon', { d: A.ldate(d.payDate) })) + '</span>' : '<span class="pill warn">' + esc(F('unpaid')) + '</span>';
@@ -171,6 +202,7 @@
       var a = left[key(e.name)] || 0;
       return '<li><div class="ln"><span><b>' + esc(e.name) + '</b><span class="soft">' + [e.desig, e.code, e.left ? F('leftp', { d: A.ldate(e.left) }) : ''].filter(Boolean).map(function (x) { return ' · ' + esc(x); }).join('') + '</span></span>' +
         (a ? '<b class="amt">' + esc(F('owes', { a: money(a) })) + '</b>' : '') + '</div><div class="acts"><button type="button" class="btn sm" data-sfemp="' + esc(e.id) + '">' + esc(A.T('edit')) + '</button>' +
+        (!e.left && A.payrunFF ? '<button type="button" class="btn sm" data-sfff="' + esc(e.id) + '">' + esc(NS.t('pw.ff')) + '</button>' : '') +   /* ERP round 2: full and final (payrun.js) */
         '<button type="button" class="btn sm" data-sfadv="' + esc(e.name) + '">' + esc(F('advgive')) + '</button>' + (a > 0 ? '<button type="button" class="btn sm" data-sfback="' + esc(e.name) + '">' + esc(F('advback')) + '</button>' : '') +
         '<button type="button" class="btn sm danger" data-sfrm="' + esc(e.id) + '">' + esc(A.T('del')) + '</button></div></li>';
     }).join('') + '</ul>' : '<p class="soft">' + esc(F('noemps')) + '</p>');
@@ -196,7 +228,7 @@
           sc.map(function (x) {
             return '<tr' + (x.paid ? ' class="sf-paid"' : '') + '><td class="n">' + x.n + '</td><td data-l="' + esc(A.T('date')) + '">' + (x.date ? A.ldate(x.date) : '') + '</td><td class="n" data-l="' + esc(F('emi')) + '">' + money(x.emi, false) + '</td><td class="n" data-l="' + esc(F('interest')) + '">' + money(x.interest, false) + '</td>' +
               '<td class="n" data-l="' + esc(F('principal')) + '">' + money(x.principal, false) + '</td><td class="n" data-l="' + esc(F('bal')) + '">' + money(x.bal, false) + '</td><td class="acts">' +
-              (x.paid ? '<button type="button" class="btn sm" data-sfedit="' + esc(x.paid.id) + '">' + esc(F('paidno', { no: x.paid.no || '' })) + '</button>' : '<button type="button" class="btn sm" data-sfemi="' + esc(l.id) + '" data-n="' + x.n + '">' + esc(F('pay')) + '</button>') + '</td></tr>';
+              (x.paid ? '<button type="button" class="btn sm" data-sfedit="' + esc(x.paid.id) + '">' + esc(F('paidno', { no: x.paid.no || '' })) + '</button>' : '<button type="button" class="btn sm" data-sfemi="' + esc(l.id) + '" data-n="' + x.n + '">' + esc(F('payrow')) + '</button>') + '</td></tr>';
           }).join('') + '</tbody></table></div></details>' : '') + '</div>';
     }).join('') : '<p class="soft">' + esc(F('noloans')) + '</p>');
   }
@@ -212,6 +244,11 @@
     $$('[data-sfopen]', pane).forEach(function (a) { a.addEventListener('click', function (e) { if (A.openUrl && A.openUrl(a.href)) e.preventDefault(); }); });
     $$('[data-sfnew]', pane).forEach(function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-sfnew'); if (k === 'emp') empForm(); else if (k === 'loan') loanForm(); else advForm(null, k); }); });
     $$('[data-sfemp]', pane).forEach(function (b) { b.addEventListener('click', function () { var e = EMPS.filter(function (x) { return x.id === b.getAttribute('data-sfemp'); })[0]; if (e) empForm(e); }); });
+    $$('[data-sfstat]', pane).forEach(function (b) { b.addEventListener('click', function () {   /* the Pay tax form, filled for that month (a new record) */
+      var p = b.getAttribute('data-sfstat').split('|'), dt = today();
+      X.forms.taxpay({ type: 'taxpay', no: X.nextNo('taxpay', 'TX', dt), kind: p[0], date: dt, mode: 'bank', period: p[1], tax: +p[2], ch: p[0] === 'tds' ? { sal: true, minor: '200' } : undefined });
+    }); });
+    $$('[data-sfff]', pane).forEach(function (b) { b.addEventListener('click', function () { var e = EMPS.filter(function (x) { return x.id === b.getAttribute('data-sfff'); })[0]; if (e && A.payrunFF) A.payrunFF(e); }); });
     $$('[data-sfadv]', pane).forEach(function (b) { b.addEventListener('click', function () { advForm(null, 'give', b.getAttribute('data-sfadv')); }); });
     $$('[data-sfback]', pane).forEach(function (b) { b.addEventListener('click', function () { advForm(null, 'back', b.getAttribute('data-sfback')); }); });
     $$('[data-sfrm]', pane).forEach(function (b) { b.addEventListener('click', function () {
@@ -253,5 +290,5 @@
   }
   function start() { menu(); refresh(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
-  A.staff = { empForm: empForm, advForm: advForm, loanForm: loanForm, emiForm: emiForm };
+  A.staff = { empForm: empForm, advForm: advForm, loanForm: loanForm, emiForm: emiForm, refresh: refresh };
 })();

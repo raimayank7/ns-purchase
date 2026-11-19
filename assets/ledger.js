@@ -17,6 +17,7 @@
 
   /* ---------- shared bits ---------- */
   function presets(today) {
+    if (NS.periodPresets) return NS.periodPresets(today);   /* one list for every report (R-3) */
     var y = +today.slice(0, 4), m = +today.slice(5, 7), fs = A.fyStart(today), fy = +fs.slice(0, 4), qs = m >= 10 ? 10 : m >= 7 ? 7 : m >= 4 ? 4 : 1;
     return { month: [today.slice(0, 8) + '01', today], quarter: [y + '-' + String(qs).padStart(2, '0') + '-01', today], fy: [fs, today], lfy: [(fy - 1) + '-04-01', fy + '-03-31'] };
   }
@@ -31,6 +32,10 @@
     var s = $('[data-preset]', pane);
     if (s) s.addEventListener('change', function () { var p = presets(NS.today())[s.value]; if (p) { A.range(p[0], p[1]); A.show(); } });
   }
+  /* Tally's Particulars: "To Sales", "By Cash" (R-18); narration under it */
+  function oppText(d, acct) { return window.NSRep ? NSRep.opp(d, acct, function (a, dd) { return A.accName ? A.accName(a, dd) : a; }).text : ''; }
+  function narrOf(d) { return window.NSRep ? NSRep.narr(d) : ''; }
+  A.oppText = oppText; A.narrOf = narrOf;
   function enBal(v) { return money(Math.abs(v), false) + (v > 0.004 ? ' Dr' : v < -0.004 ? ' Cr' : ''); }
   function partyRec(k) { return A.data().party.filter(function (x) { return key(x.name) === k; })[0] || null; }
   function partyOf(k) {
@@ -100,14 +105,14 @@
     var line = p.bal > 0.004 ? T('theyowe', { p: p.name, a: money(p.bal) }) : p.bal < -0.004 ? T('weowe', { p: p.name, a: money(-p.bal) }) : T('settled', { p: p.name });
     var body = !shown ? '' : view === 'bills' ? billsSheet(k, p, r) : view === 'letter' ? letterSheets(k, p, r) : ledgerSheet(k, p, r, types);
     var names = partyNames(), ents = A.mine().filter(function (d) { return B.partiesOf(d)[k] && B.role(d) && (d.date || '') >= r[0] && (d.date || '') <= r[1]; }).sort(A.byDate);
-    return '<p><a href="#parties" class="link">' + esc(T('back')) + '</a></p>' +
+    return '<p><a href="#parties" class="link" data-back>' + esc(T('back')) + '</a></p>' +
       '<div class="tools-row lg-switch"><label><span>' + esc(T('lg_switch')) + '</span> <input type="search" list="lg-parties" data-pswitch placeholder="' + esc(T('lg_switchph')) + '" autocomplete="off" value=""></label>' +
         '<datalist id="lg-parties">' + names.map(function (x) { return '<option value="' + esc(x.name) + '" label="' + esc(enBal(x.bal)) + '"></option>'; }).join('') + '</datalist>' +
         '<button type="button" class="btn sm" data-pnext="-1" aria-label="' + esc(T('lg_prev')) + '">&lsaquo;</button><button type="button" class="btn sm" data-pnext="1" aria-label="' + esc(T('lg_next')) + '">&rsaquo;</button></div>' +
       '<div class="pane-hd"><h2>' + esc(p.name) + (g ? ' <small class="pill">' + esc(A.gname(g)) + '</small>' : '') + '</h2><div class="quick">' +
         (p.bal > 0.004 ? '<button type="button" class="btn wa" data-wa="' + esc(k) + '">' + esc(T('remind')) + '</button>' : '') +
         (p.bal > 0.004 && shareUrl(k) ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(shareUrl(k)) + '">' + esc(NS.t('sh.app.link')) + '</a>' : '') +
-        '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button>' + (view === 'items' ? '<button type="button" class="btn" data-lgixl>' + esc(T('lg_xl')) + '</button>' :
+        '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button>' + (A.bwBtns ? A.bwBtns(k, p) : '') + (view === 'items' ? '<button type="button" class="btn" data-lgixl>' + esc(T('lg_xl')) + '</button>' :
         '<button type="button" class="btn' + (shown ? '' : ' primary') + '" data-lgprev aria-pressed="' + shown + '">' + esc(T(shown ? 'lg_hideprev' : 'lg_prev_btn')) + '</button>' +
         '<button type="button" class="btn" data-lgprint>' + esc(T('print')) + '</button><button type="button" class="btn" data-lgpdf>' + esc(T('pdf')) + '</button>' +
         (view !== 'letter' ? '<button type="button" class="btn" data-lgxl>' + esc(T('lg_xl')) + '</button><button type="button" class="btn wa" data-lgwa>' + esc(T('lg_wa')) + '</button>' : '')) + '</div></div>' +
@@ -193,14 +198,16 @@
     var S = B.ledger(A.mine(), A.bizName(), k, r[0], r[1], vt);
     return '<div class="stsheet sh" dir="ltr" data-sheet>' + bizHead('PARTY LEDGER', '<br>' + esc(p.name) + addrLines(p.rec) + '<br>' + A.ldate(r[0]) + ' to ' + A.ldate(r[1]) +
         (vt && vt.length ? '<br><span class="soft">Only: ' + esc(vt.map(function (v) { return VTEN[v]; }).join(', ')) + '</span>' : '')) +
-      '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Voucher type</th><th>Voucher no.</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th></tr></thead><tbody>' +
-      '<tr class="lg-ob"><td>' + A.ldate(r[0]) + '</td><td colspan="2">Opening balance</td><td class="n"></td><td class="n"></td><td class="n">' + enBal(S.open) + '</td></tr>' +
+      '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Particulars</th><th>Voucher type</th><th>Voucher no.</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th><th class="noprint"></th></tr></thead><tbody>' +
+      '<tr class="lg-ob"><td>' + A.ldate(r[0]) + '</td><td colspan="3">Opening balance</td><td class="n"></td><td class="n"></td><td class="n">' + enBal(S.open) + '</td><td class="noprint"></td></tr>' +
       S.rows.map(function (x) {
-        return '<tr><td>' + A.ldate(x.date) + '</td><td>' + esc(A.enName(x.d)) + (x.d.ref ? ' <span class="soft">(' + esc(x.d.ref) + ')</span>' : '') + '</td><td>' + esc(x.d.no || x.d.billNo || '') + '</td>' +
-          '<td class="n">' + (x.dr ? money(x.dr, false) : '') + '</td><td class="n">' + (x.cr ? money(x.cr, false) : '') + '</td><td class="n">' + enBal(x.bal) + '</td></tr>'; }).join('') +
-      (S.rows.length ? '' : '<tr><td colspan="6" class="soft">No entries in this period.</td></tr>') +
-      '</tbody><tfoot><tr><th colspan="3">Total</th><th class="n">' + money(S.dr, false) + '</th><th class="n">' + money(S.cr, false) + '</th><th></th></tr>' +
-      '<tr><th colspan="3">Closing balance on ' + A.ldate(r[1]) + '</th><th class="n"></th><th class="n"></th><th class="n">' + enBal(S.close) + '</th></tr></tfoot></table>' +
+        var nr = narrOf(x.d);
+        return '<tr data-k="' + esc(x.d.id) + '"><td>' + A.ldate(x.date) + '</td><td>' + esc(oppText(x.d, 'p:' + k)) + (nr ? '<br><span class="soft lg-narr">' + esc(nr) + '</span>' : '') + '</td><td>' + esc(A.enName(x.d)) + (x.d.ref ? ' <span class="soft">(' + esc(x.d.ref) + ')</span>' : '') + '</td><td>' + esc(x.d.no || x.d.billNo || '') + '</td>' +
+          '<td class="n">' + (x.dr ? money(x.dr, false) : '') + '</td><td class="n">' + (x.cr ? money(x.cr, false) : '') + '</td><td class="n">' + enBal(x.bal) + '</td>' +
+          '<td class="noprint"><button type="button" class="btn sm ib" data-view="' + esc(x.d.id) + '" title="' + esc(T('open')) + '" aria-label="' + esc(T('open')) + '">' + NS.icSvg('eye') + '</button></td></tr>'; }).join('') +
+      (S.rows.length ? '' : '<tr><td colspan="8" class="soft">No entries in this period.</td></tr>') +
+      '</tbody><tfoot><tr><th colspan="4">Total</th><th class="n">' + money(S.dr, false) + '</th><th class="n">' + money(S.cr, false) + '</th><th></th><th class="noprint"></th></tr>' +
+      '<tr><th colspan="4">Closing balance on ' + A.ldate(r[1]) + '</th><th class="n"></th><th class="n"></th><th class="n">' + enBal(S.close) + '</th><th class="noprint"></th></tr></tfoot></table>' +
       '<p class="small">Dr = amount due to ' + esc(A.bizName()) + '; Cr = amount due from ' + esc(A.bizName()) + '.</p>' + NS.creditLine('st-ft') + '</div>';
   }
   var VTEN = { sales: 'Sales', receipts: 'Money received', notes: 'Credit and debit notes', purchases: 'Purchases', payments: 'Payments', journal: 'Journal', opening: 'Opening balance' };
@@ -215,11 +222,11 @@
             '<td class="lg-by">' + (b.by.length ? b.by.map(function (x) { return esc(x.type === 'paid' ? 'Paid on the bill' : A.enName(x) + ' ' + (x.no || '')) + (x.adv ? ' (advance)' : '') + ' <span class="soft">' + A.ldate(x.date) + '</span> ' + money(x.amt, false); }).join('<br>') : '—') + '</td>' +
             '<td class="n">' + (b.left > 0.004 ? '<b>' + money(b.left, false) + '</b>' : 'Paid') + '</td><td class="n">' + (b.left > 0.004 ? B.daysBetween(b.date, r[1]) : '') + '</td></tr>'; }).join('') +
         '</tbody><tfoot><tr><th colspan="2">Total</th><th class="n">' + money(L.reduce(function (a, b) { return a + b.total; }, 0), false) + '</th><th></th><th class="n">' + money(W.due[s], false) + '</th><th></th></tr></tfoot></table>' +
-        (W.advances[s] > 0.004 ? '<p>Advance not used yet: <b>' + money(W.advances[s]) + '</b></p>' : '');
+        (W.advances[s] > 0.004 ? '<p>' + (B.isStrict && B.isStrict(A.bizName()) ? 'On account (not set against a bill yet): ' : 'Advance not used yet: ') + '<b>' + money(W.advances[s]) + '</b></p>' : '');
     };
     return '<div class="stsheet sh" dir="ltr" data-sheet>' + bizHead('BILL-WISE DETAILS', '<br>' + esc(p.name) + addrLines(p.rec) + '<br>As on ' + A.ldate(r[1])) +
       (sides.length ? sides.map(tbl).join('') : '<p>No bills up to this date.</p>') +
-      '<p class="small">Money is set against the bills it names first, then against the oldest bill.</p>' + NS.creditLine('st-ft') + '</div>';
+      '<p class="small">' + (B.isStrict && B.isStrict(A.bizName()) ? 'Money is set only against the bills it names; the rest stays on account until it is adjusted.' : 'Money is set against the bills it names first, then against the oldest bill.') + '</p>' + NS.creditLine('st-ft') + '</div>';
   }
 
   /* the balance confirmation letter: auditors and CAs ask for it at year end */
@@ -250,8 +257,8 @@
   function excel(k, p, r) {
     var S = B.ledger(A.mine(), A.bizName(), k, r[0], r[1], types), W = B.billwise(A.mine(), A.bizName(), k, r[1]);
     var dc = function (v) { return v > 0.004 ? 'Dr' : v < -0.004 ? 'Cr' : ''; };
-    var led = [['Date', 'Voucher type', 'Voucher no.', 'Reference', 'Debit', 'Credit', 'Balance', 'Dr/Cr'], [r[0], 'Opening balance', '', '', '', '', Math.abs(S.open), dc(S.open)]]
-      .concat(S.rows.map(function (x) { return [x.date, A.enName(x.d), x.d.no || x.d.billNo || '', x.d.ref || '', x.dr || '', x.cr || '', Math.abs(x.bal), dc(x.bal)]; }))
+    var led = [['Date', 'Voucher type', 'Voucher no.', 'Reference', 'Debit', 'Credit', 'Balance', 'Dr/Cr', 'Particulars', 'Narration'], [r[0], 'Opening balance', '', '', '', '', Math.abs(S.open), dc(S.open)]]
+      .concat(S.rows.map(function (x) { return [x.date, A.enName(x.d), x.d.no || x.d.billNo || '', x.d.ref || '', x.dr || '', x.cr || '', Math.abs(x.bal), dc(x.bal), oppText(x.d, 'p:' + k), narrOf(x.d)]; }))
       .concat([['', 'Total', '', '', S.dr, S.cr, '', ''], [r[1], 'Closing balance', '', '', '', '', Math.abs(S.close), dc(S.close)]]);
     var bw = [['Side', 'Bill date', 'Bill', 'Bill no.', 'Due date', 'Amount', 'Settled', 'Still due', 'Settled by']].concat(W.bills.map(function (b) {
       return [b.side === 'pay' ? 'To pay' : 'To receive', b.date, A.enName(b), b.no, b.due, b.total, NS.r2(b.total - b.left), b.left, b.by.map(function (x) { return (x.type === 'paid' ? 'Paid on the bill' : A.enName(x) + ' ' + (x.no || '')) + ' ' + x.date + ' ' + x.amt; }).join('; ')];
@@ -330,7 +337,7 @@
      Print, PDF, Excel. Printed column names stay in English like every printed report. ---------- */
   var dcAs = '', dcMin = '', dcSort = 'bal';
   function dcRows(side) {
-    var as = dcAs || NS.today(), D = A.mine().filter(function (d) { return (d.date || '') <= as; }), biz = A.bizName(), P = B.parties(D, biz);
+    var as = dcAs || A.range()[1], D = A.mine().filter(function (d) { return (d.date || '') <= as; }), biz = A.bizName(), P = B.parties(D, biz);
     var byP = {};
     dueBills(D, biz).forEach(function (b) { if (b.left > 0.004 && b.side === side) (byP[key(b.party)] = byP[key(b.party)] || []).push(b); });
     var rows = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return (side === 'recv' ? p.bal > 0.004 : p.bal < -0.004) && A.grpKeep(p.key, P); }).map(function (p) {
@@ -345,7 +352,7 @@
   function dcHtml(side) {
     var R = dcRows(side), deb = side === 'recv', title = T(deb ? 'dc_deb' : 'dc_cred');
     var hd = '<div class="pane-hd"><h2>' + esc(title) + '</h2></div>' +
-      '<div class="lg-bar"><label><span>' + esc(T('dc_as')) + '</span> <input type="date" data-dcas value="' + R.as + '"></label>' + A.grpSel() +
+      '<div class="lg-bar"><label><span>' + esc(T('dc_as')) + '</span> <input type="date" data-dcas value="' + R.as + '"></label><a class="btn sm" href="#os/' + side + '">' + esc(NS.t('rp.os_link')) + ' ›</a>' + A.grpSel() +
       '<label><span>' + esc(T('dc_min')) + '</span> <input type="number" min="0" step="1" data-dcmin value="' + esc(dcMin) + '" style="width:120px"></label>' +
       '<label><span>' + esc(T('dc_sort')) + '</span> <select data-dcsort>' + [['bal', 'dc_s_bal'], ['age', 'dc_s_age'], ['name', 'dc_s_name']].map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === dcSort ? ' selected' : '') + '>' + esc(T(x[1])) + '</option>'; }).join('') + '</select></label></div>' +
       '<p class="soft">' + esc(T(deb ? 'dc_h_deb' : 'dc_h_cred')) + '</p>' +
@@ -363,7 +370,7 @@
       var a = $('[data-dcas]', pane); if (a) a.addEventListener('change', function () { dcAs = a.value; A.show(); });
       var m = $('[data-dcmin]', pane); if (m) m.addEventListener('change', function () { dcMin = m.value; A.show(); });
       var s = $('[data-dcsort]', pane); if (s) s.addEventListener('change', function () { dcSort = s.value; A.show(); });
-      var pb = $('[data-dcpdf]', pane); if (pb) pb.addEventListener('click', function () { pdf(pane, (side === 'recv' ? 'Debtors' : 'Creditors') + ' ' + (dcAs || NS.today()), T(side === 'recv' ? 'dc_deb' : 'dc_cred')); });
+      var pb = $('[data-dcpdf]', pane); if (pb) pb.addEventListener('click', function () { pdf(pane, (side === 'recv' ? 'Debtors' : 'Creditors') + ' ' + (dcAs || A.range()[1]), T(side === 'recv' ? 'dc_deb' : 'dc_cred')); });
       var xb = $('[data-dcxl]', pane); if (xb) xb.addEventListener('click', function () {
         var R = dcRows(side), deb = side === 'recv', rows = [[deb ? 'Sundry Debtors' : 'Sundry Creditors', 'As on ' + R.as], ['#', 'Party', 'Phone', 'GSTIN', 'City', 'Balance', 'Oldest bill', 'Days overdue', deb ? 'Credit limit' : 'MSME']];
         R.rows.forEach(function (r, i) { rows.push([i + 1, r.name, r.phone, r.gstin, r.city, Math.round(r.amt * 100) / 100, r.old, r.days || '', deb ? (r.limit || '') : r.msme]); });
@@ -382,8 +389,36 @@
   function monthName(ym) { var p = ym.split('-'); return new Date(+p[0], +p[1] - 1, 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' }); }
 
   /* ---------- Sales summary and Purchase summary: by month, party, item or HSN; a month opens its days, a day opens its bills ---------- */
-  var smBy = { sale: 'month', buy: 'month' };
-  function smDocs(side) { var r = A.range(); return A.mine().filter(function (d) { var R = B.role(d); return (side === 'sale' ? /^(sale|sret)$/.test(R) : /^(buy|pret|exp)$/.test(R)) && (d.date || '') >= r[0] && (d.date || '') <= r[1]; }); }
+  var smBy = (function () { var o = { sale: 'month', buy: 'month' }; try { Object.assign(o, JSON.parse(localStorage.getItem('ns-rep-smby') || '{}')); } catch (e) {} return o; })(), smCol =   /* ERP C-13: remembered */ (function () { try { return localStorage.getItem('ns-rep-col') === '1'; } catch (e) { return false; } })();
+  /* the register: one row per bill with the GST split; columnar = taxable value per GST rate too (Tally's columnar register) */
+  function regData(docs) { var rows = docs.slice().sort(A.byDate).reverse().map(function (d) { return NSRep.regRow(d, A.amountOf); }); rows.sort(function (a, b) { return a.date.localeCompare(b.date) || String(a.no).localeCompare(String(b.no)); }); return { rows: rows, T: NSRep.regTotals(rows), rates: smCol ? NSRep.rateCols(rows) : [] }; }
+  /* custom fields in the registers (ERP Round 2, B-1): filter row, extra columns, group by a field (cfields.js) */
+  var CFT = { sale: ['vt:invoice', 'vt:cashmemo', 'vt:note', 'vt:expinv'], buy: ['vt:pbill', 'vt:self', 'vt:note'], vreg: ['vt:receipt', 'vt:voucher', 'vt:exp', 'vt:contra', 'vt:jv', 'vt:note'] };
+  function cfCols(docs) { return window.NSCF ? NSCF.colsOf(docs) : []; }
+  function cfBar(scope, t) { return window.NSCF ? NSCF.filterBar(scope, t) : ''; }
+  function cfOk(d, scope) { return !window.NSCF || NSCF.pass(d, scope); }
+  function cfByOpts(side) { return window.NSCF ? NSCF.groupDefs(CFT[side === 'sale' ? 'sale' : 'buy']).map(function (f) { return '<option value="cf:' + esc(f.id) + '"' + (smBy[side] === 'cf:' + f.id ? ' selected' : '') + '>' + esc(T('cr_by') + ' ' + f.label) + '</option>'; }).join('') : ''; }
+  function regTable(side, docs) {
+    if (!window.NSRep) return A.rowsHtml(docs, { left: A.leftMap(A.mine()) });
+    var X = regData(docs), m = function (v) { return v ? money(v, false) : ''; }, pos = function (c) { return NS.stateName && NS.stateName(c) || c || ''; }, CC = cfCols(docs);
+    if (!X.rows.length) return '<p class="soft">' + esc(T('none')) + '</p>';
+    return '<table class="tbl st lg-tbl reg-tbl"><thead><tr><th>Date</th><th>No.</th><th>' + (side === 'sale' ? 'Customer' : 'Supplier') + '</th><th>GSTIN</th><th>Place of supply</th>' + (CC.length ? NSCF.colHead(CC) : '') +
+      X.rates.map(function (g) { return '<th class="n">Taxable ' + g + '%</th>'; }).join('') + '<th class="n">Taxable value</th><th class="n">CGST</th><th class="n">SGST</th><th class="n">IGST</th><th class="n">TCS</th><th class="n">Round off</th><th class="n">Total</th><th class="noprint"></th></tr></thead><tbody>' +
+      X.rows.map(function (r) {
+        return '<tr data-k="' + esc(r.id) + '"><td>' + esc(A.ldate(r.date)) + '</td><td>' + esc(A.enName(r.d) + ' ' + r.no) + '</td><td>' + esc(r.party) + '</td><td class="mono">' + esc(r.gstin) + '</td><td>' + esc(pos(r.pos)) + '</td>' + (CC.length ? NSCF.colCells(CC, r.d) : '') +
+          X.rates.map(function (g) { return '<td class="n">' + m(r.rates[g]) + '</td>'; }).join('') +
+          '<td class="n">' + money(r.taxable, false) + '</td><td class="n">' + m(r.cgst) + '</td><td class="n">' + m(r.sgst) + '</td><td class="n">' + m(r.igst) + '</td><td class="n">' + m(r.tcs) + '</td><td class="n">' + m(r.round) + '</td><td class="n"><b>' + money(r.total, false) + '</b></td>' +
+          '<td class="noprint"><button type="button" class="btn sm ib" data-view="' + esc(r.id) + '" title="' + esc(T('open')) + '" aria-label="' + esc(T('open')) + '">' + NS.icSvg('eye') + '</button></td></tr>';
+      }).join('') + '</tbody><tfoot><tr><th colspan="' + (5 + CC.length) + '">Total (' + X.rows.length + ')</th>' + X.rates.map(function (g) { return '<th class="n">' + money(X.T.rates[g] || 0, false) + '</th>'; }).join('') +
+      ['taxable', 'cgst', 'sgst', 'igst', 'tcs', 'round', 'total'].map(function (k) { return '<th class="n">' + money(X.T[k], false) + '</th>'; }).join('') + '<th class="noprint"></th></tr></tfoot></table>';
+  }
+  function regXl(side, docs, title) {
+    var X = regData(docs), CC = cfCols(docs), rows = [[title, A.range()[0] + ' to ' + A.range()[1]], ['Date', 'Voucher', 'No.', side === 'sale' ? 'Customer' : 'Supplier', 'GSTIN', 'Place of supply'].concat(CC.map(function (f) { return f.label; }), X.rates.map(function (g) { return 'Taxable ' + g + '%'; }), ['Taxable value', 'CGST', 'SGST', 'IGST', 'TCS', 'Round off', 'Total'])];
+    X.rows.forEach(function (r) { rows.push([r.date, A.enName(r.d), r.no, r.party, r.gstin, NS.stateName && NS.stateName(r.pos) || r.pos].concat(CC.length ? NSCF.colVals(CC, r.d) : [], X.rates.map(function (g) { return r.rates[g] || ''; }), [r.taxable, r.cgst, r.sgst, r.igst, r.tcs, r.round, r.total])); });
+    rows.push(['Total', '', '', '', '', ''].concat(CC.map(function () { return ''; }), X.rates.map(function (g) { return X.T.rates[g] || 0; }), [X.T.taxable, X.T.cgst, X.T.sgst, X.T.igst, X.T.tcs, X.T.round, X.T.total]));
+    NS.xlsx(fileName(A.bizName()) + (side === 'sale' ? '-sales-register-' : '-purchase-register-') + A.range()[1] + '.xlsx', [{ name: 'Register', rows: rows }]);
+  }
+  function smDocs(side) { var r = A.range(); return A.mine().filter(function (d) { var R = B.role(d); return (side === 'sale' ? /^(sale|sret)$/.test(R) : /^(buy|pret)$/.test(R) || R === 'exp' && (d.items || []).length && d.type !== 'exp') && (d.date || '') >= r[0] && (d.date || '') <= r[1] && cfOk(d, 'reg'); }); }
   function smVal(d) {
     var R = B.role(d), sg = /ret$/.test(R) ? -1 : 1, tot = num(A.amountOf(d)), t = d.items && d.items.length ? B.itemTotals(d) : null, g = t ? t.cgst + t.sgst + t.igst : 0;
     return { tx: sg * (t ? t.taxable : tot - g), gst: sg * g, tot: sg * tot };
@@ -394,29 +429,36 @@
     return Object.keys(o).map(function (k) { return o[k]; });
   }
   function smRows(side, arg) {
+    try { Object.assign(smBy, JSON.parse(localStorage.getItem('ns-rep-smby') || '{}')); } catch (e) {}   /* C-13: the choice may arrive from the data home after this file loaded */
     var D = smDocs(side), by = smBy[side];
     var flat = D.map(function (d) { var v = smVal(d); return { d: d, date: d.date || '', party: B.partyName(d) || (d.cat ? (A.catName ? A.catName(d.cat) : String(d.cat)) : ''), tx: v.tx, gst: v.gst, tot: v.tot }; });
     if (/^\d{4}-\d{2}$/.test(arg)) return { lvl: 'day', rows: smAgg(flat.filter(function (x) { return x.date.slice(0, 7) === arg; }), function (x) { return x.date; }).sort(function (a, b) { return a.k.localeCompare(b.k); }) };
     if (/^\d{4}-\d{2}-\d{2}$/.test(arg)) return { lvl: 'bill', docs: D.filter(function (d) { return d.date === arg; }) };
+    if (/^\d{4}-\d{2}\/reg$/.test(arg)) return { lvl: 'bill', docs: D.filter(function (d) { return (d.date || '').slice(0, 7) === arg.slice(0, 7); }) };
+    if (by === 'reg') return { lvl: 'bill', docs: D };
     if (by === 'month') return { lvl: 'month', rows: smAgg(flat, function (x) { return x.date.slice(0, 7); }).sort(function (a, b) { return a.k.localeCompare(b.k); }) };
+    var cfd = /^cf:/.test(by) && window.NSCF && NSCF.get(by.slice(3)), cfv = function (x) { return cfd ? NSCF.fmt(cfd, x.d.cf && x.d.cf[cfd.id]) || '—' : ''; };
+    if (cfd) return { lvl: 'cf', first: cfd.label, rows: smAgg(flat, function (x) { return key(cfv(x)); }, cfv).sort(function (a, b) { return b.tot - a.tot; }) };   /* sales by a custom field, e.g. by Site (ERP Round 2) */
     if (by === 'party') return { lvl: 'party', rows: smAgg(flat, function (x) { return key(x.party || 'Cash'); }, function (x) { return x.party || 'Cash'; }).sort(function (a, b) { return b.tot - a.tot; }) };
     var lines = [];
-    D.forEach(function (d) { var R = B.role(d), sg = /ret$/.test(R) ? -1 : 1; (d.items || []).forEach(function (it) { var a = lineAmt(it), g = a * num(it.gst) / 100; lines.push({ name: String(it.desc || '').trim(), hsn: String(it.hsn || '').trim() || '(no HSN)', n: 0, tx: sg * a, gst: sg * g, tot: sg * (a + g), qty: sg * num(it.qty || 0), unit: it.unit || '' }); }); });
-    if (by === 'hsn') return { lvl: 'hsn', rows: smAgg(lines, function (x) { return x.hsn; }).sort(function (a, b) { return b.tx - a.tx; }) };
+    D.forEach(function (d) { var R = B.role(d), sg = /ret$/.test(R) ? -1 : 1; (d.items || []).forEach(function (it) { var a = lineAmt(it), g = a * num(it.gst) / 100; lines.push({ id: d.id, name: String(it.desc || '').trim(), hsn: String(it.hsn || '').trim() || '(no HSN)', n: 0, tx: sg * a, gst: sg * g, tot: sg * (a + g), qty: sg * num(it.qty || 0), unit: it.unit || '' }); }); });
+    function bills(rows, kf) { var s = {}; lines.forEach(function (x) { var k = kf(x); (s[k] = s[k] || {})[x.id] = 1; }); rows.forEach(function (r) { r.n = Object.keys(s[r.kk != null ? r.kk : r.k] || {}).length; }); return rows; }   /* F2-7 */
+    if (by === 'hsn') return { lvl: 'hsn', rows: bills(smAgg(lines, function (x) { return x.hsn; }), function (x) { return x.hsn; }).sort(function (a, b) { return b.tx - a.tx; }) };
     var o = {}; lines.forEach(function (x) { if (!x.name) return; var r = o[key(x.name)] || (o[key(x.name)] = { k: x.name, label: x.name, n: 0, qty: 0, unit: x.unit, tx: 0, gst: 0, tot: 0 }); r.qty += x.qty; r.tx += x.tx; r.gst += x.gst; r.tot += x.tot; });
-    return { lvl: 'item', rows: Object.keys(o).map(function (k) { return o[k]; }).sort(function (a, b) { return b.tx - a.tx; }) };
+    return { lvl: 'item', rows: bills(Object.keys(o).map(function (k) { o[k].kk = k; return o[k]; }), function (x) { return key(x.name); }).sort(function (a, b) { return b.tx - a.tx; }) };
   }
   function smHtml(side, arg) {
     var sec = side === 'sale' ? 'ssum' : 'psum', R = smRows(side, arg || ''), title = T(side === 'sale' ? 'cr_ssum' : 'cr_psum');
-    var crumbs = arg ? '<p class="cr-drill"><a href="#' + sec + '">' + esc(T('cr_allm')) + '</a>' + (arg.length === 10 ? ' › <a href="#' + sec + '/' + arg.slice(0, 7) + '">' + esc(monthName(arg.slice(0, 7))) + '</a> › <b>' + esc(A.ldate(arg)) + '</b>' : ' › <b>' + esc(monthName(arg)) + '</b>') + '</p>' : '';
-    var bar = '<div class="lg-bar">' + (arg ? '' : '<label><span>' + esc(T('cr_by')) + '</span> <select data-smby>' + ['month', 'party', 'item', 'hsn'].map(function (x) { return '<option value="' + x + '"' + (smBy[side] === x ? ' selected' : '') + '>' + esc(T('cr_by_' + x)) + '</option>'; }).join('') + '</select></label>') + period() + '</div>';
+    var crumbs = arg ? '<p class="cr-drill"><a href="#' + sec + '">' + esc(T('cr_allm')) + '</a>' + (arg.length === 10 ? ' › <a href="#' + sec + '/' + arg.slice(0, 7) + '">' + esc(monthName(arg.slice(0, 7))) + '</a> › <b>' + esc(A.ldate(arg)) + '</b>' : ' › <b>' + esc(monthName(arg.slice(0, 7))) + '</b>' + (/\/reg$/.test(arg) ? '' : ' · <a href="#' + sec + '/' + arg + '/reg">' + esc(NS.t('rp.regmonth')) + ' ›</a>')) + '</p>' : '';
+    var bar = '<div class="lg-bar">' + (arg ? '' : '<label><span>' + esc(T('cr_by')) + '</span> <select data-smby>' + ['month', 'party', 'item', 'hsn', 'reg'].map(function (x) { return '<option value="' + x + '"' + (smBy[side] === x ? ' selected' : '') + '>' + esc(x === 'reg' ? NS.t('rp.reg') : T('cr_by_' + x)) + '</option>'; }).join('') + cfByOpts(side) + '</select></label>') + period() + '</div>' + cfBar('reg', CFT[side === 'sale' ? 'sale' : 'buy']);
     var hd = '<div class="pane-hd"><h2>' + esc(title) + '</h2></div>' + crumbs + bar + '<p class="soft">' + esc(T('cr_h_sum')) + '</p>' + acts('sm');
-    if (R.lvl === 'bill') return hd + (R.docs.length ? A.rowsHtml(R.docs, { left: A.leftMap(A.mine()) }) : '<p class="soft">' + esc(T('none')) + '</p>');
-    var first = { month: 'Month', day: 'Date', party: 'Party', item: 'Item', hsn: 'HSN / SAC' }[R.lvl], tt = { n: 0, tx: 0, gst: 0, tot: 0 };
+    if (R.lvl === 'bill') return hd + '<label class="chk no-print"><input type="checkbox" data-smcol' + (smCol ? ' checked' : '') + '> ' + esc(NS.t('rp.colh')) + '</label>' +
+      sheet(side === 'sale' ? 'Sales register' : 'Purchase register', rng() + (arg ? '<br>' + esc(arg.length === 10 ? A.ldate(arg) : monthName(arg.slice(0, 7))) : ''), regTable(side, R.docs));
+    var first = R.first || { month: 'Month', day: 'Date', party: 'Party', item: 'Item', hsn: 'HSN / SAC' }[R.lvl], tt = { n: 0, tx: 0, gst: 0, tot: 0 };
     var body = R.rows.length ? '<table class="tbl st lg-tbl sm-tbl"><thead><tr><th>' + first + '</th>' + (R.lvl === 'item' ? '<th class="n">Quantity</th>' : '<th class="n">Bills</th>') + '<th class="n">Taxable value</th><th class="n">GST</th><th class="n">Total</th></tr></thead><tbody>' +
       R.rows.map(function (r) {
         tt.n += r.n || 0; tt.tx += r.tx; tt.gst += r.gst; tt.tot += r.tot;
-        var lab = R.lvl === 'month' ? '<a href="#' + sec + '/' + r.k + '">' + esc(monthName(r.k)) + '</a>' : R.lvl === 'day' ? '<a href="#' + sec + '/' + r.k + '">' + esc(A.ldate(r.k)) + '</a>' : R.lvl === 'party' && r.label !== 'Cash' ? '<a href="#st/' + encodeURIComponent(key(r.label)) + '">' + esc(r.label) + '</a>' : esc(r.label);
+        var lab = R.lvl === 'month' ? '<a href="#' + sec + '/' + r.k + '">' + esc(monthName(r.k)) + '</a> <a class="soft no-print" href="#' + sec + '/' + r.k + '/reg">' + esc(NS.t('rp.regshort')) + '</a>' : R.lvl === 'day' ? '<a href="#' + sec + '/' + r.k + '">' + esc(A.ldate(r.k)) + '</a>' : R.lvl === 'party' && r.label !== 'Cash' ? '<a href="#st/' + encodeURIComponent(key(r.label)) + '">' + esc(r.label) + '</a>' : esc(r.label);
         return '<tr><td>' + lab + '</td><td class="n">' + (R.lvl === 'item' ? esc(String(m2(r.qty))) + (r.unit ? ' ' + esc(r.unit) : '') : r.n) + '</td><td class="n">' + money(r.tx, false) + '</td><td class="n">' + money(r.gst, false) + '</td><td class="n"><b>' + money(r.tot, false) + '</b></td></tr>';
       }).join('') + '</tbody><tfoot><tr><th>Total</th><th class="n">' + (R.lvl === 'item' ? '' : tt.n) + '</th><th class="n">' + money(tt.tx, false) + '</th><th class="n">' + money(tt.gst, false) + '</th><th class="n">' + money(tt.tot, false) + '</th></tr></tfoot></table>'
       : '<p class="soft">' + esc(T('none')) + '</p>';
@@ -425,11 +467,12 @@
   function smWire(side) {
     return function (pane, arg) {
       wirePeriod(pane);
-      var s = $('[data-smby]', pane); if (s) s.addEventListener('change', function () { smBy[side] = s.value; A.show(); });
+      var s = $('[data-smby]', pane); if (s) s.addEventListener('change', function () { smBy[side] = s.value; try { localStorage.setItem('ns-rep-smby', JSON.stringify(smBy)); } catch (e) {} A.show(); });
+      var cc = $('[data-smcol]', pane); if (cc) cc.addEventListener('change', function () { smCol = cc.checked; try { localStorage.setItem('ns-rep-col', smCol ? '1' : '0'); } catch (e) {} A.show(); });
       var pb = $('[data-smpdf]', pane); if (pb) pb.addEventListener('click', function () { pdf(pane, (side === 'sale' ? 'Sales summary ' : 'Purchase summary ') + A.range()[1], T(side === 'sale' ? 'cr_ssum' : 'cr_psum')); });
       var xb = $('[data-smxl]', pane); if (xb) xb.addEventListener('click', function () {
-        var R = smRows(side, arg || ''); if (R.lvl === 'bill') return;
-        var rows = [[(side === 'sale' ? 'Sales' : 'Purchase') + ' summary', A.range()[0] + ' to ' + A.range()[1]], [R.lvl, R.lvl === 'item' ? 'Quantity' : 'Bills', 'Taxable value', 'GST', 'Total']];
+        var R = smRows(side, arg || ''); if (R.lvl === 'bill') { if (window.NSRep) regXl(side, R.docs, side === 'sale' ? 'Sales register' : 'Purchase register'); return; }
+        var rows = [[(side === 'sale' ? 'Sales' : 'Purchase') + ' summary', A.range()[0] + ' to ' + A.range()[1]], [R.first || R.lvl, R.lvl === 'item' ? 'Quantity' : 'Bills', 'Taxable value', 'GST', 'Total']];
         R.rows.forEach(function (r) { rows.push([R.lvl === 'month' ? monthName(r.k) : r.label, R.lvl === 'item' ? m2(r.qty) : r.n, m2(r.tx), m2(r.gst), m2(r.tot)]); });
         NS.xlsx(fileName(A.bizName()) + (side === 'sale' ? '-sales-summary-' : '-purchase-summary-') + A.range()[1] + '.xlsx', [{ name: 'Summary', rows: rows }]);
       });
@@ -444,22 +487,22 @@
     journal: function (d) { return B.role(d) === 'jv'; }, contra: function (d) { return d.type === 'contra'; },
     cnote: function (d) { return d.type === 'note' && d.kind !== 'debit'; }, dnote: function (d) { return d.type === 'note' && d.kind === 'debit'; } };
   var VRN = { receipt: 'Receipt register', payment: 'Payment register', journal: 'Journal register', contra: 'Contra register', cnote: 'Credit note register', dnote: 'Debit note register' };
-  function vrList() { var r = A.range(); return A.mine().filter(function (d) { return (d.date || '') >= r[0] && (d.date || '') <= r[1] && VRT[vrT](d) && (!vrMode || d.mode === vrMode); }).sort(function (a, b) { return (a.date || '').localeCompare(b.date || '') || String(a.no || '').localeCompare(String(b.no || '')); }); }
+  function vrList() { var r = A.range(); return A.mine().filter(function (d) { return (d.date || '') >= r[0] && (d.date || '') <= r[1] && VRT[vrT](d) && (!vrMode || d.mode === vrMode) && cfOk(d, 'vreg'); }).sort(function (a, b) { return (a.date || '').localeCompare(b.date || '') || String(a.no || '').localeCompare(String(b.no || '')); }); }
   A.addSection('vreg', function () {
-    var L = vrList(), tot = 0, modes = { cash: 'Cash', upi: 'UPI', bank: 'Bank', cheque: 'Cheque', card: 'Card' };
+    var L = vrList(), CC = cfCols(L), tot = 0, modes = { cash: 'Cash', upi: 'UPI', bank: 'Bank', cheque: 'Cheque', card: 'Card' };
     var bar = '<div class="lg-bar"><label><span>' + esc(T('cr_vtype')) + '</span> <select data-vrt>' + Object.keys(VRT).map(function (k) { return '<option value="' + k + '"' + (k === vrT ? ' selected' : '') + '>' + esc(T('cr_vt_' + k)) + '</option>'; }).join('') + '</select></label>' +
-      '<label><span>' + esc(T('cr_mode')) + '</span> <select data-vrm><option value="">' + esc(T('all')) + '</option>' + Object.keys(modes).map(function (k) { return '<option value="' + k + '"' + (k === vrMode ? ' selected' : '') + '>' + modes[k] + '</option>'; }).join('') + '</select></label>' + period() + '</div>';
-    var body = L.length ? '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Voucher</th><th>Party / account</th><th>Mode</th><th class="n">Amount</th><th class="noprint"></th></tr></thead><tbody>' + L.map(function (d) {
-      var a = num(A.amountOf(d)); tot += a;
-      return '<tr><td>' + esc(A.ldate(d.date)) + '</td><td>' + esc(A.docName(d) + ' ' + (d.no || '')) + '</td><td>' + esc(B.partyName(d) || d.cat || (d.type === 'contra' ? (d.from === 'bank' ? 'Bank to cash' : 'Cash to bank') : '')) + '</td><td>' + esc(modes[d.mode] || d.mode || '') + '</td><td class="n">' + money(a, false) + '</td><td class="noprint"><button type="button" class="btn sm ib" data-view="' + d.id + '" title="' + esc(T('open')) + '" aria-label="' + esc(T('open')) + '">' + NS.icSvg('eye') + '</button></td></tr>';
-    }).join('') + '</tbody><tfoot><tr><th colspan="4">Total (' + L.length + ')</th><th class="n">' + money(tot, false) + '</th><th class="noprint"></th></tr></tfoot></table>' : '<p class="soft">' + esc(T('none')) + '</p>';
+      '<label><span>' + esc(T('cr_mode')) + '</span> <select data-vrm><option value="">' + esc(T('all')) + '</option>' + Object.keys(modes).map(function (k) { return '<option value="' + k + '"' + (k === vrMode ? ' selected' : '') + '>' + modes[k] + '</option>'; }).join('') + '</select></label>' + period() + '</div>' + cfBar('vreg', CFT.vreg);
+    var body = L.length ? '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Voucher</th><th>Party / account</th><th>Mode</th>' + (CC.length ? NSCF.colHead(CC) : '') + '<th class="n">Amount</th><th class="noprint"></th></tr></thead><tbody>' + L.map(function (d) {
+      var a = d.type === 'oinc' ? num(d.amount) : num(A.amountOf(d)); tot += a;   /* other income: the money received, TDS apart (F2-9) */
+      return '<tr><td>' + esc(A.ldate(d.date)) + '</td><td>' + esc(A.docName(d) + ' ' + (d.no || '')) + '</td><td>' + esc(B.partyName(d) || d.payer || d.cat || (d.type === 'contra' ? ({ wd: 'Bank to cash', dep: 'Cash to bank', xfer: 'Bank to bank' })[B.contraKind(d)] : '')) + '</td><td>' + esc(modes[d.mode] || d.mode || '') + '</td>' + (CC.length ? NSCF.colCells(CC, d) : '') + '<td class="n">' + money(a, false) + '</td><td class="noprint"><button type="button" class="btn sm ib" data-view="' + d.id + '" title="' + esc(T('open')) + '" aria-label="' + esc(T('open')) + '">' + NS.icSvg('eye') + '</button></td></tr>';
+    }).join('') + '</tbody><tfoot><tr><th colspan="' + (4 + CC.length) + '">Total (' + L.length + ')</th><th class="n">' + money(tot, false) + '</th><th class="noprint"></th></tr></tfoot></table>' : '<p class="soft">' + esc(T('none')) + '</p>';
     return '<div class="pane-hd"><h2>' + esc(T('cr_vreg')) + '</h2></div>' + bar + acts('vr') + sheet(VRN[vrT], rng(), body);
   }, function (pane) {
     wirePeriod(pane);
     var t = $('[data-vrt]', pane); if (t) t.addEventListener('change', function () { vrT = t.value; A.show(); });
     var m = $('[data-vrm]', pane); if (m) m.addEventListener('change', function () { vrMode = m.value; A.show(); });
     var pb = $('[data-vrpdf]', pane); if (pb) pb.addEventListener('click', function () { pdf(pane, VRN[vrT] + ' ' + A.range()[1], VRN[vrT]); });
-    var xb = $('[data-vrxl]', pane); if (xb) xb.addEventListener('click', function () { var rows = [[VRN[vrT], A.range()[0] + ' to ' + A.range()[1]], ['Date', 'Voucher', 'Party / account', 'Mode', 'Amount']]; vrList().forEach(function (d) { rows.push([d.date, A.docName(d) + ' ' + (d.no || ''), B.partyName(d) || d.cat || '', d.mode || '', m2(num(A.amountOf(d)))]); }); NS.xlsx(fileName(A.bizName()) + '-' + vrT + '-register-' + A.range()[1] + '.xlsx', [{ name: 'Register', rows: rows }]); });
+    var xb = $('[data-vrxl]', pane); if (xb) xb.addEventListener('click', function () { var VL = vrList(), CC = cfCols(VL), rows = [[VRN[vrT], A.range()[0] + ' to ' + A.range()[1]], ['Date', 'Voucher', 'Party / account', 'Mode'].concat(CC.map(function (f) { return f.label; }), ['Amount'])]; VL.forEach(function (d) { rows.push([d.date, A.docName(d) + ' ' + (d.no || ''), B.partyName(d) || d.cat || '', d.mode || ''].concat(CC.length ? NSCF.colVals(CC, d) : [], [m2(num(A.amountOf(d)))])); }); NS.xlsx(fileName(A.bizName()) + '-' + vrT + '-register-' + A.range()[1] + '.xlsx', [{ name: 'Register', rows: rows }]); });
   });
 
   /* ---------- Cash and bank summary: opening, money in, money out and closing for each month ---------- */
@@ -470,21 +513,22 @@
   }
   function cbData() {
     var D = A.mine(), biz = A.bizName();
-    return ['cash', 'bank'].map(function (acct) {
+    var BL = A.banks ? A.banks() : [{ k: 'bank' }];   /* every bank account its own table (several banks) */
+    return ['cash'].concat(BL.map(function (x) { return x.k; })).map(function (acct) {
       return { acct: acct, rows: cbMonths().map(function (mm) { var b = B.book(D, biz, acct, mm[1], mm[2]), i = 0, o = 0; b.rows.forEach(function (x) { i += x.dr; o += x.cr; }); return { m: mm[0], open: b.open, inn: i, out: o, close: b.close }; }) };
     });
   }
   A.addSection('cbsum', function () {
     var bal = function (v) { return money(Math.abs(v), false) + (v < -0.004 ? ' Cr' : ''); };
     var body = cbData().map(function (a) {
-      return '<h3>' + (a.acct === 'cash' ? 'Cash in hand' : 'Bank') + '</h3><table class="tbl st lg-tbl"><thead><tr><th>Month</th><th class="n">Opening</th><th class="n">Money in</th><th class="n">Money out</th><th class="n">Closing</th></tr></thead><tbody>' +
-        a.rows.map(function (r) { return '<tr><td><a href="#books">' + esc(monthName(r.m)) + '</a></td><td class="n">' + bal(r.open) + '</td><td class="n">' + money(r.inn, false) + '</td><td class="n">' + money(r.out, false) + '</td><td class="n"><b>' + bal(r.close) + '</b></td></tr>'; }).join('') + '</tbody></table>';
+      return '<h3>' + esc(a.acct === 'cash' ? 'Cash in hand' : B.bankName(a.acct)) + '</h3><table class="tbl st lg-tbl"><thead><tr><th>Month</th><th class="n">Opening</th><th class="n">Money in</th><th class="n">Money out</th><th class="n">Closing</th></tr></thead><tbody>' +
+        a.rows.map(function (r) { return '<tr data-k="' + r.m + '"><td><a href="#books/' + esc(a.acct) + '?m=' + r.m + '">' + esc(monthName(r.m)) + '</a></td><td class="n">' + bal(r.open) + '</td><td class="n">' + money(r.inn, false) + '</td><td class="n">' + money(r.out, false) + '</td><td class="n"><b>' + bal(r.close) + '</b></td></tr>'; }).join('') + '</tbody></table>';
     }).join('');
     return '<div class="pane-hd"><h2>' + esc(T('cr_cbsum')) + '</h2></div><div class="lg-bar">' + period() + '</div><p class="soft">' + esc(T('cr_h_cb')) + '</p>' + acts('cb') + sheet('Cash and bank summary', rng(), body);
   }, function (pane) {
     wirePeriod(pane);
     var pb = $('[data-cbpdf]', pane); if (pb) pb.addEventListener('click', function () { pdf(pane, 'Cash and bank summary ' + A.range()[1], T('cr_cbsum')); });
-    var xb = $('[data-cbxl]', pane); if (xb) xb.addEventListener('click', function () { var rows = [['Cash and bank summary', A.range()[0] + ' to ' + A.range()[1]]]; cbData().forEach(function (a) { rows.push([]); rows.push([a.acct === 'cash' ? 'Cash in hand' : 'Bank']); rows.push(['Month', 'Opening', 'Money in', 'Money out', 'Closing']); a.rows.forEach(function (r) { rows.push([monthName(r.m), m2(r.open), m2(r.inn), m2(r.out), m2(r.close)]); }); }); NS.xlsx(fileName(A.bizName()) + '-cash-bank-summary-' + A.range()[1] + '.xlsx', [{ name: 'Cash and bank', rows: rows }]); });
+    var xb = $('[data-cbxl]', pane); if (xb) xb.addEventListener('click', function () { var rows = [['Cash and bank summary', A.range()[0] + ' to ' + A.range()[1]]]; cbData().forEach(function (a) { rows.push([]); rows.push([a.acct === 'cash' ? 'Cash in hand' : B.bankName(a.acct)]); rows.push(['Month', 'Opening', 'Money in', 'Money out', 'Closing']); a.rows.forEach(function (r) { rows.push([monthName(r.m), m2(r.open), m2(r.inn), m2(r.out), m2(r.close)]); }); }); NS.xlsx(fileName(A.bizName()) + '-cash-bank-summary-' + A.range()[1] + '.xlsx', [{ name: 'Cash and bank', rows: rows }]); });
   });
 
   /* ---------- Print many vouchers at once: a type and dates; the maker prints them one after another (?printall=from,to) ---------- */
@@ -507,19 +551,35 @@
 
   /* ---------- Ledger of any account (cash, bank, sales, an expense head, GST, capital...): opened from the Chart of Accounts and the Trial Balance ---------- */
   function aclName(k) { return A.accName ? A.accName(k, {}) : k; }
+  var aclView = 'vch';
+  /* #acl/<account>, #acl/<account>?m=2026-10 (one month of it, from the monthly summary) */
+  function aclArg(arg) {
+    var p = String(arg || 'cash').split('?'), k = p[0] || 'cash', m = (/(?:^|&)m=(\d{4}-\d{2})/.exec(p[1] || '') || [])[1] || '', r = A.range();
+    if (m) r = [m + '-01' < r[0] ? r[0] : m + '-01', NSRep.monthEnd(m) > r[1] ? r[1] : NSRep.monthEnd(m)];
+    return { k: k, m: m, r: r };
+  }
   A.addSection('acl', function (arg) {
-    var k = arg || 'cash';
+    var X = aclArg(arg), k = X.k, r = X.r;
     if (k.indexOf('p:') === 0) { setTimeout(function () { location.replace('#st/' + encodeURIComponent(k.slice(2))); }, 0); return ''; }
-    var r = A.range(), Bk = B.book(A.mine(), A.bizName(), k, r[0], r[1]), bal = function (v) { return money(Math.abs(v), false) + (v > 0.004 ? ' Dr' : v < -0.004 ? ' Cr' : ''); }, td = 0, tc = 0;
-    var body = '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Particulars</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th><th class="noprint"></th></tr></thead><tbody><tr><td>' + esc(A.ldate(r[0])) + '</td><td><i>Opening balance</i></td><td></td><td></td><td class="n">' + bal(Bk.open) + '</td><td class="noprint"></td></tr>' +
-      Bk.rows.map(function (x) { td += x.dr; tc += x.cr; var d = x.d; return '<tr><td>' + esc(A.ldate(x.date)) + '</td><td>' + esc(A.docName(d) + ' ' + (d.no || '') + (B.partyName(d) ? ' · ' + B.partyName(d) : '')) + '</td><td class="n">' + (x.dr ? money(x.dr, false) : '') + '</td><td class="n">' + (x.cr ? money(x.cr, false) : '') + '</td><td class="n">' + bal(x.bal) + '</td><td class="noprint"><button type="button" class="btn sm ib" data-view="' + d.id + '" title="' + esc(T('open')) + '" aria-label="' + esc(T('open')) + '">' + NS.icSvg('eye') + '</button></td></tr>'; }).join('') +
-      '</tbody><tfoot><tr><th colspan="2">Total</th><th class="n">' + money(td, false) + '</th><th class="n">' + money(tc, false) + '</th><th class="n">' + bal(Bk.close) + '</th><th class="noprint"></th></tr></tfoot></table>';
-    return '<div class="pane-hd"><h2>' + esc(T('cr_acl')) + ': ' + esc(aclName(k)) + '</h2></div><p class="cr-drill"><a href="#coa">' + esc(T('cr_coa')) + '</a> › <b>' + esc(aclName(k)) + '</b></p><div class="lg-bar">' + period() + '</div>' + acts('acl') + sheet('Ledger: ' + aclName(k), rng(), body);
+    var Bk = B.book(A.mine(), A.bizName(), k, r[0], r[1]), bal = function (v) { return money(Math.abs(v), false) + (v > 0.004 ? ' Dr' : v < -0.004 ? ' Cr' : ''); }, td = 0, tc = 0, mon = aclView === 'mon' && !X.m && window.NSRep, body;
+    if (mon) {
+      var M = NSRep.monthly(Bk, r[0], r[1]);
+      body = '<table class="tbl st lg-tbl"><thead><tr><th>Month</th><th class="n">Opening</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Closing</th></tr></thead><tbody>' +
+        M.map(function (x) { td += x.dr; tc += x.cr; return '<tr data-k="' + x.m + '"><td><a href="#acl/' + encodeURIComponent(k) + '?m=' + x.m + '">' + esc(monthName(x.m)) + '</a>' + (x.n ? ' <span class="soft">(' + x.n + ')</span>' : '') + '</td><td class="n">' + bal(x.open) + '</td><td class="n">' + (x.dr ? money(x.dr, false) : '') + '</td><td class="n">' + (x.cr ? money(x.cr, false) : '') + '</td><td class="n"><b>' + bal(x.close) + '</b></td></tr>'; }).join('') +
+        '</tbody><tfoot><tr><th>Total</th><th class="n">' + bal(Bk.open) + '</th><th class="n">' + money(td, false) + '</th><th class="n">' + money(tc, false) + '</th><th class="n">' + bal(Bk.close) + '</th></tr></tfoot></table>';
+    } else body = '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Particulars</th><th>Voucher</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th><th class="noprint"></th></tr></thead><tbody><tr><td>' + esc(A.ldate(r[0])) + '</td><td colspan="2"><i>Opening balance</i></td><td></td><td></td><td class="n">' + bal(Bk.open) + '</td><td class="noprint"></td></tr>' +
+      Bk.rows.map(function (x) { td += x.dr; tc += x.cr; var d = x.d, nr = narrOf(d); return '<tr data-k="' + esc(d.id) + '"><td>' + esc(A.ldate(x.date)) + '</td><td>' + esc(oppText(d, k) || (B.partyName(d) || '')) + (nr ? '<br><span class="soft lg-narr">' + esc(nr) + '</span>' : '') + '</td><td>' + esc(A.docName(d) + ' ' + (d.no || '') + (B.partyName(d) ? ' · ' + B.partyName(d) : '')) + '</td><td class="n">' + (x.dr ? money(x.dr, false) : '') + '</td><td class="n">' + (x.cr ? money(x.cr, false) : '') + '</td><td class="n">' + bal(x.bal) + '</td><td class="noprint"><button type="button" class="btn sm ib" data-view="' + d.id + '" title="' + esc(T('open')) + '" aria-label="' + esc(T('open')) + '">' + NS.icSvg('eye') + '</button></td></tr>'; }).join('') +
+      '</tbody><tfoot><tr><th colspan="3">Total</th><th class="n">' + money(td, false) + '</th><th class="n">' + money(tc, false) + '</th><th class="n">' + bal(Bk.close) + '</th><th class="noprint"></th></tr></tfoot></table>';
+    var sw = window.NSRep && !X.m ? seg('aclv', [['vch', NS.t('rp.vch')], ['mon', NS.t('rp.mon')]], aclView) : '';
+    var one = X.m ? '<p class="note">' + esc(NS.t('rp.onemonth', { m: monthName(X.m) })) + ' <a href="#acl/' + encodeURIComponent(k) + '">' + esc(NS.t('rp.wholeper')) + ' ›</a></p>' : '';
+    return '<div class="pane-hd"><h2>' + esc(T('cr_acl')) + ': ' + esc(aclName(k)) + '</h2>' + sw + '</div><p class="cr-drill"><a href="#coa">' + esc(T('cr_coa')) + '</a> › <b>' + esc(aclName(k)) + '</b></p>' + one + '<div class="lg-bar">' + period() + '</div>' + acts('acl') +
+      sheet((mon ? 'Monthly summary: ' : 'Ledger: ') + aclName(k), esc(A.ldate(r[0])) + ' to ' + esc(A.ldate(r[1])), body);
   }, function (pane, arg) {
     wirePeriod(pane);
-    var k = arg || 'cash';
+    $$('[data-aclv]', pane).forEach(function (b) { b.addEventListener('click', function () { aclView = b.getAttribute('data-aclv'); A.show(); }); });
+    var X = aclArg(arg), k = X.k;
     var pb = $('[data-aclpdf]', pane); if (pb) pb.addEventListener('click', function () { pdf(pane, 'Ledger ' + aclName(k) + ' ' + A.range()[1], T('cr_acl')); });
-    var xb = $('[data-aclxl]', pane); if (xb) xb.addEventListener('click', function () { var r = A.range(), Bk = B.book(A.mine(), A.bizName(), k, r[0], r[1]), rows = [['Ledger: ' + aclName(k), r[0] + ' to ' + r[1]], ['Date', 'Particulars', 'Debit', 'Credit', 'Balance'], [r[0], 'Opening balance', '', '', m2(Bk.open)]]; Bk.rows.forEach(function (x) { rows.push([x.date, A.docName(x.d) + ' ' + (x.d.no || ''), x.dr ? m2(x.dr) : '', x.cr ? m2(x.cr) : '', m2(x.bal)]); }); NS.xlsx(fileName(aclName(k)) + '-ledger-' + r[1] + '.xlsx', [{ name: 'Ledger', rows: rows }]); });
+    var xb = $('[data-aclxl]', pane); if (xb) xb.addEventListener('click', function () { var r = X.r, Bk = B.book(A.mine(), A.bizName(), k, r[0], r[1]), rows = [['Ledger: ' + aclName(k), r[0] + ' to ' + r[1]], ['Date', 'Particulars', 'Voucher', 'Debit', 'Credit', 'Balance', 'Narration'], [r[0], 'Opening balance', '', '', '', m2(Bk.open)]]; Bk.rows.forEach(function (x) { rows.push([x.date, oppText(x.d, k), A.enName(x.d) + ' ' + (x.d.no || ''), x.dr ? m2(x.dr) : '', x.cr ? m2(x.cr) : '', m2(x.bal), narrOf(x.d)]); }); NS.xlsx(fileName(aclName(k)) + '-ledger-' + r[1] + '.xlsx', [{ name: 'Ledger', rows: rows }]); });
   });
   /* open bills with the party's credit days applied (as on the Dues screen), so ageing counts from the due date */
   function dueBills(D, biz) {

@@ -434,6 +434,7 @@ html.installed:has(#app:not([data-secs])) .hub{margin-top:14px}
 /* printed voucher for an expense or a staff advance (owner, 2026-11-11) */
 .vch-print{display:none}
 .vch .vch-biz{font-size:1.15rem}
+.vch{position:relative}.vch .stamp.cx-stamp{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);border:3px solid #B91C1C;color:#B91C1C;font:800 40px var(--font-head);padding:4px 16px;border-radius:8px;letter-spacing:.1em;opacity:.45;mix-blend-mode:multiply;pointer-events:none;z-index:3}   /* A-3: cancelled */
 .vch .vch-ttl{font-size:1.05rem;letter-spacing:.04em}
 .vch .vch-t{width:100%;margin:6px 0 0}
 .vch .vch-t th{width:9.5em;text-align:left;font-weight:600;background:#eef2f6;color:#111;vertical-align:top}
@@ -542,7 +543,9 @@ html.ap-print #app-printarea{display:block}
 html.ap-print #app-printarea .stsheet{position:static!important;width:auto!important;max-width:none!important;padding:12mm 12mm 8mm;box-sizing:border-box;break-after:page;border:0!important;box-shadow:none!important}
 html.ap-print #app-printarea .noprint,html.ap-print #app-printarea .no-print,html.ap-print #app-printarea .acts{display:none!important}
 html.ap-print #app-printarea a{color:#111!important;text-decoration:none!important}
-html.vch-on .vch-print .stsheet{padding:12mm}
+html.ap-print #app-printarea .ap-pane{color:#111;font-size:10.5pt}html.ap-print #app-printarea .ap-pane .ap-biz{margin:0 0 6px;color:#374151}html.ap-print #app-printarea .ap-pane table{width:100%;border-collapse:collapse}html.ap-print #app-printarea .ap-pane th,html.ap-print #app-printarea .ap-pane td{border-bottom:1px solid #D1D5DB;padding:3px 6px;text-align:left}html.ap-print #app-printarea .ap-pane .tbl-wrap{overflow:visible!important}html.ap-print #app-printarea .ap-pane svg{max-width:16px;max-height:16px}html.ap-print #app-printarea .ap-pane .ap-val{display:inline-block;min-width:4em;border-bottom:1px solid #9CA3AF;padding:0 2px;font-weight:600}
+html.vch-on .vch-print .stsheet{padding:12mm;position:relative}
+html.vch-on .vch-print,html.vch-on .vch-print *{visibility:visible!important}   /* the has-hub rule above outranked .stsheet: the voucher printed blank */
 }
 @media print{html.ap-print,html.ap-print body{background:#fff!important}}
 
@@ -595,6 +598,15 @@ html.vch-on .vch-print .stsheet{padding:12mm}
 .jg-f{border-top:2px solid var(--line);background:var(--surface2);font-variant-numeric:tabular-nums}
 .jg-f>*{padding:8px}.jg-f b{text-align:end}.jg-tl{font-weight:700}.jg-df{font-size:.85rem;color:var(--soft)}.jg-df.bad{color:#C0392B}
 .jv-top{grid-template-columns:repeat(auto-fill,minmax(180px,240px))}
+/* journal with one Particulars box per line (owner 19 Nov 2026): #, Particulars, Dr, Cr, remove */
+.jg-p .jg-h,.jg-p .jg-r,.jg-p .jg-f{grid-template-columns:36px minmax(220px,1fr) 150px 150px 36px}
+.jg-p .jg-h span:nth-child(3),.jg-p .jg-h span:nth-child(4){text-align:end}.jg-p .jg-h span:nth-child(5){text-align:start}
+.jg-p .jg-r .jg-c:nth-child(3) input{text-align:end;font-variant-numeric:tabular-nums}
+.jg-p .jg-pc{gap:0}.jg-p .jg-pc input{flex:1 1 auto;min-width:0}.jg-p .jg-new{flex:0 0 auto;width:auto;max-width:48%;font-size:.8rem;color:var(--soft);border-inline-start:1px solid var(--line)}
+.jg-p .jg-f .jg-df{margin-inline-start:8px}
+@media (max-width:700px){.jg-p .jg-r,.jg-p .jg-f{grid-template-columns:28px 1fr 1fr 32px}.jg-p .jg-r>:nth-child(3){grid-column:2/3}.jg-p .jg-r .jg-c:nth-child(4){grid-column:3/4}
+  .jg-p .jg-r>:nth-child(4){border-inline-start:1px solid var(--line)}.jg-p .jg-f{grid-template-columns:1fr 1fr}}
+.jv-opts{align-self:end;position:relative}.jv-opts[open]{grid-column:1/-1}.jv-opts .chk{display:flex;gap:8px;align-items:center;margin:8px 0 2px}
 @media (max-width:700px){.jg-h{display:none}.jg-r,.jg-f{grid-template-columns:28px 1fr 1fr 32px}
   .jg-r .jg-c:nth-child(2){grid-column:2/4}.jg-r>:nth-child(3){grid-column:2/4;border-top:1px solid var(--line);border-inline-start:0}
   .jg-r .jg-c:nth-child(4){grid-column:2/3;border-top:1px solid var(--line)}.jg-r .jg-c:nth-child(5){grid-column:3/4;border-top:1px solid var(--line)}
@@ -624,3 +636,50 @@ html.vch-on .vch-print .stsheet{padding:12mm}
   .vg .line>button{justify-self:end;width:40px} .vg .line .lc-gst{grid-column:auto}
   .vg .lc-amt{display:flex;align-items:center;justify-content:flex-end;font-weight:600;font-variant-numeric:tabular-nums}
 }
+
+/* Masters (masters.js) */
+.ms-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:.2rem 0 1rem}.ms-tabs a[aria-current=page]{background:var(--accent,#0E746A);color:#fff;border-color:transparent}
+.ms-gw{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.ms-card h3{margin:.1rem 0 .6rem}.ms-list{list-style:none;margin:0;padding:0}.ms-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid rgba(127,127,127,.18)}
+.ms-list li:last-child{border-bottom:0}.ms-list a{text-decoration:none;color:inherit;display:inline-flex;gap:8px;align-items:center;min-height:36px}.ms-list a:hover b{text-decoration:underline}
+.ms-find{max-width:420px;margin:0 0 .8rem}.ms-acts{white-space:nowrap;text-align:end}.ms-tbl td.l,.ms-tbl th{text-align:start}
+/* reports (ERP review round 1, reports.js): the row cursor, the period cell, things to check */
+tr.rp-cur>*{background:color-mix(in srgb,var(--accent,#0E746A) 14%,transparent)!important}tr.rp-cur{outline:2px solid var(--accent,#0E746A);outline-offset:-2px}
+[data-s-fy][role=button]{cursor:pointer;text-decoration:underline dotted}[data-s-fy].rp-oldyr{background:#FDE68A;color:#713F12;border-radius:4px;padding:0 4px}
+.rp-exc{display:flex;gap:.5em;align-items:center;flex-wrap:wrap;text-decoration:none;border-inline-start:4px solid #DC2626}.os-late td:nth-child(8){color:#B91C1C;font-weight:600}.lg-narr{font-style:italic;font-size:.9em}
+@media print{tr.rp-cur{outline:0}tr.rp-cur>*{background:none!important}}
+/* ERP round 2 (orders.js): pick-lines note, pick dialog, orders outstanding */
+.or-hint{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;justify-content:space-between;margin:.4rem 0}
+.or-pick{max-width:min(860px,96vw)}
+.or-pick .or-src{margin:.6rem 0 1rem}
+.or-pick h4{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:.3rem 0}
+.or-tbl input[data-orq],.or-tbl input[data-orc]{width:6em;text-align:right}
+.or-tabs{display:flex;flex-wrap:wrap;gap:.3rem;margin:.4rem 0 .8rem}
+.or-out .or-head th{background:var(--soft-bg,rgba(127,127,127,.08));text-align:left;font-weight:400}
+.or-out .or-head .or-h{margin-right:.6rem}
+.or-out .or-acts{display:inline-flex;flex-wrap:wrap;gap:.3rem;vertical-align:middle}
+/* ERP Round 2, r2-billwise: party lines set against bills (journal, Receipt / Payment with any ledgers), opening bills, interest */
+.bw-al{display:flex;flex-wrap:wrap;gap:.35rem 1rem;align-items:center;padding:.15rem .5rem .55rem 2.2rem;font-size:.92em}
+.bw-al>.soft:first-child,.bw-al>small{flex-basis:100%}
+.bw-alr{display:inline-flex;gap:.45rem;align-items:center}
+.bw-alr .chk{margin:0}
+.bw-al input[data-bwamt]{width:8.5rem;min-height:2rem;padding:.2rem .45rem}
+.bw-ob{margin:.6rem 0}
+.bw-obr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.45rem;margin:.35rem 0}
+.bw-obr label{display:flex;flex-direction:column;gap:.15rem;font-size:.85em}
+.bw-adj input{width:9rem}
+.bw-set .chk{align-items:flex-start;margin:.35rem 0}
+.bw-int .pane-hd h3{margin:0}
+@media (max-width:620px){.bw-obr{grid-template-columns:repeat(2,minmax(0,1fr))}.bw-al{padding-left:.5rem}}
+
+/* ERP r2-config C-9: accounting mode (no quantity, unit, discount) and no GST column on the entry lines; Configure gear (C-12) */
+[data-lines].nx-acct .lc-qty, [data-lines].nx-acct .lc-unit, [data-lines].nx-acct .lc-disc, [data-lines].nx-acct .h-qty, [data-lines].nx-acct .h-uom, [data-lines].nx-acct .h-disc { display: none !important; }
+[data-lines].nx-nogst .lc-gst, [data-lines].nx-nogst .h-gst { display: none !important; }
+.cf-gear { display: inline-flex; align-items: center; gap: 4px; margin-inline-start: auto; }
+.cf-gear svg { width: 16px; height: 16px; }
+.ms-tbl tr.ms-sub td:first-child { padding-inline-start: 22px; }
+.cf-tbl td { vertical-align: middle; }
+/* phones: a long small button wraps onto two lines instead of pushing the screen sideways (TDS returns, 320 px, 19 Nov 2026) */
+@media (max-width:480px){[data-pane] .btn.sm{white-space:normal;max-width:100%;text-align:center}}
+/* very small phones (320 px): New document and Settings each take a whole row, so the New box is not cut to "+ Nev" */
+@media (max-width:360px){.bizbar .newdoc{flex:1 1 100%}.bizbar>.btn{flex:1 1 100%;max-width:100%}}

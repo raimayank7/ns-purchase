@@ -32,7 +32,7 @@
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
   /* ---------- attendance ---------- */
-  var CODES = ['P', 'A', 'H', 'PL', 'UL', 'HOL', 'WO'];
+  var CODES = ['P', 'A', 'H', 'PL', 'UL', 'HOL', 'WO'], BASE = CODES.slice();
   var PAID = { P: 1, A: 0, H: 0.5, PL: 1, UL: 0, HOL: 1, WO: 1 };
   N.CODES = CODES;
   function dim(ym) { return new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate(); }
@@ -62,9 +62,10 @@
   N.next = function (c) { var i = CODES.indexOf(c); return i < 0 ? CODES[0] : i === CODES.length - 1 ? '' : CODES[i + 1]; };
   N.setDay = function (rec, d, code) { rec.d = rec.d || {}; if (code) rec.d[d] = code; else delete rec.d[d]; return rec; };
   /* mark every day that is not marked and not a weekly off / holiday / outside employment as present */
-  N.fillPresent = function (rec, ym, cfg, emp) {
+  N.fillPresent = function (rec, ym, cfg, emp, today) {
     rec.d = rec.d || {};
-    for (var d = 1; d <= dim(ym); d++) if (!N.dayCode(rec, ym, d, cfg, emp)) rec.d[d] = 'P';
+    var cm = today ? String(today).slice(0, 7) : '', lim = !today || ym < cm ? dim(ym) : ym === cm ? +String(today).slice(8, 10) : 0;   /* with today given: not the days still to come (F6-6) */
+    for (var d = 1; d <= lim; d++) if (!N.dayCode(rec, ym, d, cfg, emp)) rec.d[d] = 'P';
     return rec;
   };
   /* mark one day for many employees; days that are a weekly off / holiday are changed too (the caller chose that day) */
@@ -78,7 +79,7 @@
     emps.forEach(function (e) {
       var rec = month && month[e.id] || {}, s = N.summary(rec, ym, cfg, e), row = [e.name, e.code || ''];
       for (d = 1; d <= n; d++) { var c = N.dayCode(rec, ym, d, cfg, e); row.push(c === 'NA' ? '' : c); }
-      rows.push(row.concat([s.P, s.A, s.H, s.PL, s.UL, s.HOL, s.WO, s.paid, s.ot]));
+      rows.push(row.concat([s.P, s.A, s.H, s.PL + LEAVE.reduce(function (x, t) { return x + (s[t.code] || 0); }, 0), s.UL, s.HOL, s.WO, s.paid, s.ot]));   /* leave types count as paid leave */
     });
     return [head].concat(rows);
   };
@@ -116,7 +117,7 @@
   };
 
   /* ---------- PF ---------- */
-  N.PF = { ceil: 25000, epf: 12, eps: 8.33, edli: 0.5, admin: 0.5, adminMin: 500, due: 15 };
+  N.PF = { ceil: 25000, epf: 12, eps: 8.33, edli: 0.5, admin: 0.5, adminMin: 500, due: 15 };   /* due: EPF Scheme 2026 para 28(3), 15 days after the month (gazette G.S.R. 525(E)) */
   function pfCfg(c) { return Object.assign({}, N.PF, c || {}); }
   /* m: { uan, name, gross, basic, days, paid, noEps (employee not in the pension scheme, e.g. joined after 58), full (pay PF on the whole basic) } */
   N.pfLine = function (m, cfg) {
@@ -195,6 +196,77 @@
   /* reason codes for a month with no wages, as in ESIC's template (0 = no particular reason) */
   N.ESI_REASONS = [[0, 'Without reason'], [1, 'On leave'], [2, 'Left service'], [3, 'Retired'], [4, 'Out of coverage'], [5, 'Expired'], [6, 'Non implemented area'], [7, 'Compliance by immediate employer'],
     [8, 'Suspension of work'], [9, 'Strike / lockout'], [10, 'Retrenchment'], [11, 'No work'], [12, 'Does not belong to this employer'], [13, 'Duplicate IP']];
+
+  /* ---------- leave types and balances (ERP round 2, T-B16) ----------
+     meta 'payroll'.leave = { types: [{ code 'CL' | 'EL' | ..., name, perYear (days), accrue 'm' (perYear/12 a month worked) | 'y' (all at
+     the start of the leave year, less for joiners) | 'w20' (1 day for every 20 days worked), carry (days that move to the next year),
+     encash (paid out on leaving) }], yearStart (month the leave year starts, 1 = January), lateN (late marks that make a half day cut) }.
+     Each type's code becomes an attendance mark (paid). Opening balances: meta 'attendance'.leave = { open: { <leave year>: { empId:
+     { code: days } } } }. Leave taken beyond the balance is not paid: the salary run cuts those days. */
+  var LEAVE = [];
+  N.setLeave = function (types) {
+    var seen = {};
+    LEAVE = (types || []).filter(function (t) { var ok = t && /^[A-Z]{1,4}$/.test(t.code) && BASE.indexOf(t.code) < 0 && !seen[t.code]; if (ok) seen[t.code] = 1; return ok; });
+    CODES.length = 0; BASE.forEach(function (c) { CODES.push(c); });   /* the array is kept (screens hold it): rebuilt from the fixed marks */
+    LEAVE.forEach(function (t, i) { CODES.splice(CODES.indexOf('PL') + 1 + i, 0, t.code); PAID[t.code] = 1; ALIAS[t.code] = t.code; });
+    return LEAVE;
+  };
+  N.BASE = BASE;
+  N.leaveTypes = function () { return LEAVE.slice(); };
+  N.leaveType = function (code) { return LEAVE.filter(function (t) { return t.code === code; })[0] || null; };
+  N.leaveYear = function (ym, start) { start = +start || 1; var y = +ym.slice(0, 4), m = +ym.slice(5, 7); return String(m >= start ? y : y - 1); };
+  function lyMonths(year, start, upto) { var out = [], m = +year + '-' + pad(+start || 1); while (m <= upto && out.length < 12) { out.push(m); var y = +m.slice(0, 4), mo = +m.slice(5, 7) + 1; if (mo > 12) { mo = 1; y++; } m = y + '-' + pad(mo); } return out; }
+  /* Earned leave by the OSH Code (accrue 'w20'), Occupational Safety, Health and Working Conditions Code, 2020, s.32 (Bill 122 of 2020
+     text and the Labour Ministry FAQ, read 19 Nov 2026): a worker who worked 180 days or more in a calendar year gets, in the next
+     year, 1 day for every 20 days worked (s.32(1)(i)-(ii)); days of lay-off, maternity leave and leave taken count towards the 180 but
+     earn nothing (s.32(1)(iii)); one who joined during the year qualifies with a quarter of the days left in that year (s.32(1)(v)); on
+     leaving, leave due for the current year is paid even without the 180 days (s.32(1)(vi)).
+     oshEarn(att, emp, year, start) -> { worked (P + H/2), counted (worked + leave taken), need, ok, earned, data (any attendance that year) } */
+  N.oshEarn = function (att, emp, year, start, upto) {
+    var months = lyMonths(year, start, upto || (+year + (+start > 1 ? 1 : 0)) + '-' + pad(((+start || 1) + 10) % 12 + 1)), acfg = att.cfg || N.defaultCfg(), worked = 0, counted = 0, data = false;
+    months.forEach(function (m) {
+      var rec = (att.months || {})[m] && att.months[m][emp.id]; if (rec && rec.d && Object.keys(rec.d).length) data = true;
+      var sm = N.summary(rec, m, acfg, emp); worked += sm.P + sm.H / 2;
+      counted += sm.P + sm.H / 2 + sm.PL + LEAVE.reduce(function (x, t) { return x + (sm[t.code] || 0); }, 0);
+    });
+    var first = months[0] + '-01', need = 180;
+    if (emp.doj && emp.doj > first && emp.doj.slice(0, 7) <= months[months.length - 1]) {
+      var last = months[months.length - 1] + '-' + pad(dim(months[months.length - 1])), left = Math.round((new Date(last + 'T00:00:00') - new Date(emp.doj + 'T00:00:00')) / 864e5) + 1;
+      need = Math.ceil(left / 4);
+    }
+    worked = r2(worked); counted = r2(counted);
+    return { worked: worked, counted: counted, need: need, ok: counted >= need, earned: counted >= need ? Math.floor(worked / 20) : 0, data: data };
+  };
+  /* balance of one type for one employee up to month 'upto' (included): { open, earned, taken, bal, before (available before 'upto'), month (taken in 'upto') };
+     o.leaving: the employee leaves in 'upto', so this year's earned leave by the OSH Code is due too (s.32(1)(vi)) */
+  N.leaveBal = function (att, emp, type, upto, cfg, o) {
+    cfg = cfg || {}; var start = +cfg.yearStart || 1, year = N.leaveYear(upto, start), months = lyMonths(year, start, upto), acfg = att.cfg || N.defaultCfg();
+    var open = num((((att.leave || {}).open || {})[year] || {})[emp.id] && att.leave.open[year][emp.id][type.code]), earned = 0, taken = 0, worked = 0, tm = 0, em = 0;
+    months.forEach(function (m) {
+      var first = m + '-01', last = m + '-' + pad(dim(m)); if (emp.doj && emp.doj > last || emp.left && emp.left < first) return;
+      em++; var rec = (att.months || {})[m] && att.months[m][emp.id], s = N.summary(rec, m, acfg, emp), t = s[type.code] || 0;
+      taken += t; if (m === upto) tm = t; worked += s.P + s.H / 2;
+    });
+    var osh = null;
+    if (type.accrue === 'w20') {   /* earned on last year's work, only with 180 days (OSH Code s.32) */
+      osh = N.oshEarn(att, emp, String(+year - 1), start); earned = osh.earned;
+      if (o && o.leaving) { var cur = N.oshEarn(att, emp, year, start, upto); earned += Math.floor(cur.worked / 20); osh.now = Math.floor(cur.worked / 20); }
+    }
+    else if (type.accrue === 'y') { var jm = emp.doj && emp.doj.slice(0, 7) > months[0] ? 12 - (months.indexOf(emp.doj.slice(0, 7)) < 0 ? 0 : months.indexOf(emp.doj.slice(0, 7))) : 12; earned = r2(num(type.perYear) * jm / 12); }
+    else earned = r2(num(type.perYear) / 12 * em);
+    earned = r2(earned); var bal = r2(open + earned - taken);
+    return { year: year, open: open, earned: earned, taken: taken, bal: bal, month: tm, before: r2(open + earned - (taken - tm)), osh: osh };
+  };
+  /* days of month ym to cut as unpaid: leave taken beyond the balance, and every lateN late marks = half a day */
+  N.unpaidLeave = function (att, emp, ym, cfg) {
+    var cut = 0, why = [];
+    LEAVE.forEach(function (t) { var b = N.leaveBal(att, emp, t, ym, cfg); var x = Math.max(0, b.month - Math.max(0, b.before)); if (x) { cut += x; why.push(t.code + ' ' + x); } });
+    var rec = (att.months || {})[ym] && att.months[ym][emp.id], ln = num(cfg && cfg.lateN);
+    if (ln > 0 && rec && num(rec.late) >= ln) { var h = Math.floor(num(rec.late) / ln) / 2; cut += h; why.push('late ' + rec.late); }
+    return { days: r2(cut), why: why };
+  };
+  /* the opening balance of next leave year: what is left now, at most 'carry' days */
+  N.carryOver = function (att, emp, type, lastYm, cfg) { var b = N.leaveBal(att, emp, type, lastYm, cfg); return Math.max(0, Math.min(b.bal, type.carry == null || type.carry === '' ? b.bal : num(type.carry))); };
 
   /* ---------- store ---------- */
   N.Store = {
