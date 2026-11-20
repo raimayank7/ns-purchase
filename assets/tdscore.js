@@ -169,6 +169,56 @@
     });
     return out;
   };
+  /* Section codes of the statements (Income-tax Rules, 2026, G.S.R. 198(E): Form No. 140 Note 15 and Form No. 143 Note 9; read in the
+     gazetted text 20 Nov 2026). The statements use these 4-digit codes, not the old 194-style sections. Rent paid by individuals not
+     under audit (old 194-IB) and payments under old 194M have no code in Form 140: they are reported in Form No. 141
+     (challan-cum-statement), so T.code gives '' and the file says so. */
+  T.CODES = { c: ['1023', '1024'], jt: '1026', jp: '1027', jd: '1028', h: '1006', im: '1008', il: '1009', a: '1022', q: '1031', tp: '1067' };
+  T.code = function (r) {
+    if (r.form === '138') return '1002';   /* salary, employees other than government */
+    var c = T.CODES[r.sec]; if (!c) return '';
+    return Array.isArray(c) ? c[r.who === 'ind' ? 0 : 1] : c;
+  };
+  /* TCS collection codes (Form No. 143, Note 9) from the "Section and nature" picked on the bill */
+  T.tcsCode = function (sec) {
+    var s = String(sec || '').toLowerCase(), m = /sl\.?\s*(\d)(?:\(([ab])\))?/.exec(s); if (!m) return '';
+    var n = +m[1];
+    if (n === 1) return '1068'; if (n === 2) return '1069'; if (n === 4) return '1073'; if (n === 5) return '1074';
+    if (n === 3) return /other forest produce \(not/.test(s) ? '1072' : /timber obtained under a forest lease/.test(s) ? '1070' : '1071';   /* older bills (one combined line) -> 1071, timber by other mode */
+    if (n === 6) {
+      if (m[2] !== 'b') return '1075';
+      var L = [['watch', '1076'], ['art', '1077'], ['collectible', '1078'], ['yacht', '1079'], ['sunglass', '1080'], ['bag', '1081'], ['shoe', '1082'], ['sport', '1083'], ['theatre', '1084'], ['horse', '1085']];
+      var f = L.filter(function (x) { return s.indexOf(x[0]) >= 0; })[0]; return f ? f[1] : '';
+    }
+    if (n === 8) return '1088';
+    if (n === 9) return /toll/.test(s) && !/parking/.test(s) ? '1091' : /mine|quarry/.test(s) && !/parking/.test(s) ? '1092' : '1090';
+    return '';
+  };
+  function ddmm(d) { return d ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : ''; }
+  T.ddmm = ddmm;
+  /* the statement in the department's own layout (Income-tax Rules, 2026): Part B table 1 (challans, columns A to K) and the Annexure
+     (Form 140/138/144: deductee-wise, columns A to Q; Form 143: collectee-wise, columns A to U). One workbook, sheets in this order. */
+  T.statement = function (o) {
+    var used = [], ix = {};
+    o.rows.forEach(function (r) { if (r.ch && !(r.ch.id in ix)) { ix[r.ch.id] = used.length + 1; used.push(r.ch); } });
+    var chHead = ['(A) Sl. No.', '(B) Total tax', '(C) Total interest', '(D) Total fee', '(E) Total penalty/others', '(F) Total amount deposited as per challan (B+C+D+E)', '(G) Mode of payment (C = challan, B = book adjustment)', '(H) BSR code', '(I) Date on which amount deposited through challan (dd/mm/yyyy)', '(J) Challan serial No.', '(K) Minor head of challan'];
+    var chRows = used.map(function (c, i) { var x = o.chExtra(c) || {}, tot = r2(num(c.tax) + num(x.int) + num(x.fee) + num(x.oth)); return [i + 1, num(c.tax), num(x.int), num(x.fee), num(x.oth), tot, 'C', c.bsr || '', ddmm(c.date), c.serial || '', c.minor || '']; });
+    var ann, head;
+    if (o.tcs) {
+      head = ['(A) Sl. No.', '(B) Challan reference No. (column A of Part B)', '(C) Permanent account number', '(D) Name', '(E) Whether non-resident (Y/N)', '(F) Collectee code (non-resident)', '(G) Permanent establishment in India (non-resident) (Yes/No)', '(H) Whether collectee opting out of taxation regime under section 202(1)?', '(I) Amount received / debited', '(J) Date on which amount received/debited (dd/mm/yyyy)', '(K) Collection code', '(L) Total tax collected', '(M) Whether total tax collected has been deposited (Yes/No)', '(N) Total tax deposited', '(O) Date of collection (dd/mm/yyyy)', '(P) Rate at which tax collected', '(Q) Reason for lower collection / collection at higher rate', '(R) Certificate number under section 395(3)', '(S) Whether the payment by collectee is liable to TDS as per section 394(5) (Yes/No)', '(T) Challan number (if S is Yes)', '(U) Date of payment of TDS (if S is Yes)'];
+      ann = o.rows.map(function (r, i) {
+        var dep = r.ch ? r.tds : 0, rem = r.decl ? 'B' : r.ldc ? 'A' : !r.pan || !T.panOk(r.pan) ? 'C' : '';
+        return [i + 1, r.ch ? ix[r.ch.id] : '', r.pan || 'PANNOTAVBL', r.party, 'N', '', '', '', r.base, ddmm(r.date), r.code || '', r.tds, r.decl ? '' : r.ch ? 'Yes' : 'No', dep, r.decl ? '' : ddmm(r.date), r.decl ? '' : r.rate, rem, r.ldc || '', 'No', '', ''];
+      });
+    } else {
+      head = ['(A) Sl. No.', '(B) Challan reference No. (column A of Part B)', '(C) Permanent account number of the deductee', '(D) Name of the deductee', '(E) Section code', '(F) Date of payment or credit (dd/mm/yyyy)', '(G) Amount paid or credited', '(H) Cash withdrawal above Rs 1 crore, section 393(3) Sl. 5', '(I) Cash withdrawal above Rs 3 crore (co-operative societies)', '(J) Total tax deducted', '(K) Whether total tax deducted has been deposited (Yes/No)', '(L) Total tax deposited', '(M) Rate at which tax deducted', '(N) Date of deduction (dd/mm/yyyy)', '(O) Reason for non-deduction / lower / higher deduction', '(P) Certificate number under section 395', '(Q) Unique identification number of Form No. 121'];
+      ann = o.rows.map(function (r, i) {
+        var rem = r.ldc ? 'A' : !r.pan || !T.panOk(r.pan) ? 'C' : '';
+        return [i + 1, r.ch ? ix[r.ch.id] : '', r.pan || 'PANNOTAVBL', r.party, T.code(r) || 'Form 141: no Form 140 code', ddmm(r.date), r.base, '', '', r.tds, r.ch ? 'Yes' : 'No', r.ch ? r.tds : 0, r.rate, ddmm(r.date), rem, r.ldc || '', ''];
+      });
+    }
+    return { chHead: chHead, chRows: chRows, head: head, ann: ann };
+  };
   /* Excel rows of the deductee annexure (the order of fields of the Return Preparation Utility's deductee sheet, simplified) */
   T.annexure = function (rows) {
     var head = ['Sl', 'Section (2025 Act)', 'Old section', 'Deductee name', 'PAN', 'Deductee type', 'Date of payment or credit', 'Amount paid or credited', 'TDS', 'Rate %', 'Date of deduction', 'Challan BSR code', 'Challan date', 'Challan serial', 'Lower deduction certificate'];

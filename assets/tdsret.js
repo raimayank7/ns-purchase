@@ -24,8 +24,15 @@
   function tcsRows(docs) {
     return docs.filter(function (d) { return !d.cancelled && !d.deleted && /^(invoice|cashmemo|expinv)$/.test(d.type || 'invoice') && d.tcs && d.tcs.on; }).map(function (d) {
       var t = B.itemTotals(d), rate = B.tcsRate ? B.tcsRate(d) : num(d.tcs.rate), base = d.tcs.base === 'taxable' ? t.taxable : t.taxable + t.cgst + t.sgst + t.igst;
-      return { id: d.id, src: 'invoice', no: d.no || '', date: d.date, party: d.buyer && d.buyer.name || '', pan: B.tcsPan ? String(B.tcsPan(d) || '').toUpperCase() : '', sec: '', base: NS.r2 ? NS.r2(base) : base, rate: rate, tds: t.tcs || 0, form: '143' };
+      return { id: d.id, src: 'invoice', no: d.no || '', date: d.date, party: d.buyer && d.buyer.name || '', pan: B.tcsPan ? String(B.tcsPan(d) || '').toUpperCase() : '', sec: '', code: T.tcsCode(d.tcs.sec), base: NS.r2 ? NS.r2(base) : base, rate: rate, tds: t.tcs || 0, form: '143' };
     }).filter(function (r) { return r.tds > 0; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  }
+  /* bills where the buyer's Form No. 127 was kept instead of collecting TCS: reported with remark B and no tax (Form 143, Note 2) */
+  function declRows(docs, from, to) {
+    return docs.filter(function (d) { return !d.cancelled && !d.deleted && /^(invoice|cashmemo)$/.test(d.type || 'invoice') && d.tcs && d.tcs.decl && !d.tcs.on && d.date >= from && d.date <= to; }).map(function (d) {
+      var t = B.itemTotals(d), sec = d.tcs.sec || '';
+      return { id: d.id, src: 'invoice', no: d.no || '', date: d.date, party: d.buyer && d.buyer.name || '', pan: B.tcsPan ? String(B.tcsPan(d) || '').toUpperCase() : '', code: T.tcsCode(sec), base: NS.r2(t.taxable + t.cgst + t.sgst + t.igst), rate: 0, tds: 0, decl: true, declOn: d.tcs.declOn || '', form: '143' };
+    }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
   }
   function tcsDue(date) { var y = +date.slice(0, 4), m = +date.slice(5, 7), ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1; return ny + '-' + String(nm).padStart(2, '0') + '-07'; }
   function tcsStmtDue(fy, q) { var y = +fy; return [y + '-07-15', y + '-10-15', (y + 1) + '-01-15', (y + 1) + '-05-15'][q - 1]; }
@@ -37,7 +44,7 @@
     m.rows.forEach(function (r) { r.due = tcsDue(r.date); r.late = !!(r.ch && r.paid > r.due); r.intDeposit = 0; });
     m.rows = m.rows.filter(inq); m.unmapped = m.unmapped.filter(inq); m.short = m.unmapped.reduce(function (a, r) { return a + r.tds; }, 0);
     var checks = []; m.rows.forEach(function (r) { if (!r.pan) checks.push({ k: 'nopan', r: r }); if (!r.ch) checks.push({ k: 'noch', r: r }); else if (r.late) checks.push({ k: 'late', r: r }); });
-    return { q: Object.assign({}, qr, { due: tcsStmtDue(ST.fy, ST.q) }), map: m, tds: m.rows.reduce(function (a, r) { return a + r.tds; }, 0), intr: 0, checks: checks, chDocs: ch, tcs: true };
+    return { decl: declRows(docs, qr.from, qr.to), q: Object.assign({}, qr, { due: tcsStmtDue(ST.fy, ST.q) }), map: m, tds: m.rows.reduce(function (a, r) { return a + r.tds; }, 0), intr: 0, checks: checks, chDocs: ch, tcs: true };
   }
   function work() {
     if (ST.form === '143') return tcsWork();
@@ -60,7 +67,7 @@
     var rows = m.rows.length ? '<div class="tbl-wrap"><table class="tbl pw-t"><thead><tr><th>' + esc(A.T('date')) + '</th><th>' + esc(TC ? 'Collectee' : F('party')) + '</th><th>PAN</th><th>' + esc(TC ? 'Rate' : F('sec')) + '</th><th class="n">' + esc(TC ? 'Amount received or debited' : F('base')) + '</th><th class="n">' + TX + '</th><th>' + esc(F('due')) + '</th><th>' + esc(F('challan')) + '</th><th class="n">' + esc(F('int')) + '</th></tr></thead><tbody>' +
       m.rows.map(function (r) {
         var s = T.sec(r.sec);
-        return '<tr' + (!r.ch || r.late || !r.pan ? ' class="pr-bad"' : '') + '><td>' + esc(A.ldate(r.date)) + '</td><th scope="row">' + esc(r.party) + '<small class="soft"> · ' + esc(A.docName ? r.src : r.src) + ' ' + esc(r.no || '') + '</small></th><td dir="ltr">' + esc(r.pan || '—') + '</td><td>' + esc(TC ? (r.rate ? r.rate + '%' : '—') : r.form === '138' ? '392 (old 192)' : s ? s[6] + ' (old ' + s[1] + ')' : '—') + '</td>' +
+        return '<tr' + (!r.ch || r.late || !r.pan ? ' class="pr-bad"' : '') + '><td>' + esc(A.ldate(r.date)) + '</td><th scope="row">' + esc(r.party) + '<small class="soft"> · ' + esc(A.docName ? r.src : r.src) + ' ' + esc(r.no || '') + '</small></th><td dir="ltr">' + esc(r.pan || '—') + '</td><td>' + esc(TC ? (r.code ? 'Code ' + r.code + ' · ' : '') + (r.rate ? r.rate + '%' : '—') : r.form === '138' ? 'Code 1002 · 392 (old 192)' : s ? (T.code(r) ? 'Code ' + T.code(r) : 'Form 141') + ' · ' + s[6] + ' (old ' + s[1] + ')' : '—') + '</td>' +
           '<td class="n">' + m0(r.base) + '</td><td class="n"><b>' + m0(r.tds) + '</b></td><td>' + esc(A.ldate(r.due)) + '</td><td>' + (r.ch ? '<span class="pill' + (r.late ? ' warn' : ' ok') + '">' + esc(A.ldate(r.paid)) + '</span> ' : '<span class="pill warn">' + esc(F('notpaid')) + '</span> ') + chOpts(r) + '</td><td class="n">' + (r.intDeposit ? m0(r.intDeposit) : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<p class="soft">' + esc(F('none')) + '</p>';
     var cks = w.checks.length ? '<div class="card"><h3>' + esc(F('checks', { n: w.checks.length })) + '</h3><ul class="rows">' + w.checks.slice(0, 60).map(function (c) { return '<li><span>' + esc(W('ck_' + c.k, { p: c.r.party, d: A.ldate(c.r.date), t: m0(c.r.tds) })) + '</span></li>'; }).join('') + '</ul></div>' : (m.rows.length ? '<p class="pill ok">' + esc(F('allok')) + '</p>' : '');
@@ -101,10 +108,34 @@
       win.document.close();
     }); });
     var x = $('[data-trxl]', pane); if (x) x.addEventListener('click', function () {
-      var w = work(), ann = w.tcs ? [['Collectee name', 'PAN', 'Date of collection', 'Amount received or debited', 'Rate', 'TCS', 'Collection code', 'Bill no.', 'BSR code', 'Challan serial', 'Date deposited']].concat(w.map.rows.map(function (r) { return [r.party, r.pan, r.date, r.base, r.rate, r.tds, '', r.no, r.ch ? r.ch.bsr : '', r.ch ? r.ch.serial : '', r.ch ? r.ch.date : '']; })) : T.annexure(w.map.rows), chs = [['BSR code', 'Challan serial', 'Date of deposit', 'Minor head', 'Tax', 'Interest', 'Fee', 'Linked TDS', 'Not linked']].concat(w.map.challans.map(function (c) { var d = w.chDocs.filter(function (y) { return y.id === c.id; })[0] || {}; return [c.bsr, c.serial, c.date, c.minor, c.tax, num(d['int']), num(d.fee), c.used, c.left]; }));
+      var w = work(); if (exportStatement(w)) return; var ann = w.tcs ? [['Collectee name', 'PAN', 'Date of collection', 'Amount received or debited', 'Rate', 'TCS', 'Collection code', 'Bill no.', 'BSR code', 'Challan serial', 'Date deposited']].concat(w.map.rows.map(function (r) { return [r.party, r.pan, r.date, r.base, r.rate, r.tds, '', r.no, r.ch ? r.ch.bsr : '', r.ch ? r.ch.serial : '', r.ch ? r.ch.date : '']; })) : T.annexure(w.map.rows), chs = [['BSR code', 'Challan serial', 'Date of deposit', 'Minor head', 'Tax', 'Interest', 'Fee', 'Linked TDS', 'Not linked']].concat(w.map.challans.map(function (c) { var d = w.chDocs.filter(function (y) { return y.id === c.id; })[0] || {}; return [c.bsr, c.serial, c.date, c.minor, c.tax, num(d['int']), num(d.fee), c.used, c.left]; }));
       var fn = (w.tcs ? 'tcs-' : 'tds-') + fname(ST.form).replace(/\W+/g, '-').replace(/-+$/, '').toLowerCase() + '-' + ST.fy + '-Q' + ST.q + '.xlsx';
       NS.loadLazy(['xlsx.js']).then(function () { NS.saveFile(NS.xlsx.write([[w.tcs ? 'Collectees' : 'Deductees', ann], ['Challans', chs]]), fn); NS.toast(F('saved', { f: fn })); }, function () { NS.toast(F('noxl'), 'bad'); });
     });
+  }
+  /* one file for the quarter, in the department's own layout (owner 20 Nov): About (who, which statement, totals, what to check),
+     Part B challans (columns A to K) and the Annexure (Form 140/138/144 columns A to Q, Form 143 columns A to U) with the official
+     4-digit section or collection codes of the Income-tax Rules, 2026. The department's utility still makes the upload file (FVU). */
+  function exportStatement(w) {
+    var b = A.biz() || {}, rows = w.tcs ? w.map.rows.concat(w.decl || []).sort(function (x, y) { return x.date < y.date ? -1 : 1; }) : w.map.rows;
+    var st = T.statement({ rows: rows, tcs: !!w.tcs, chExtra: function (c) { var d = w.chDocs.filter(function (y) { return y.id === c.id; })[0] || {}; return { int: d['int'], fee: d.fee, oth: d.oth || d.pen }; } });
+    var noCode = rows.filter(function (r) { return w.tcs ? !r.code : !T.code(r); }).length, noPan = rows.filter(function (r) { return !r.pan; }).length, noCh = rows.filter(function (r) { return !r.decl && !r.ch; }).length;
+    var tot = rows.reduce(function (a, r) { return a + r.tds; }, 0), qEnd = T.ddmm(w.q.to);
+    var about = [['Form', fname(ST.form) + ': ' + FORMS[ST.form][2]], ['Tax year', ST.fy + '-' + String(+ST.fy + 1).slice(2)], ['Quarter', 'Q' + ST.q + ' (quarter ended ' + qEnd + ')'],
+      [w.tcs ? 'Collector' : 'Deductor', b.name || ''], ['TAN', b.tan || '(add the TAN in My data › Businesses)'], ['PAN', String(b.pan || (b.gstin ? String(b.gstin).slice(2, 12) : '') || '').toUpperCase()],
+      ['Address', [b.addr, b.city, b.pin].filter(Boolean).join(', ')], ['Statement due by', T.ddmm(w.q.due)],
+      [w.tcs ? 'Collectee rows' : 'Deductee rows', rows.length], [w.tcs ? 'Total tax collected' : 'Total tax deducted', NS.r2(tot)], ['Challans', st.chRows.length], [],
+      ['Before filing', [noCode ? noCode + ' row(s) with no ' + (w.tcs ? 'collection' : 'section') + ' code: pick it on the bill.' : '', noPan ? noPan + ' row(s) with no PAN (PANNOTAVBL): the higher rate applies, remark C.' : '', noCh ? noCh + ' row(s) not yet linked to a paid challan.' : ''].filter(Boolean).join(' ') || 'Nothing missing.'],
+      ['Codes', w.tcs ? 'Collection codes of Form No. 143, Note 9 (1068 liquor, 1069 tendu leaves, 1070-1072 timber and forest produce, 1073 scrap, 1074 coal, lignite or iron ore, 1075-1085 motor vehicle and notified goods, 1088-1089 overseas tour, 1090-1092 parking lot, toll plaza, mine or quarry). Remark B = buyer gave Form No. 127 (section 394(2)); C = no PAN (section 397(2)); A = lower-collection certificate.' : 'Section codes of Form No. 140, Note 15 (for example 1023/1024 contractors, 1026 technical fees, 1027 professional fees, 1028 director, 1006 commission, 1008 rent of machinery, 1009 rent of land or building, 1022 interest, 1031 purchase of goods, 1067 partner; salary 1002). Remark A = lower or no deduction certificate; C = no PAN.'],
+      ['Source', 'Income-tax Rules, 2026 (G.S.R. 198(E), 20 March 2026), Form No. ' + ST.form + ' and its Notes.'],
+      ['How to file', 'Type or paste these rows into the department\'s Return Preparation Utility for Form No. ' + ST.form + ', validate with the File Validation Utility (FVU), then upload on the income-tax portal or at a TIN facilitation centre.'],
+      ['Made by', NS.creditText || 'NSBiz by Nivesh Sahayak']];
+    var fn = (w.tcs ? 'TCS' : 'TDS') + ' Form ' + ST.form + ' ' + ST.fy + '-' + String(+ST.fy + 1).slice(2) + ' Q' + ST.q + '.xlsx';
+    NS.loadLazy(['xlsx.js']).then(function () {
+      NS.saveFile(NS.xlsx.write([['About', about], ['Part B Challans', [st.chHead].concat(st.chRows)], [w.tcs ? 'Annexure Collectees' : 'Annexure Deductees', [st.head].concat(st.ann)]]), fn);
+      NS.toast(F('saved', { f: fn }));
+    }, function () { NS.toast(F('noxl'), 'bad'); });
+    return true;
   }
   A.addSection('tdsr', html, wire);
   function menu() {

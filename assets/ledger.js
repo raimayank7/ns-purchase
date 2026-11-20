@@ -555,6 +555,7 @@
   var VRG = [['Accounting vouchers', ['all', 'sale', 'sret', 'purchase', 'pret', 'receipt', 'payment', 'contra', 'journal', 'expense', 'cnote', 'dnote']],
     ['Orders and other documents', ['quote', 'proforma', 'so', 'po', 'challan']], ['Inventory vouchers', ['grn', 'stj']]];
   function vrList() { var r = A.range(); return A.mine().filter(function (d) { return (d.date || '') >= r[0] && (d.date || '') <= r[1] && VRT[vrT](d) && (!vrMode || d.mode === vrMode) && cfOk(d, 'vreg'); }).sort(function (a, b) { return (a.date || '').localeCompare(b.date || '') || String(a.no || '').localeCompare(String(b.no || '')); }); }
+  A.vregOf = function (k) { if (VRT[k]) vrT = k; };   /* List on a voucher screen opens its own register (vtools.js) */
   A.addSection('vreg', function () {
     var L = vrList(), CC = cfCols(L), tot = 0, modes = { cash: 'Cash', upi: 'UPI', bank: 'Bank', cheque: 'Cheque', card: 'Card' };
     var bar = '<div class="lg-bar"><label><span>' + esc(T('cr_vtype')) + '</span> <select data-vrt>' + VRG.map(function (g) { return '<optgroup label="' + esc(g[0]) + '">' + g[1].map(function (k) { return '<option value="' + k + '"' + (k === vrT ? ' selected' : '') + '>' + esc(VRL[k]) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select></label>' +

@@ -174,6 +174,7 @@
       apply(r);
       var s = sigOf(r), ch = s !== SIG; MEM = r; SIG = s;   /* stamped after apply: its one-time settings copy is part of it */
       readyFns.splice(0).forEach(function (f) { try { f(); } catch (e) {} });
+      if (NS.gateway) setTimeout(NS.gateway, 0);   /* the box above Dashboard: drawn again once the business is known (it could stay empty when drawn before the data arrived) */
       return ch;
     });
   }
