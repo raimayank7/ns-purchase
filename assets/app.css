@@ -730,3 +730,9 @@ dialog.vt-pv{width:min(1000px,96vw);height:92vh;padding:0;display:none;flex-dire
 @media print{.stsheet{font-size:11pt!important}}
 .stsheet .tbl,.stsheet .tbl :is(th,td){font-size:1em!important}.stsheet .fr-tbd :is(th,td),.stsheet .tbl.eb :is(td,th){font-size:.92em!important}
 html.ns-soft .app-frame{transition:none}
+/* one WhatsApp button with its two messages (20 Nov 2026) */
+.wa-menu{position:relative;display:inline-block}.wa-menu>summary{list-style:none;cursor:pointer}.wa-menu>summary::-webkit-details-marker{display:none}
+.wa-pop{position:absolute;z-index:40;top:calc(100% + 4px);inset-inline-start:0;min-width:300px;display:grid;gap:4px;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 28px rgba(0,0,0,.35)}
+.wa-pop .btn{display:grid;justify-items:start;text-align:start;gap:2px;width:100%;border:0;background:transparent}.wa-pop .btn:hover,.wa-pop .btn:focus-visible{background:var(--surface2)}.wa-pop small{color:var(--soft);font-weight:400}
+.wa-pop .btn,.wa-pop .btn+.btn{margin:0!important;padding:8px 10px}
+.wa-pop .btn{display:flex!important;flex-direction:column;align-items:flex-start!important;justify-content:flex-start}.wa-pop .btn::before,.wa-pop .btn::after{display:none!important}

@@ -110,12 +110,16 @@
         '<datalist id="lg-parties">' + names.map(function (x) { return '<option value="' + esc(x.name) + '" label="' + esc(enBal(x.bal)) + '"></option>'; }).join('') + '</datalist>' +
         '<button type="button" class="btn sm" data-pnext="-1" aria-label="' + esc(T('lg_prev')) + '">&lsaquo;</button><button type="button" class="btn sm" data-pnext="1" aria-label="' + esc(T('lg_next')) + '">&rsaquo;</button></div>' +
       '<div class="pane-hd"><h2>' + esc(p.name) + (g ? ' <small class="pill">' + esc(A.gname(g)) + '</small>' : '') + '</h2><div class="quick">' +
-        (p.bal > 0.004 ? '<button type="button" class="btn wa" data-wa="' + esc(k) + '">' + esc(T('remind')) + '</button>' : '') +
+        /* one WhatsApp button (owner 20 Nov: "WhatsApp reminder" and "Send on WhatsApp" looked like the same action): a payment reminder or the account statement */
+        (view !== 'letter' ? '<details class="wa-menu"><summary class="btn wa">WhatsApp ▾</summary><div class="wa-pop" role="menu">' +
+          (p.bal > 0.004 ? '<button type="button" class="btn" role="menuitem" data-noic data-wa="' + esc(k) + '"><b>Payment reminder</b><small>What is due, the unpaid bills and your UPI ID</small></button>' : '') +
+          '<button type="button" class="btn" role="menuitem" data-noic data-lgwa><b>Account statement</b><small>The ledger of these dates, last 20 entries</small></button></div></details>'
+          : p.bal > 0.004 ? '<button type="button" class="btn wa" data-wa="' + esc(k) + '">' + esc(T('remind')) + '</button>' : '') +
         (p.bal > 0.004 && shareUrl(k) ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(shareUrl(k)) + '">' + esc(NS.t('sh.app.link')) + '</a>' : '') +
         '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button>' + (A.bwBtns ? A.bwBtns(k, p) : '') + (view === 'items' ? '<button type="button" class="btn" data-lgixl>' + esc(T('lg_xl')) + '</button>' :
         '<button type="button" class="btn' + (shown ? '' : ' primary') + '" data-lgprev aria-pressed="' + shown + '">' + esc(T(shown ? 'lg_hideprev' : 'lg_prev_btn')) + '</button>' +
         '<button type="button" class="btn" data-lgprint>' + esc(T('print')) + '</button><button type="button" class="btn" data-lgpdf>' + esc(T('pdf')) + '</button>' +
-        (view !== 'letter' ? '<button type="button" class="btn" data-lgxl>' + esc(T('lg_xl')) + '</button><button type="button" class="btn wa" data-lgwa>' + esc(T('lg_wa')) + '</button>' : '')) + '</div></div>' +
+        (view !== 'letter' ? '<button type="button" class="btn" data-lgxl>' + esc(T('lg_xl')) + '</button>' : '')) + '</div></div>' +
       '<p class="big">' + esc(line) + '</p>' +
       '<div class="lg-bar">' + seg('lgview', [['all', T('lg_all')], ['items', T('lg_items')], ['bills', T('lg_bills')], ['letter', T('lg_letter')]], view) +
       period() +
@@ -165,6 +169,7 @@
     });
     var xb = $('[data-lgxl]', pane); if (xb) xb.addEventListener('click', function () { excel(k, p, r); });
     var wb = $('[data-lgwa]', pane); if (wb) wb.addEventListener('click', function () { waLedger(k, p, r); });
+    var wm = $('.wa-menu', pane); if (wm) { wm.addEventListener('click', function (e) { if (e.target.closest('.wa-pop button')) wm.open = false; }); document.addEventListener('click', function off(e) { if (!wm.isConnected) { document.removeEventListener('click', off); return; } if (!wm.contains(e.target)) wm.open = false; }); }
   });
 
   /* each party remembers the tab and the dates last used on it (this browser only) */
