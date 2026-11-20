@@ -136,8 +136,10 @@
         '<iframe class="app-frame" src="' + esc(url) + '" title="' + esc(title) + '" allow="web-share; clipboard-write"></iframe>';
       sh.appendChild(box);
       var fr = $('iframe.app-frame', box);
+      /* the document shows when it is ready (its words and data in), not at the first load event: a half-drawn page flashed (owner 19 Nov) */
+      var showFr = function () { var n = 0; (function w() { var ok = false; try { ok = fr.contentDocument.documentElement.classList.contains('ready'); } catch (er) { ok = true; } if (ok || ++n > 80) { fr.classList.add('on'); sizeFrame(); } else setTimeout(w, 30); })(); };
       fr.addEventListener('load', function () {
-        fr.classList.add('on'); sizeFrame();
+        showFr();
         /* a page of the App: its own heading names the screen */
         if (site === 'page') try { var hh = fr.contentDocument.querySelector('h1'), t2 = $('.fr-hd h2'); if (hh && t2 && box.classList.contains('cur')) t2.textContent = hh.textContent.trim(); } catch (er) {}
       });
@@ -554,11 +556,14 @@
   }
   /* built-in names: My data's words (grp.debtors / grp.creditors from ns-groups) when that pack has them, else the App's own */
   function gname(g) { if (!(g.builtin || B.BUILTIN[g.id])) return g.name; var k = 'grp.' + g.id, w = NS.t(k); return w !== k ? w : T('lg_g_' + g.id); }
-  function grpKeep(k, P) { return (!grp || B.inGroup(gidOf(k, P), grp, GRP)) && (!window.NSApp || !NSApp.routeKeep || NSApp.routeKeep(k)); }   /* route filter: route.js */
+  /* top: 'debtors' or 'creditors' on a screen of one side only; a group chosen on the other side is not used there (owner 19 Nov: Sundry Creditors showed Sundry Debtors) */
+  function grpFor(top) { return !grp || !top || B.inGroup(grp, top, GRP) ? grp : ''; }
+  function grpKeep(k, P, top) { var g = grpFor(top); return (!g || B.inGroup(gidOf(k, P), g, GRP)) && (!window.NSApp || !NSApp.routeKeep || NSApp.routeKeep(k)); }   /* route filter: route.js */
   /* group filter: All, Customers and its groups, Suppliers and its groups (sub-groups indented) */
-  function grpSel() {
-    return '<label class="lg-gsel"><span>' + esc(T('lg_group')) + '</span> <select data-grp><option value="">' + esc(T('all')) + '</option>' + B.groupTree(GRP).map(function (g) {
-      return '<option value="' + esc(g.id) + '"' + (g.id === grp ? ' selected' : '') + '>' + new Array(g.depth + 1).join('\u2003') + esc(gname(g)) + '</option>'; }).join('') + '</select></label>';
+  function grpSel(top) {
+    var cur = grpFor(top), tree = B.groupTree(GRP).filter(function (g) { return !top || g.id === top || B.inGroup(g.id, top, GRP); });
+    return '<label class="lg-gsel"><span>' + esc(T('lg_group')) + '</span> <select data-grp><option value="">' + esc(T('all')) + '</option>' + tree.map(function (g) {
+      return '<option value="' + esc(g.id) + '"' + (g.id === cur ? ' selected' : '') + '>' + new Array(g.depth + 1).join('\u2003') + esc(gname(g)) + '</option>'; }).join('') + '</select></label>';
   }
   /* the statement is printed in English like every document */
   var ENDOC = { salary: 'Salary slip', rent: 'Rent receipt', petty: 'Petty cash', emi: 'Loan EMI', salpay: 'Salary paid', sadv: 'Staff advance', loan: 'Loan', pettyl: 'Petty cash', rentin: 'Rent received', sal: 'Salary slip', expinv: 'Export invoice', advadj: 'GST on advance adjusted', jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice', oinc: 'Other income', don: 'Donation or subscription received', taxpay: 'Tax paid', gstset: 'GST set-off', wo: 'Write-off', pdd: 'Provision for doubtful debts' };
@@ -1429,6 +1434,7 @@
   }
 
   /* for door sites and extra sections (money.js) */
+  document.documentElement.classList.add('ns-soft');   /* the App: screens change at once, no fades or slides */
   window.NSApp = {
     T: T, B: B, addSection: function (name, html, wire) { EXT[name] = { html: html, wire: wire }; }, addHome: function (f) { HOME.push(f); }, cfg: function () { return CFG; }, show: show, openForm: openForm,
     newDoc: function (v) { var u = toolUrl(v) === '#' ? siteHome(v) : toolUrl(v); if (!openUrl(u)) location.href = u; },
@@ -1436,6 +1442,7 @@
     mine: mine, biz: function () { return BIZ; }, bizName: bizName, data: function () { return C; }, docName: docName, catName: catName, enName: enName, amountOf: amountOf,
     rowsHtml: rowsHtml, leftMap: leftMap, searchBar: searchBar, match: match, byDate: byDate, fyStart: fyStart, toolUrl: toolUrl, myUrl: myUrl, ldate: ldate,
     range: range, trail: function () { return trail; }, viewDoc: function (id) { viewDoc(id); },
+    formDoc: function () { if (!F || !form) return null; var d = F.kind === 'sale' ? saleFromForm() : F.vd && F.vd.build ? F.vd.build() : null; if (d) { delete d.tax; if (F.rec && F.rec.id) d.id = F.rec.id; } return d; },
     markPaid: markPaid, openUrl: openUrl, siteHome: siteHome, frameAt: frameAt, docUrl: docUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },
     whatsapp: whatsapp, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
     vh: function () { return { fld: fld, inp: inp, sel: sel, partyList: partyList, savePartyRole: savePartyRole, drawLines: drawLines, drawSum: drawSum, form: function () { return form; }, cur: function () { return F; } }; },

@@ -353,7 +353,7 @@
     var as = dcAs || A.range()[1], D = A.mine().filter(function (d) { return (d.date || '') <= as; }), biz = A.bizName(), P = B.parties(D, biz);
     var byP = {};
     dueBills(D, biz).forEach(function (b) { if (b.left > 0.004 && b.side === side) (byP[key(b.party)] = byP[key(b.party)] || []).push(b); });
-    var rows = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return (side === 'recv' ? p.bal > 0.004 : p.bal < -0.004) && A.grpKeep(p.key, P); }).map(function (p) {
+    var rows = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return (side === 'recv' ? p.bal > 0.004 : p.bal < -0.004) && A.grpKeep(p.key, P, side === 'recv' ? 'debtors' : 'creditors'); }).map(function (p) {
       var rec = partyRec(p.key) || {}, bl = byP[p.key] || [], old = '', days = 0;
       bl.forEach(function (b) { if (!old || (b.date || '') < old) old = b.date || ''; var dd = B.daysBetween(b.due || b.date, as); if (dd > days) days = dd; });
       return { key: p.key, name: rec.name || p.name, phone: rec.phone || p.phone || '', gstin: rec.gstin || '', city: rec.city || '', amt: Math.abs(p.bal), old: old, days: days,
@@ -365,7 +365,7 @@
   function dcHtml(side) {
     var R = dcRows(side), deb = side === 'recv', title = T(deb ? 'dc_deb' : 'dc_cred');
     var hd = '<div class="pane-hd"><h2>' + esc(title) + '</h2></div>' +
-      '<div class="lg-bar"><label><span>' + esc(T('dc_as')) + '</span> <input type="date" data-dcas value="' + R.as + '"></label><a class="btn sm" href="#os/' + side + '">' + esc(NS.t('rp.os_link')) + ' ›</a>' + A.grpSel() +
+      '<div class="lg-bar"><label><span>' + esc(T('dc_as')) + '</span> <input type="date" data-dcas value="' + R.as + '"></label><a class="btn sm" href="#os/' + side + '">' + esc(NS.t('rp.os_link')) + ' ›</a>' + A.grpSel(deb ? 'debtors' : 'creditors') +
       '<label><span>' + esc(T('dc_min')) + '</span> <input type="number" min="0" step="1" data-dcmin value="' + esc(dcMin) + '" style="width:120px"></label>' +
       '<label><span>' + esc(T('dc_sort')) + '</span> <select data-dcsort>' + [['bal', 'dc_s_bal'], ['age', 'dc_s_age'], ['name', 'dc_s_name']].map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === dcSort ? ' selected' : '') + '>' + esc(T(x[1])) + '</option>'; }).join('') + '</select></label></div>' +
       '<p class="soft">' + esc(T(deb ? 'dc_h_deb' : 'dc_h_cred')) + '</p>' +
@@ -514,14 +514,32 @@
 
   /* ---------- Voucher registers: receipts, payments, journals, contra, credit notes, debit notes ---------- */
   var vrT = 'receipt', vrMode = '';
-  var VRT = { receipt: function (d) { return /^(in|oinc)$/.test(B.role(d)); }, payment: function (d) { return /^(out|outexp|taxpay|refund)$/.test(B.role(d)); },
-    journal: function (d) { return B.role(d) === 'jv'; }, contra: function (d) { return d.type === 'contra'; },
-    cnote: function (d) { return d.type === 'note' && d.kind !== 'debit'; }, dnote: function (d) { return d.type === 'note' && d.kind === 'debit'; } };
-  var VRN = { receipt: 'Receipt register', payment: 'Payment register', journal: 'Journal register', contra: 'Contra register', cnote: 'Credit note register', dnote: 'Debit note register' };
+  var VRT = {
+    all: function (d) { return !!B.role(d) || VDOC.test(d.type || '') || d.type === 'stk'; },
+    sale: function (d) { return B.role(d) === 'sale'; }, sret: function (d) { return B.role(d) === 'sret'; },
+    purchase: function (d) { return B.role(d) === 'buy'; }, pret: function (d) { return B.role(d) === 'pret'; },
+    receipt: function (d) { return /^(in|oinc)$/.test(B.role(d)); }, payment: function (d) { return /^(out|outexp|taxpay|refund)$/.test(B.role(d)); },
+    contra: function (d) { return d.type === 'contra'; }, journal: function (d) { return B.role(d) === 'jv'; },
+    expense: function (d) { return d.type === 'exp' && !(d.items || []).length || B.role(d) === 'exp'; },
+    cnote: function (d) { return d.type === 'note' && d.kind !== 'debit'; }, dnote: function (d) { return d.type === 'note' && d.kind === 'debit'; },
+    quote: function (d) { return d.type === 'quote'; }, proforma: function (d) { return d.type === 'proforma'; }, so: function (d) { return d.type === 'so'; },
+    po: function (d) { return d.type === 'po'; }, challan: function (d) { return d.type === 'challan'; },
+    grn: function (d) { return d.type === 'stk' && /^(grn|rejin|rejout)$/.test(d.kind || ''); },
+    stj: function (d) { return d.type === 'stk' && /^(move|make|adj|jobout|jobin)$/.test(d.kind || ''); } };
+  var VDOC = /^(quote|proforma|so|po|challan)$/;
+  var VRN = { all: 'Day book (every voucher)', sale: 'Sales register', sret: 'Sales return register', purchase: 'Purchase register', pret: 'Purchase return register',
+    receipt: 'Receipt register', payment: 'Payment register', contra: 'Contra register', journal: 'Journal register', expense: 'Expense register',
+    cnote: 'Credit note register', dnote: 'Debit note register', quote: 'Quotation register', proforma: 'Proforma invoice register', so: 'Sales order register',
+    po: 'Purchase order register', challan: 'Delivery challan register', grn: 'Goods receipt and returns register', stj: 'Stock journal register' };
+  var VRL = { all: 'Every voucher (day book)', sale: 'Sales', sret: 'Sales returns', purchase: 'Purchases', pret: 'Purchase returns', receipt: 'Receipts', payment: 'Payments',
+    contra: 'Contra', journal: 'Journals', expense: 'Expenses', cnote: 'Credit notes', dnote: 'Debit notes', quote: 'Quotations', proforma: 'Proforma invoices', so: 'Sales orders',
+    po: 'Purchase orders', challan: 'Delivery challans', grn: 'Goods receipts and returns', stj: 'Stock journals' };
+  var VRG = [['Accounting vouchers', ['all', 'sale', 'sret', 'purchase', 'pret', 'receipt', 'payment', 'contra', 'journal', 'expense', 'cnote', 'dnote']],
+    ['Orders and other documents', ['quote', 'proforma', 'so', 'po', 'challan']], ['Inventory vouchers', ['grn', 'stj']]];
   function vrList() { var r = A.range(); return A.mine().filter(function (d) { return (d.date || '') >= r[0] && (d.date || '') <= r[1] && VRT[vrT](d) && (!vrMode || d.mode === vrMode) && cfOk(d, 'vreg'); }).sort(function (a, b) { return (a.date || '').localeCompare(b.date || '') || String(a.no || '').localeCompare(String(b.no || '')); }); }
   A.addSection('vreg', function () {
     var L = vrList(), CC = cfCols(L), tot = 0, modes = { cash: 'Cash', upi: 'UPI', bank: 'Bank', cheque: 'Cheque', card: 'Card' };
-    var bar = '<div class="lg-bar"><label><span>' + esc(T('cr_vtype')) + '</span> <select data-vrt>' + Object.keys(VRT).map(function (k) { return '<option value="' + k + '"' + (k === vrT ? ' selected' : '') + '>' + esc(T('cr_vt_' + k)) + '</option>'; }).join('') + '</select></label>' +
+    var bar = '<div class="lg-bar"><label><span>' + esc(T('cr_vtype')) + '</span> <select data-vrt>' + VRG.map(function (g) { return '<optgroup label="' + esc(g[0]) + '">' + g[1].map(function (k) { return '<option value="' + k + '"' + (k === vrT ? ' selected' : '') + '>' + esc(VRL[k]) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select></label>' +
       '<label><span>' + esc(T('cr_mode')) + '</span> <select data-vrm><option value="">' + esc(T('all')) + '</option>' + Object.keys(modes).map(function (k) { return '<option value="' + k + '"' + (k === vrMode ? ' selected' : '') + '>' + modes[k] + '</option>'; }).join('') + '</select></label>' + period() + '</div>' + cfBar('vreg', CFT.vreg);
     var body = L.length ? '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Voucher</th><th>Party / account</th><th>Mode</th>' + (CC.length ? NSCF.colHead(CC) : '') + '<th class="n">Amount</th><th class="noprint"></th></tr></thead><tbody>' + L.map(function (d) {
       var a = d.type === 'oinc' ? num(d.amount) : num(A.amountOf(d)); tot += a;   /* other income: the money received, TDS apart (F2-9) */

@@ -710,3 +710,23 @@ tr.rp-cur>*{background:color-mix(in srgb,var(--accent,#0E746A) 14%,transparent)!
 @media print{.lg-half{font-size:9pt}.lg-half .lg-tbl td,.lg-half .lg-tbl th{padding:2px 4px}}
 /* sales and purchase analysis by month (19 Nov 2026) */
 .tbl-scroll{overflow-x:auto}.sm-mx td:first-child,.sm-mx th:first-child{position:sticky;inset-inline-start:0;background:var(--bg-2,var(--surface,#fff));z-index:1}.sm-mx th,.sm-mx td{white-space:nowrap}
+/* filter rows line up (owner 19 Nov): every box has its label above, buttons sit on the boxes' line; headings never in the number font */
+.lg-bar{align-items:flex-end}.lg-bar>label:not(.chk){display:flex;flex-direction:column;align-items:stretch;gap:4px}.lg-bar>label:not(.chk)>span{font-size:.82rem;color:var(--soft)}
+.lg-bar>label.chk{align-self:center}.lg-bar>.btn,.lg-bar>a.btn{min-height:34px;display:inline-flex;align-items:center}
+.tbl thead th.n{font-family:inherit}
+/* voucher preview (19 Nov 2026) */
+dialog.vt-pv{width:min(1000px,96vw);height:92vh;padding:0;display:none;flex-direction:column}dialog.vt-pv[open]{display:flex}
+.vt-pv .dlg-hd{display:flex;align-items:center;gap:12px;padding:10px 14px}.vt-pv .dlg-hd h2{margin:0}.vt-pv .dlg-hd .btn{margin-inline-start:auto}
+.vt-pvb{flex:1;min-height:0;position:relative}.vt-pvf{position:absolute;inset:0;width:100%;height:100%;border:0}.vt-pvb>p{padding:16px}
+/* one font and one size for every report, on screen and on paper (owner 19 Nov): the body font for words AND numbers
+   (numbers line up with tabular figures, no typewriter font), 15px on screen = 11pt on paper, every part of the sheet the same size */
+.stsheet{font-family:var(--font,system-ui,sans-serif)!important;font-size:15px;line-height:1.4}
+.stsheet *{font-family:inherit!important}
+.stsheet .tbl :is(th,td),.stsheet .tbl .n,.stsheet .mono,.stsheet .lg-by,.stsheet .lg-h,.stsheet .small,.stsheet small{font-size:1em}
+.stsheet .tbl .n,.stsheet .n,.stsheet .mono{font-variant-numeric:tabular-nums;letter-spacing:0}
+.stsheet .fr-tbd,.stsheet .tbl.eb :is(td,th){font-size:.92em}
+.stsheet .lg-tbl td:first-child,.stsheet .tbl td.d,.stsheet .lg-tbl td:nth-child(4){white-space:nowrap}
+.stsheet .st-ft,.stsheet .ns-credit{font-size:.8em}
+@media print{.stsheet{font-size:11pt!important}}
+.stsheet .tbl,.stsheet .tbl :is(th,td){font-size:1em!important}.stsheet .fr-tbd :is(th,td),.stsheet .tbl.eb :is(td,th){font-size:.92em!important}
+html.ns-soft .app-frame{transition:none}
