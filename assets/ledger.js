@@ -110,16 +110,16 @@
         '<datalist id="lg-parties">' + names.map(function (x) { return '<option value="' + esc(x.name) + '" label="' + esc(enBal(x.bal)) + '"></option>'; }).join('') + '</datalist>' +
         '<button type="button" class="btn sm" data-pnext="-1" aria-label="' + esc(T('lg_prev')) + '">&lsaquo;</button><button type="button" class="btn sm" data-pnext="1" aria-label="' + esc(T('lg_next')) + '">&rsaquo;</button></div>' +
       '<div class="pane-hd"><h2>' + esc(p.name) + (g ? ' <small class="pill">' + esc(A.gname(g)) + '</small>' : '') + '</h2><div class="quick">' +
-        /* one WhatsApp button (owner 20 Nov: "WhatsApp reminder" and "Send on WhatsApp" looked like the same action): a payment reminder or the account statement */
-        (view !== 'letter' ? '<details class="wa-menu"><summary class="btn wa">WhatsApp ▾</summary><div class="wa-pop" role="menu">' +
-          (p.bal > 0.004 ? '<button type="button" class="btn" role="menuitem" data-noic data-wa="' + esc(k) + '"><b>Payment reminder</b><small>What is due, the unpaid bills and your UPI ID</small></button>' : '') +
-          '<button type="button" class="btn" role="menuitem" data-noic data-lgwa><b>Account statement</b><small>The ledger of these dates, last 20 entries</small></button></div></details>'
-          : p.bal > 0.004 ? '<button type="button" class="btn wa" data-wa="' + esc(k) + '">' + esc(T('remind')) + '</button>' : '') +
+        /* one WhatsApp button (owner 20 Nov): the whole statement, and what is due when the party owes money */
+        (view !== 'letter' ? '<button type="button" class="btn wa" data-lgwa>WhatsApp</button>' : p.bal > 0.004 ? '<button type="button" class="btn wa" data-wa="' + esc(k) + '">' + esc(T('remind')) + '</button>' : '') +
         (p.bal > 0.004 && shareUrl(k) ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(shareUrl(k)) + '">' + esc(NS.t('sh.app.link')) + '</a>' : '') +
         '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button>' + (A.bwBtns ? A.bwBtns(k, p) : '') + (view === 'items' ? '<button type="button" class="btn" data-lgixl>' + esc(T('lg_xl')) + '</button>' :
         '<button type="button" class="btn' + (shown ? '' : ' primary') + '" data-lgprev aria-pressed="' + shown + '">' + esc(T(shown ? 'lg_hideprev' : 'lg_prev_btn')) + '</button>' +
-        '<button type="button" class="btn" data-lgprint>' + esc(T('print')) + '</button><button type="button" class="btn" data-lgpdf>' + esc(T('pdf')) + '</button>' +
-        (view !== 'letter' ? '<button type="button" class="btn" data-lgxl>' + esc(T('lg_xl')) + '</button>' : '')) + '</div></div>' +
+        '<button type="button" class="btn" data-lgprint>' + esc(T('print')) + '</button>' +
+        '<details class="wa-menu ex-menu"><summary class="btn" data-ic="save">Export ▾</summary><div class="wa-pop" role="menu">' +
+          '<button type="button" class="btn" role="menuitem" data-noic data-lgpdf><b>PDF</b><small>The ledger page, to save or share</small></button>' +
+          (view !== 'letter' ? '<button type="button" class="btn" role="menuitem" data-noic data-lgxl><b>Excel</b><small>Ledger and bill-wise sheets (.xlsx)</small></button>' +
+          '<button type="button" class="btn" role="menuitem" data-noic data-lgcsv><b>CSV</b><small>The ledger as plain rows for any program (.csv)</small></button>' : '') + '</div></details>') + '</div></div>' +
       '<p class="big">' + esc(line) + '</p>' +
       '<div class="lg-bar">' + seg('lgview', [['all', T('lg_all')], ['items', T('lg_items')], ['bills', T('lg_bills')], ['letter', T('lg_letter')]], view) +
       period() +
@@ -168,8 +168,9 @@
       pdf(pane, (view === 'letter' ? 'Balance confirmation ' : view === 'bills' ? 'Bill-wise ' : 'Ledger ') + p.name + ' ' + r[1], view === 'letter' ? 'Balance confirmation' : 'Party ledger', A.phoneOf(k));
     });
     var xb = $('[data-lgxl]', pane); if (xb) xb.addEventListener('click', function () { excel(k, p, r); });
+    var cb = $('[data-lgcsv]', pane); if (cb) cb.addEventListener('click', function () { excel(k, p, r, 'csv'); });
     var wb = $('[data-lgwa]', pane); if (wb) wb.addEventListener('click', function () { waLedger(k, p, r); });
-    var wm = $('.wa-menu', pane); if (wm) { wm.addEventListener('click', function (e) { if (e.target.closest('.wa-pop button')) wm.open = false; }); document.addEventListener('click', function off(e) { if (!wm.isConnected) { document.removeEventListener('click', off); return; } if (!wm.contains(e.target)) wm.open = false; }); }
+    $$('.wa-menu', pane).forEach(function (wm) { wm.addEventListener('click', function (e) { if (e.target.closest('.wa-pop button')) wm.open = false; }); document.addEventListener('click', function off(e) { if (!wm.isConnected) { document.removeEventListener('click', off); return; } if (!wm.contains(e.target)) wm.open = false; }); });
   });
 
   /* each party remembers the tab and the dates last used on it (this browser only) */
@@ -271,7 +272,7 @@
   }
 
   /* Excel: the ledger and the bill-wise sheet in one file (English headers, like every report) */
-  function excel(k, p, r) {
+  function excel(k, p, r, fmt) {
     var S = B.ledger(A.mine(), A.bizName(), k, r[0], r[1], types), W = B.billwise(A.mine(), A.bizName(), k, r[1]);
     var dc = function (v) { return v > 0.004 ? 'Dr' : v < -0.004 ? 'Cr' : ''; };
     var led = [['Date', 'Voucher type', 'Voucher no.', 'Reference', 'Debit', 'Credit', 'Balance', 'Dr/Cr', 'Particulars', 'Narration'], [r[0], 'Opening balance', '', '', '', '', Math.abs(S.open), dc(S.open)]]
@@ -280,12 +281,24 @@
     var bw = [['Side', 'Bill date', 'Bill', 'Bill no.', 'Due date', 'Amount', 'Settled', 'Still due', 'Settled by']].concat(W.bills.map(function (b) {
       return [b.side === 'pay' ? 'To pay' : 'To receive', b.date, A.enName(b), b.no, b.due, b.total, NS.r2(b.total - b.left), b.left, b.by.map(function (x) { return (x.type === 'paid' ? 'Paid on the bill' : A.enName(x) + ' ' + (x.no || '')) + ' ' + x.date + ' ' + x.amt; }).join('; ')];
     }));
+    if (fmt === 'csv') {   /* plain rows that any program opens */
+      var q = function (v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+      var blob = new Blob(['\ufeff' + led.map(function (row) { return row.map(q).join(','); }).join('\r\n')], { type: 'text/csv;charset=utf-8' }), lnk = document.createElement('a');
+      lnk.href = URL.createObjectURL(blob); lnk.download = fileName(p.name) + '-ledger-' + r[0] + '-to-' + r[1] + '.csv'; document.body.appendChild(lnk); lnk.click();
+      setTimeout(function () { URL.revokeObjectURL(lnk.href); document.body.removeChild(lnk); }, 1000); return;
+    }
     NS.xlsx(fileName(p.name) + '-ledger-' + r[0] + '-to-' + r[1] + '.xlsx', [{ name: 'Ledger', rows: led }, { name: 'Bill-wise', rows: bw }]);
   }
   function waLedger(k, p, r) {
     var S = B.ledger(A.mine(), A.bizName(), k, r[0], r[1], types);
-    var lines = S.rows.slice(-20).map(function (x) { return A.ldate(x.date) + ' ' + A.enName(x.d) + ' ' + (x.d.no || '') + ' ' + (x.dr ? 'Dr ' + money(x.dr) : 'Cr ' + money(x.cr)); });
+    var lines = S.rows.map(function (x) { return A.ldate(x.date) + ' ' + A.enName(x.d) + ' ' + (x.d.no || '') + ' ' + (x.dr ? 'Dr ' + money(x.dr) : 'Cr ' + money(x.cr)); });
     var msg = T('lg_watxt', { p: p.name, b: A.bizName(), f: A.ldate(r[0]), t: A.ldate(r[1]), o: enBal(S.open), c: enBal(S.close) }) + (lines.length ? '\n\n' + lines.join('\n') : '');
+    /* when the party owes money: what is due, the bills still open and the UPI ID (the old separate reminder, in the same message) */
+    if (p.bal > 0.004) {
+      var open = B.bills(A.mine(), A.bizName(), k).bills.filter(function (b) { return b.side === 'recv' && b.left > 0.004; }), biz = A.biz && A.biz() || {};
+      msg += '\n\nAmount due: ' + money(p.bal) + (open.length ? '\nBills still open: ' + open.map(function (b) { return (b.no || A.enName(b)) + ' ' + A.ldate(b.date) + ' ' + money(b.left); }).join(', ') : '') +
+        (biz.upi ? '\nPay by UPI: ' + biz.upi : '');
+    }
     var ph = A.phoneOf(k); if (ph.length === 10) ph = '91' + ph;
     if (!ph) NS.toast(T('nophone', { p: p.name }));
     window.open('https://wa.me/' + (ph.length >= 11 ? ph : '') + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');

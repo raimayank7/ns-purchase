@@ -14,12 +14,33 @@
   function F(k, v) { return NS.t('tq.' + k, v); }
   function m0(v) { return money(v, false); }
   /* statement forms of the Income-tax Rules, 2026 (old form in brackets); see FORMSRC */
-  var FORMS = { '140': ['140', '26Q', 'TDS other than salary (residents)'], '138': ['138', '24Q', 'TDS on salary'], '144': ['144', '27Q', 'TDS on payments to non-residents'] };
+  var FORMS = { '140': ['140', '26Q', 'TDS other than salary (residents)'], '138': ['138', '24Q', 'TDS on salary'], '144': ['144', '27Q', 'TDS on payments to non-residents'], '143': ['143', '27EQ', 'TCS collected on sales'] };
   var FORMSRC = 'Form numbers: Income-tax Rules, 2026, rule 219 (G.S.R. 198(E), 20 March 2026), checked 19 Nov 2026. Late fee: s.427 of the Income-tax Act, 2025; interest: s.398(3)(a).';
   var fyNow = (function () { var d = NS.today(), y = +d.slice(0, 4), m = +d.slice(5, 7); return String(m >= 4 ? y : y - 1); })();
   var ST = { fy: fyNow, q: T.quarterOf(NS.today()), form: '140', filed: '' };
   function fname(f) { var x = FORMS[f]; return 'Form ' + x[0] + ' (old ' + x[1] + ')'; }
+  /* TCS (Form 143): every sales bill of the year with TCS charged, and the challans of kind TCS. Collected tax is paid by the 7th of the
+     next month (March too); the statement is due by the 15th after the quarter (15 May for Q4), as for the old Form 27EQ. */
+  function tcsRows(docs) {
+    return docs.filter(function (d) { return !d.cancelled && !d.deleted && /^(invoice|cashmemo|expinv)$/.test(d.type || 'invoice') && d.tcs && d.tcs.on; }).map(function (d) {
+      var t = B.itemTotals(d), rate = B.tcsRate ? B.tcsRate(d) : num(d.tcs.rate), base = d.tcs.base === 'taxable' ? t.taxable : t.taxable + t.cgst + t.sgst + t.igst;
+      return { id: d.id, src: 'invoice', no: d.no || '', date: d.date, party: d.buyer && d.buyer.name || '', pan: B.tcsPan ? String(B.tcsPan(d) || '').toUpperCase() : '', sec: '', base: NS.r2 ? NS.r2(base) : base, rate: rate, tds: t.tcs || 0, form: '143' };
+    }).filter(function (r) { return r.tds > 0; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  }
+  function tcsDue(date) { var y = +date.slice(0, 4), m = +date.slice(5, 7), ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1; return ny + '-' + String(nm).padStart(2, '0') + '-07'; }
+  function tcsStmtDue(fy, q) { var y = +fy; return [y + '-07-15', y + '-10-15', (y + 1) + '-01-15', (y + 1) + '-05-15'][q - 1]; }
+  function tcsWork() {
+    var docs = A.mine(), qr = T.quarter(ST.fy, ST.q), from = ST.fy + '-04-01', to = (+ST.fy + 1) + '-03-31';
+    var yr = tcsRows(docs).filter(function (r) { return r.date >= from && r.date <= to; });
+    var ch = docs.filter(function (d) { return d.type === 'taxpay' && d.kind === 'tcs' && d.date >= from && d.date <= (+ST.fy + 1) + '-06-30'; });
+    var m = T.map(yr, ch), inq = function (r) { return r.date >= qr.from && r.date <= qr.to; };
+    m.rows.forEach(function (r) { r.due = tcsDue(r.date); r.late = !!(r.ch && r.paid > r.due); r.intDeposit = 0; });
+    m.rows = m.rows.filter(inq); m.unmapped = m.unmapped.filter(inq); m.short = m.unmapped.reduce(function (a, r) { return a + r.tds; }, 0);
+    var checks = []; m.rows.forEach(function (r) { if (!r.pan) checks.push({ k: 'nopan', r: r }); if (!r.ch) checks.push({ k: 'noch', r: r }); else if (r.late) checks.push({ k: 'late', r: r }); });
+    return { q: Object.assign({}, qr, { due: tcsStmtDue(ST.fy, ST.q) }), map: m, tds: m.rows.reduce(function (a, r) { return a + r.tds; }, 0), intr: 0, checks: checks, chDocs: ch, tcs: true };
+  }
   function work() {
+    if (ST.form === '143') return tcsWork();
     var docs = A.mine(), qr = T.quarter(ST.fy, ST.q);
     /* every deduction of the tax year goes through the challans in date order (a challan's room is shared by all forms and quarters);
        the screen then shows this quarter and this form */
@@ -31,30 +52,30 @@
     return { q: qr, map: m, tds: tds, intr: intr, checks: T.checks(m.rows), chDocs: ch };
   }
   function html() {
-    var w = work(), m = w.map, ys = [+fyNow, +fyNow - 1, +fyNow - 2];
+    var w = work(), m = w.map, ys = [+fyNow, +fyNow - 1, +fyNow - 2], TC = !!w.tcs, TX = TC ? 'TCS' : 'TDS', W = function (k, v) { return TC ? F(k, v).replace(/TDS/g, 'TCS').replace(/deductee/gi, 'collectee') : F(k, v); };
     var bar = '<div class="pr-bar tr-bar"><label>' + esc(F('year')) + ' <select id="tr-fy">' + ys.map(function (y) { return '<option value="' + y + '"' + (String(y) === ST.fy ? ' selected' : '') + '>' + y + '-' + String(y + 1).slice(2) + '</option>'; }).join('') + '</select></label>' +
       '<label>' + esc(F('quarter')) + ' <select id="tr-q">' + [1, 2, 3, 4].map(function (q) { return '<option value="' + q + '"' + (q === +ST.q ? ' selected' : '') + '>Q' + q + '</option>'; }).join('') + '</select></label>' +
       '<label>' + esc(F('form')) + ' <select id="tr-form">' + Object.keys(FORMS).map(function (f) { return '<option value="' + f + '"' + (f === ST.form ? ' selected' : '') + '>' + esc(fname(f) + ' · ' + FORMS[f][2]) + '</option>'; }).join('') + '</select></label></div>';
     var chOpts = function (r) { return '<select data-trch="' + esc(r.id) + '" aria-label="' + esc(F('challan')) + '"><option value="">' + esc(F('auto')) + '</option>' + m.challans.map(function (c) { return '<option value="' + esc(c.id) + '"' + (r.ch && r.ch.id === c.id && c.alloc.indexOf(r.id) >= 0 ? ' selected' : '') + '>' + esc((c.bsr || '—') + ' / ' + (c.serial || '—') + ' · ' + A.ldate(c.date) + ' · ' + m0(c.tax)) + '</option>'; }).join('') + '</select>'; };
-    var rows = m.rows.length ? '<div class="tbl-wrap"><table class="tbl pw-t"><thead><tr><th>' + esc(A.T('date')) + '</th><th>' + esc(F('party')) + '</th><th>PAN</th><th>' + esc(F('sec')) + '</th><th class="n">' + esc(F('base')) + '</th><th class="n">TDS</th><th>' + esc(F('due')) + '</th><th>' + esc(F('challan')) + '</th><th class="n">' + esc(F('int')) + '</th></tr></thead><tbody>' +
+    var rows = m.rows.length ? '<div class="tbl-wrap"><table class="tbl pw-t"><thead><tr><th>' + esc(A.T('date')) + '</th><th>' + esc(TC ? 'Collectee' : F('party')) + '</th><th>PAN</th><th>' + esc(TC ? 'Rate' : F('sec')) + '</th><th class="n">' + esc(TC ? 'Amount received or debited' : F('base')) + '</th><th class="n">' + TX + '</th><th>' + esc(F('due')) + '</th><th>' + esc(F('challan')) + '</th><th class="n">' + esc(F('int')) + '</th></tr></thead><tbody>' +
       m.rows.map(function (r) {
         var s = T.sec(r.sec);
-        return '<tr' + (!r.ch || r.late || !r.pan ? ' class="pr-bad"' : '') + '><td>' + esc(A.ldate(r.date)) + '</td><th scope="row">' + esc(r.party) + '<small class="soft"> · ' + esc(A.docName ? r.src : r.src) + ' ' + esc(r.no || '') + '</small></th><td dir="ltr">' + esc(r.pan || '—') + '</td><td>' + esc(r.form === '138' ? '392 (old 192)' : s ? s[6] + ' (old ' + s[1] + ')' : '—') + '</td>' +
+        return '<tr' + (!r.ch || r.late || !r.pan ? ' class="pr-bad"' : '') + '><td>' + esc(A.ldate(r.date)) + '</td><th scope="row">' + esc(r.party) + '<small class="soft"> · ' + esc(A.docName ? r.src : r.src) + ' ' + esc(r.no || '') + '</small></th><td dir="ltr">' + esc(r.pan || '—') + '</td><td>' + esc(TC ? (r.rate ? r.rate + '%' : '—') : r.form === '138' ? '392 (old 192)' : s ? s[6] + ' (old ' + s[1] + ')' : '—') + '</td>' +
           '<td class="n">' + m0(r.base) + '</td><td class="n"><b>' + m0(r.tds) + '</b></td><td>' + esc(A.ldate(r.due)) + '</td><td>' + (r.ch ? '<span class="pill' + (r.late ? ' warn' : ' ok') + '">' + esc(A.ldate(r.paid)) + '</span> ' : '<span class="pill warn">' + esc(F('notpaid')) + '</span> ') + chOpts(r) + '</td><td class="n">' + (r.intDeposit ? m0(r.intDeposit) : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<p class="soft">' + esc(F('none')) + '</p>';
-    var cks = w.checks.length ? '<div class="card"><h3>' + esc(F('checks', { n: w.checks.length })) + '</h3><ul class="rows">' + w.checks.slice(0, 60).map(function (c) { return '<li><span>' + esc(F('ck_' + c.k, { p: c.r.party, d: A.ldate(c.r.date), t: m0(c.r.tds) })) + '</span></li>'; }).join('') + '</ul></div>' : (m.rows.length ? '<p class="pill ok">' + esc(F('allok')) + '</p>' : '');
-    var chs = '<div class="card"><h3>' + esc(F('challans')) + '</h3>' + (m.challans.length ? '<ul class="rows">' + m.challans.map(function (c) { return '<li><span>' + esc(F('chline', { b: c.bsr || '—', s: c.serial || '—', d: A.ldate(c.date), n: c.no })) + (c.bsr ? '' : ' <span class="pill warn">' + esc(F('nobsr')) + '</span>') + '</span><b class="amt">' + esc(F('used', { u: m0(c.used), t: m0(c.tax) })) + '</b></li>'; }).join('') + '</ul>' : '<p class="soft">' + esc(F('noch')) + '</p>') +
+    var cks = w.checks.length ? '<div class="card"><h3>' + esc(F('checks', { n: w.checks.length })) + '</h3><ul class="rows">' + w.checks.slice(0, 60).map(function (c) { return '<li><span>' + esc(W('ck_' + c.k, { p: c.r.party, d: A.ldate(c.r.date), t: m0(c.r.tds) })) + '</span></li>'; }).join('') + '</ul></div>' : (m.rows.length ? '<p class="pill ok">' + esc(F('allok')) + '</p>' : '');
+    var chs = '<div class="card"><h3>' + esc(F('challans')) + '</h3>' + (m.challans.length ? '<ul class="rows">' + m.challans.map(function (c) { return '<li><span>' + esc(F('chline', { b: c.bsr || '—', s: c.serial || '—', d: A.ldate(c.date), n: c.no })) + (c.bsr ? '' : ' <span class="pill warn">' + esc(F('nobsr')) + '</span>') + '</span><b class="amt">' + esc(F('used', { u: m0(c.used), t: m0(c.tax) })) + '</b></li>'; }).join('') + '</ul>' : '<p class="soft">' + esc(W('noch')) + '</p>') +
       '<p><a class="btn sm" href="#acx">' + esc(F('paych')) + ' ›</a></p></div>';
     var fee = T.lateFee(w.q.due, ST.filed, w.tds);
-    var sum = '<ul class="rows pw-tot"><li><span>' + esc(F('tdsq')) + '</span><b class="amt">' + money(w.tds) + '</b></li><li><span>' + esc(F('short')) + '</span><b class="amt">' + money(m.short) + '</b></li><li><span>' + esc(F('intq')) + '</span><b class="amt">' + money(w.intr) + '</b></li><li><span>' + esc(F('stdue')) + '</span><b>' + esc(A.ldate(w.q.due)) + '</b></li></ul>' +
+    var sum = '<ul class="rows pw-tot"><li><span>' + esc(W('tdsq')) + '</span><b class="amt">' + money(w.tds) + '</b></li><li><span>' + esc(F('short')) + '</span><b class="amt">' + money(m.short) + '</b></li>' + (TC ? '' : '<li><span>' + esc(F('intq')) + '</span><b class="amt">' + money(w.intr) + '</b></li>') + '<li><span>' + esc(F('stdue')) + '</span><b>' + esc(A.ldate(w.q.due)) + '</b></li></ul>' +
       '<div class="fg"><div class="f"><label for="tr-filed">' + esc(F('filed')) + '</label><input type="date" id="tr-filed" value="' + esc(ST.filed) + '"><small class="soft">' + esc(F('filedh')) + '</small></div></div>' + (fee ? '<p class="callout">' + esc(F('fee', { a: money(fee) })) + '</p>' : '');
     /* S-23: certificate working per deductee for this quarter (Form 131, old 16A; Form 130, old Form 16, for salary): the deductions and
        the challans that paid them, to check against the certificate downloaded from TRACES */
     var by = {}; m.rows.forEach(function (r) { (by[r.party] = by[r.party] || []).push(r); });
-    var certs = Object.keys(by).length ? '<div class="card"><h3>' + esc(F('certs', { f: ST.form === '138' ? 'Form 130 (old Form 16)' : 'Form 131 (old 16A)' })) + '</h3><ul class="rows">' + Object.keys(by).sort().map(function (p) {
+    var certs = !TC && Object.keys(by).length ? '<div class="card"><h3>' + esc(F('certs', { f: ST.form === '138' ? 'Form 130 (old Form 16)' : 'Form 131 (old 16A)' })) + '</h3><ul class="rows">' + Object.keys(by).sort().map(function (p) {
       var t = by[p].reduce(function (a, r) { return a + r.tds; }, 0); return '<li><span>' + esc(p) + ' <span class="soft">' + esc(by[p][0].pan || '—') + '</span></span><b class="amt">' + m0(t) + '</b> <button type="button" class="btn sm" data-trcert="' + esc(p) + '" data-ic="print">' + esc(F('certp')) + '</button></li>'; }).join('') + '</ul><p class="soft">' + esc(F('certh')) + '</p></div>' : '';
-    return '<div class="pane-hd"><h2>' + esc(F('title')) + '</h2><div class="quick"><button type="button" class="btn primary" data-trxl data-ic="download">' + esc(F('xl')) + '</button></div></div><p class="soft">' + esc(F('intro')) + '</p>' + bar + sum + cks + rows + chs + certs +
-      '<p class="soft">' + esc(F('rules')) + '</p><p class="soft">' + esc(FORMSRC) + '</p>';
+    return '<div class="pane-hd"><h2>' + esc(F('title')) + '</h2><div class="quick"><button type="button" class="btn primary" data-trxl data-ic="download">' + esc(F('xl')) + '</button></div></div><p class="soft">' + esc(TC ? 'TCS charged on your sales bills in the quarter, the TCS challans paid, and what to fix before filing Form 143 (old 27EQ). Make the statement with the department’s utility using the Excel file.' : F('intro')) + '</p>' + bar + sum + cks + rows + chs + certs +
+      '<p class="soft">' + esc(TC ? 'Pay TCS by the 7th of the next month. The quarterly statement is due by 15 July, 15 October, 15 January and 15 May (as for the old Form 27EQ: check the date on the income-tax portal). Interest on late payment of TCS is not worked out here.' : F('rules')) + '</p><p class="soft">' + esc(FORMSRC) + '</p>';
   }
   function wire(pane) {
     var ch = function (id, k) { var x = $('#' + id, pane); if (x) x.addEventListener('change', function () { ST[k] = x.value; A.show(); }); };
@@ -80,9 +101,9 @@
       win.document.close();
     }); });
     var x = $('[data-trxl]', pane); if (x) x.addEventListener('click', function () {
-      var w = work(), ann = T.annexure(w.map.rows), chs = [['BSR code', 'Challan serial', 'Date of deposit', 'Minor head', 'Tax', 'Interest', 'Fee', 'Linked TDS', 'Not linked']].concat(w.map.challans.map(function (c) { var d = w.chDocs.filter(function (y) { return y.id === c.id; })[0] || {}; return [c.bsr, c.serial, c.date, c.minor, c.tax, num(d['int']), num(d.fee), c.used, c.left]; }));
-      var fn = 'tds-' + fname(ST.form).replace(/\W+/g, '-').replace(/-+$/, '').toLowerCase() + '-' + ST.fy + '-Q' + ST.q + '.xlsx';
-      NS.loadLazy(['xlsx.js']).then(function () { NS.saveFile(NS.xlsx.write([['Deductees', ann], ['Challans', chs]]), fn); NS.toast(F('saved', { f: fn })); }, function () { NS.toast(F('noxl'), 'bad'); });
+      var w = work(), ann = w.tcs ? [['Collectee name', 'PAN', 'Date of collection', 'Amount received or debited', 'Rate', 'TCS', 'Collection code', 'Bill no.', 'BSR code', 'Challan serial', 'Date deposited']].concat(w.map.rows.map(function (r) { return [r.party, r.pan, r.date, r.base, r.rate, r.tds, '', r.no, r.ch ? r.ch.bsr : '', r.ch ? r.ch.serial : '', r.ch ? r.ch.date : '']; })) : T.annexure(w.map.rows), chs = [['BSR code', 'Challan serial', 'Date of deposit', 'Minor head', 'Tax', 'Interest', 'Fee', 'Linked TDS', 'Not linked']].concat(w.map.challans.map(function (c) { var d = w.chDocs.filter(function (y) { return y.id === c.id; })[0] || {}; return [c.bsr, c.serial, c.date, c.minor, c.tax, num(d['int']), num(d.fee), c.used, c.left]; }));
+      var fn = (w.tcs ? 'tcs-' : 'tds-') + fname(ST.form).replace(/\W+/g, '-').replace(/-+$/, '').toLowerCase() + '-' + ST.fy + '-Q' + ST.q + '.xlsx';
+      NS.loadLazy(['xlsx.js']).then(function () { NS.saveFile(NS.xlsx.write([[w.tcs ? 'Collectees' : 'Deductees', ann], ['Challans', chs]]), fn); NS.toast(F('saved', { f: fn })); }, function () { NS.toast(F('noxl'), 'bad'); });
     });
   }
   A.addSection('tdsr', html, wire);
