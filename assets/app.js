@@ -1360,6 +1360,7 @@
           (on ? '<span><button type="button" class="btn sm ib" data-qup="' + q + '" title="' + esc(T('qe_cus_up')) + '" aria-label="' + esc(T('qe_cus_up')) + '"' + (i ? '' : ' disabled') + '>↑</button><button type="button" class="btn sm ib" data-qdn="' + q + '" title="' + esc(T('qe_cus_down')) + '" aria-label="' + esc(T('qe_cus_down')) + '"' + (i < tabs.length - 1 ? '' : ' disabled') + '>↓</button></span>' : '') + '</li>'; }).join('');
     }
     function draw() {
+      setTimeout(function () { var ul = $('.qe-cl', d); if (ul && NS.dragSort) NS.dragSort(ul, function (a, b) { tabs.splice(b, 0, tabs.splice(a, 1)[0]); draw(); }, function (i) { return i < tabs.length; }); }, 0);
       d.innerHTML = '<div class="dlg-h"><h2>' + esc(T('qe_cus_t')) + '</h2></div><div class="dlg-b"><h3>' + esc(T('qe_cus_tabs')) + '</h3><ul class="qe-cl">' + list() + '</ul>' +
         '<div class="fg">' + fld('qc-gst', T('qe_cus_gst'), sel('qc-gst', String(qeGst()), ['0', '0.1', '0.25', '1.5', '3', '5', '12', '18', '40'].map(function (r) { return [r, r + '%']; }))) +
         fld('qc-sale', T('qe_cus_sale'), sel('qc-sale', qeMode('sale') || '', [['', T('qe_cus_std')]].concat(modeOpts(true)))) +
