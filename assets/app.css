@@ -736,3 +736,11 @@ html.ns-soft .app-frame{transition:none}
 .wa-pop .btn{display:grid;justify-items:start;text-align:start;gap:2px;width:100%;border:0;background:transparent}.wa-pop .btn:hover,.wa-pop .btn:focus-visible{background:var(--surface2)}.wa-pop small{color:var(--soft);font-weight:400}
 .wa-pop .btn,.wa-pop .btn+.btn{margin:0!important;padding:8px 10px}
 .wa-pop .btn{display:flex!important;flex-direction:column;align-items:flex-start!important;justify-content:flex-start}.wa-pop .btn::before,.wa-pop .btn::after{display:none!important}
+/* Charts (charts.js): two a row on computers, one on phones */
+.ch-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.ch-card{margin:0;min-width:0}.ch-card h3{margin:0 0 2px}.ch-card .soft{margin:0 0 6px}.ch-box{height:300px;width:100%}.ch-wait{padding:40px 0;text-align:center}
+@media (max-width:860px){.ch-grid{grid-template-columns:1fr}}
+@media print{.ch-grid{grid-template-columns:1fr 1fr}.ch-card{break-inside:avoid}}
+/* the printed voucher of every App voucher (vtools.js vtPrint): copy name on top, a page per copy */
+.vt-vch .vt-tag{text-align:right;font:700 .72rem/1 sans-serif;letter-spacing:.08em;margin:0 0 6px}.vt-vch .vt-party{margin:8px 0}.vt-vch .vt-to{color:#6B7280;font-size:.85em;margin-right:4px}.vt-vch .vt-items{margin:8px 0}.vt-vch .vt-post{margin:8px 0}.vt-vch .vt-words,.vt-vch .vt-narr{margin:6px 0}
+.vt-pb{break-after:page;page-break-after:always;height:0}
+.vt-cp{height:34px;padding:2px 6px;border-radius:6px;max-width:220px}

@@ -6,7 +6,7 @@
    Maths and file layouts: engine/payrollcore.js (NSPayroll, tested by scripts/test_payroll.js). Screen words: NS.t('pr.*'). Everything stays in the data home. */
 (function () {
   'use strict';
-  var SHEETJS = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'];
+  var SHEETJS = ['/assets/vendor/xlsx-0.20.3.full.min.js', ''];
   var A = window.NSApp, S = window.NSStaff, P = window.NSPayroll, B = window.NSBooks; if (!A || !A.staffExt || !S || !P || !B) return;
   var $ = NS.$, $$ = NS.$$, esc = NS.esc, num = NS.num, money = NS.money;
   function F(k, v) { return NS.t('pr.' + k, v); }

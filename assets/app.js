@@ -1526,6 +1526,8 @@
     });
     /* a page shown in the App's frame asks for another page (core.js): open it on an App screen */
     window.addEventListener('message', function (e) {
+      /* Esc from a screen shown in a frame from its own site (Declarations, look-up tools...): it cannot press the App's Back itself */
+      if (e.data && e.data.nsEsc && e.source && $('iframe.app-frame') && e.source === $('iframe.app-frame').contentWindow) { if (!$('dialog[open]')) { var fb = $('[data-fback]'); if (fb) fb.click(); } return; }
       var u, d = e.data; if (!d || typeof d.nsOpen !== 'string') return;
       try { u = new URL(d.nsOpen); } catch (er) { return; }
       var from; try { from = new URL(e.origin); } catch (er) { return; }

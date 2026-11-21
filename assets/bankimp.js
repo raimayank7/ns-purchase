@@ -3,14 +3,14 @@
    (NSBI) into: receipt from a party, payment to a party, expense, other income, cash deposited or withdrawn, or still open. What the user
    confirms is saved as the records the Money screens already make (receipt, voucher, exp, oinc, contra), each with a `bsk` key so a line is
    never posted twice, even when the same statement is opened again. The party or head chosen for a narration is remembered (meta
-   'bankrules', per business) and suggested next time. PDF statements are not read. Nothing leaves the browser.
+   'bankrules', per business) and suggested next time. PDF statements are read with PDF.js (bank PDFs with text, password asked when the file has one). Nothing leaves the browser.
    Screen words: NS.t('bi.*'), section name NS.t('app.bimp'). */
 (function () {
   'use strict';
   var A = window.NSApp, K = window.NSBank, I = window.NSBI; if (!A || !I) return;
   var $ = NS.$, $$ = NS.$$, esc = NS.esc, num = NS.num, r2 = NS.r2, money = NS.money, B = NSBooks, key = B.key;
   function BI(k, v) { return NS.t('bi.' + k, v); }
-  var XL = ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'];
+  var XL = ['/assets/vendor/xlsx-0.20.3.full.min.js', ''];
   var WANT = '';   /* where the cursor goes after the table is drawn again (see the keys below) */
   var COLS = ['date', 'desc', 'ref', 'dr', 'cr', 'amt', 'type', 'bal'];
   var BS = null, RULES = null, filt = 'todo', busy = false, acct = 'bank';   /* acct: which bank the statement is from (several banks) */
@@ -24,10 +24,103 @@
   function heads() { var H = window.NSHeads; return H ? { exp: H.list(['dexp', 'iexp']).map(function (h) { return H.label(h); }), inc: H.list(['oinc', 'dinc']).map(function (h) { return H.label(h); }) } : { exp: [], inc: [] }; }
   function partyNames() { var o = {}; NS.active(NS.forBiz(A.data().party, A.biz())).forEach(function (p) { o[key(p.name)] = p.name; }); B.parties(A.mine(), A.bizName()); return Object.keys(o).map(function (k) { return o[k]; }).sort(); }
 
+  /* ---------- PDF statements (PDF.js 3.11.174, Mozilla, Apache 2.0; a copy is kept in the App: /vendor/, so it works offline) ----------
+     A bank PDF is text placed on the page. The words are put back into rows by their height on the page; the heading line
+     (Date ... Balance) gives the columns, and every word goes under the heading nearest to it. A narration that runs onto a
+     second line is joined to its row; the heading printed again on later pages is skipped. Password-protected statements
+     (most Indian banks) ask for the password; it is used only to open the file and is not kept. Scanned (picture) PDFs have no
+     text and cannot be read this way. */
+  var PDFJS = '/vendor/pdf.min.js', PDFW = '/vendor/pdf.worker.min.js';
+  function askPassword(again) {
+    return new Promise(function (res) {
+      var d = NS.el('dialog', { 'class': 'b2-dlg bi-pw' });
+      d.innerHTML = '<form method="dialog"><h3>' + (again ? 'Wrong password. Try again' : 'This statement has a password') + '</h3>' +
+        '<p class="soft">Banks usually use your customer ID, date of birth or part of your name and mobile number. The password is used only to open the file here; it is not saved.</p>' +
+        '<input type="password" class="bi-pwin" autocomplete="off" aria-label="PDF password" style="width:100%">' +
+        '<div class="row" style="margin-top:12px;gap:8px;display:flex;justify-content:flex-end"><button type="button" class="btn" value="x">Cancel</button><button class="btn primary" value="ok">Open</button></div></form>';
+      document.body.appendChild(d);
+      var inp = d.querySelector('.bi-pwin'), done = function (v) { d.close(); d.remove(); res(v); };
+      d.querySelector('button[value=x]').addEventListener('click', function () { done(null); });
+      d.querySelector('form').addEventListener('submit', function (e) { e.preventDefault(); done(inp.value); });
+      d.addEventListener('cancel', function (e) { e.preventDefault(); done(null); });
+      d.showModal(); inp.focus();
+    });
+  }
+  function pdfOpen(lib, data, pw, tries) {
+    var o = { data: data.slice(0), isEvalSupported: false };   /* CVE-2024-4367: never let a PDF's fonts run code */
+    if (pw != null) o.password = pw;
+    var t = lib.getDocument(o);
+    return t.promise.catch(function (err) {
+      if (err && err.name === 'PasswordException' && tries < 5) return askPassword(err.code === 2).then(function (p) { if (p == null) throw new Error('cancel'); return pdfOpen(lib, data, p, tries + 1); });
+      throw err;
+    });
+  }
+  /* the words of one page as lines: [{ y, items: [{ x, x2, s }] }], top of the page first */
+  function pageLines(tc) {
+    var L = [];
+    tc.items.forEach(function (it) {
+      var s = String(it.str || '').replace(/\s+/g, ' '); if (!s.trim()) return;
+      var x = it.transform[4], y = it.transform[5], w = it.width || s.length * 4, h = Math.abs(it.transform[3]) || 8;
+      var line = L.filter(function (l) { return Math.abs(l.y - y) <= Math.max(2.5, h * 0.35); })[0];
+      if (!line) { line = { y: y, items: [] }; L.push(line); }
+      line.items.push({ x: x, x2: x + w, s: s.trim() });
+    });
+    L.forEach(function (l) {
+      l.items.sort(function (a, b) { return a.x - b.x; });
+      var m = []; l.items.forEach(function (it) { var p = m[m.length - 1]; if (p && it.x - p.x2 < 2.2) { p.s += (it.x - p.x2 > 0.6 ? ' ' : '') + it.s; p.x2 = it.x2; } else m.push({ x: it.x, x2: it.x2, s: it.s }); });
+      l.items = m;
+    });
+    return L.sort(function (a, b) { return b.y - a.y; });
+  }
+  var HEADW = /^(date|txn date|tran date|transaction date|value date|value dt|narration|particulars|description|details|remarks|chq|cheque|ref|withdrawal|debit|deposit|credit|balance|amount|dr|cr)/i;
+  function isHead(l) { var t = l.items.map(function (i) { return i.s.toLowerCase(); }).join(' | '); return /date/.test(t) && /(balance|withdrawal|debit|deposit|credit)/.test(t) && l.items.filter(function (i) { return HEADW.test(i.s); }).length >= 3; }
+  var DATEISH = /^\d{1,2}[\/\-. ]([A-Za-z]{3}|\d{1,2})[\/\-. ]\d{2,4}$/;
+  function pdfRows(file) {
+    return NS.loadJs(PDFJS).then(function () {
+      var lib = window.pdfjsLib; if (!lib) throw new Error('load');
+      lib.GlobalWorkerOptions.workerSrc = PDFW;
+      return file.arrayBuffer().then(function (buf) { return pdfOpen(lib, new Uint8Array(buf), null, 0); });
+    }).then(function (pdf) {
+      var pages = []; for (var i = 1; i <= pdf.numPages; i++) pages.push(i);
+      return Promise.all(pages.map(function (n) { return pdf.getPage(n).then(function (p) { return p.getTextContent(); }).then(pageLines); }));
+    }).then(function (pagesL) {
+      var all = [].concat.apply([], pagesL), hi = -1, cols = null, headTxt = '';
+      for (var i = 0; i < all.length; i++) if (isHead(all[i])) { hi = i; break; }
+      if (hi < 0) return all.map(function (l) { return l.items.map(function (it) { return it.s; }); });   /* no heading found: cells by gaps, column picking does the rest */
+      /* a heading may be printed on two lines ("Withdrawal" / "Amt."): words just under it join their heading */
+      cols = all[hi].items.map(function (it) { return { c: (it.x + it.x2) / 2, x: it.x, x2: it.x2, s: it.s }; });
+      var nx = all[hi + 1];
+      if (nx && !nx.items.some(function (it) { return DATEISH.test(it.s); }) && nx.items.length <= cols.length && Math.abs(nx.y - all[hi].y) < 16)
+        nx.items.forEach(function (it) { var c = near(it); c.s += ' ' + it.s; }), hi++;
+      headTxt = cols.map(function (c) { return c.s; }).join('|');
+      function near(it) { var m = (it.x + it.x2) / 2, best = cols[0], d = 1e9; cols.forEach(function (c) { var dd = Math.min(Math.abs(m - c.c), Math.abs(it.x - c.x), Math.abs(it.x2 - c.x2)); if (dd < d) { d = dd; best = c; } }); return best; }
+      var dateCol = cols.findIndex(function (c) { return /date/i.test(c.s); }), out = [cols.map(function (c) { return c.s; })];
+      for (var k = hi + 1; k < all.length; k++) {
+        var l = all[k], row = cols.map(function () { return ''; });
+        l.items.forEach(function (it) { var j = cols.indexOf(near(it)); row[j] = row[j] ? row[j] + ' ' + it.s : it.s; });
+        if (row.join('|') === headTxt) continue;   /* heading printed again on the next page */
+        var hasDate = dateCol >= 0 && DATEISH.test(String(row[dateCol]).trim());
+        if (!hasDate && out.length > 1 && dateCol >= 0) {
+          /* no date: the rest of the narration above (when the line has only words), else a total or page line */
+          var money = row.some(function (v, j) { return j !== dateCol && /\d[\d,]*\.\d{2}/.test(v); });
+          if (!money) { var prev = out[out.length - 1]; row.forEach(function (v, j) { if (v) prev[j] = prev[j] ? prev[j] + ' ' + v : v; }); }
+          continue;
+        }
+        if (hasDate) out.push(row);
+      }
+      return out;
+    });
+  }
+
   /* ---------- reading ---------- */
   function readFile(file) {
     var xl = /\.xlsx?$/i.test(file.name);
-    if (/\.pdf$/i.test(file.name)) { NS.toast(BI('nopdf'), 'bad'); return; }
+    if (/\.pdf$/i.test(file.name)) {
+      NS.toast('Reading ' + file.name + '…');
+      pdfRows(file).then(function (rows) { if (rows.length < 2) { NS.toast('No statement lines found in this PDF. A scanned (picture) PDF has no text: download the CSV or Excel statement instead.', 'bad'); return; } setRows(rows, file.name); })
+        .catch(function (e) { if (e && e.message === 'cancel') return; NS.toast('Could not read this PDF' + (e && e.name === 'InvalidPDFException' ? ' (it is not a valid PDF)' : '') + '. Try the CSV or Excel statement.', 'bad'); });
+      return;
+    }
     var get = xl ? NS.loadJs(XL[0], XL[1]).then(function () { return file.arrayBuffer(); }).then(function (buf) {
       var wb = window.XLSX.read(buf, { type: 'array', cellDates: false }), ws = wb.Sheets[wb.SheetNames[0]];
       return window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
@@ -117,7 +210,7 @@
       '<td class="l bi-do">' + (dis ? state : kindSel + nameBox + billSel + (e.status === 'new' && e.kind && e.problem ? '<span class="sb-note bad">' + esc(BI(e.problem)) + '</span>' : state)) + '</td></tr>';
   }
   function html() {
-    var head = '<div class="pane-hd"><h2>' + esc(A.T('bimp')) + '</h2><div class="quick"><label class="btn primary" for="bi-file">' + esc(BI(BS ? 'other' : 'open')) + '</label><input type="file" id="bi-file" class="sr" accept=".csv,.txt,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></div></div>';
+    var head = '<div class="pane-hd"><h2>' + esc(A.T('bimp')) + '</h2><div class="quick"><label class="btn primary" for="bi-file">' + esc(BI(BS ? 'other' : 'open')) + '</label><input type="file" id="bi-file" class="sr" accept=".csv,.txt,.xls,.xlsx,.pdf,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></div></div>';
     if (!BS || !BS.lines.length) return head + '<div class="card"><h3>' + esc(BI('start')) + '</h3><p>' + esc(BI('starth')) + '</p>' + (BS && !BS.lines.length ? '<p class="sb-note bad">' + esc(BI('nolines')) + '</p>' + colsHtml() : '') +
       '<ol><li>' + esc(BI('s1')) + '</li><li>' + esc(BI('s2')) + '</li><li>' + esc(BI('s3')) + '</li><li>' + esc(BI('s4')) + '</li></ol><p class="soft">' + esc(BI('priv')) + '</p></div>';
     var E = entries(), bills = ctx().bills, ready = E.filter(function (e) { return e.post; }), rev = E.filter(function (e) { return e.status === 'new' && !e.post; }), skip = E.length - E.filter(function (e) { return e.status === 'new'; }).length;
