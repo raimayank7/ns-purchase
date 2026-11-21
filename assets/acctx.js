@@ -362,7 +362,7 @@
   });
   /* Money in and out gets the same buttons next to its own (app.js draws that screen) */
   function moneyButtons() {
-    var q = $('[data-form="ob"]'); q = q && q.closest('.quick');
+    var q = $('.quick [data-form="ob"]'); q = q && q.closest('.quick');   /* phone test 21 Nov: the negative-cash note has its own Opening balance button, outside the button row */
     if (!q || $('[data-acx]', q)) return;
     q.insertAdjacentHTML('beforeend', buttons(false)); wireButtons(q);
   }

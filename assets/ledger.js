@@ -57,7 +57,7 @@
   }
   /* PDF of the printable pages: a copy in paper colours, so a dark screen still gives a white page */
   function pdf(pane, name, title, phone) {
-    var nodes = $$('.lg-print > .stsheet', pane).map(function (n) { var c = n.cloneNode(true); c.classList.add('lg-paper'); return c; });
+    var nodes = $$('.lg-print > .stsheet', pane).map(function (n) { var c = n.cloneNode(true); c.classList.add('lg-paper'); $$('.tbl-cards', c).forEach(function (t) { t.classList.remove('tbl-cards'); }); return c; });
     NS.sharePdf(nodes, name, 'a4', title, '', { phone: phone });
   }
 
@@ -150,7 +150,7 @@
         location.hash = '#st/' + encodeURIComponent(names[(i + n + names.length) % names.length].key);
       });
     });
-    var pv = $('[data-lgprev]', pane); if (pv) pv.addEventListener('click', function () { shown = !shown; A.show(); });
+    var pv = $('[data-lgprev]', pane); if (pv) pv.addEventListener('click', function () { shown = !shown; Promise.resolve(A.show()).then(function () { setTimeout(function () { var s = shown && $('.lg-print'); if (s && s.scrollIntoView) s.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120); }); });
     $$('[data-lgo]', pane).forEach(function (c) { c.addEventListener('change', function () { var o = lgOpt(); o[c.getAttribute('data-lgo')] = c.checked ? 1 : 0; lgOptSave(o); shown = true; A.show(); var d = $('.lg-opts', pane); setTimeout(function () { var d2 = document.querySelector('.lg-opts'); if (d2) d2.open = true; }, 30); }); });   /* print choices: the preview shows the change at once */
     /* Print / PDF pressed before the preview: open the ledger page first, then print or make the PDF */
     var lp = $('[data-lgprint]', pane); if (lp) lp.addEventListener('click', function () { if (shown) { window.print(); return; } shown = true; A.show(); setTimeout(function () { window.print(); }, 350); });

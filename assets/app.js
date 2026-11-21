@@ -122,8 +122,9 @@
     var pane = $('[data-pane]'), sh = shelfEl(), box = curBox();
     document.documentElement.classList.add('app-in', 'app-frame-on');
     document.documentElement.classList.toggle('app-maker', !/^(my|page|web)$/.test(site));   /* a document maker: full screen (desk.css) */
-    if (box && box.getAttribute('data-url') === url && !sh.hidden) return;
+    if (box && box.getAttribute('data-url') === url && !sh.hidden) { frVsSync(); return; }
     /* the App's own title row (Back + what is open), then the document: no second website, no new tab */
+    frVsSync();
     pane.innerHTML = '<div class="pane-hd fr-hd"><button type="button" class="btn sm fr-back" data-fback>' + esc(T('back')) + '</button><h2>' + esc(title) + '</h2></div>';
     $('[data-fback]', pane).addEventListener('click', function () { if (trail.length > 1) history.back(); else go(backTo || 'home'); });
     var boxes = $$('.fr-box', sh);
@@ -144,7 +145,7 @@
         if (site === 'page') try { var hh = fr.contentDocument.querySelector('h1'), t2 = $('.fr-hd h2'); if (hh && t2 && box.classList.contains('cur')) t2.textContent = hh.textContent.trim(); } catch (er) {}
       });
     } else { var fr0 = $('iframe.app-frame', box); fr0.title = title; try { fr0.contentDocument.dispatchEvent(new CustomEvent('ns-shown')); } catch (er) {} }   /* P5-4: it brings in what changed meanwhile */
-    box.classList.add('cur'); box.setAttribute('data-used', String(Date.now())); sh.hidden = false;
+    box.classList.add('cur'); box.setAttribute('data-used', String(Date.now())); sh.hidden = false; frVsSync();
     sizeFrame(); requestAnimationFrame(sizeFrame);
     var h2 = $('h2', pane); h2.tabIndex = -1; h2.focus({ preventScroll: true });
   }
@@ -356,7 +357,10 @@
       paint(focus && !first);
     });
   }
-  function paint(focus) { if (B.memo) B.memo(true); try { return paint0(focus); } finally { if (B.memo) B.memo(false); } }   /* Stage 3: every panel of one drawing shares the same dues and balances */
+  function paint(focus) { if (B.memo) B.memo(true); try { return paint0(focus); } finally { if (B.memo) B.memo(false); } }
+  /* phone test 21 Nov: when the data home answers late, the screen may not draw again (nothing changed), so the line saying where the
+     data is kept is put right on its own */
+  document.addEventListener('ns-data', function () { var m = $('[data-mode]'); if (m && window.NSStore) m.textContent = T(NSStore.mode() === 'vault' ? 'vault' : 'local'); });   /* Stage 3: every panel of one drawing shares the same dues and balances */
   function paint0(focus) {
       painted = true;
       var pane = $('[data-pane]');
@@ -846,6 +850,7 @@
     }
     dlg.innerHTML = '<div class="dlg-hd"><h2>' + esc(T('open')) + ': ' + esc(docName(d)) + '</h2><button type="button" class="icon-btn" data-vwclose aria-label="' + esc(T('back')) + '" title="' + esc(T('back')) + '">&#10005;</button></div>' +
       '<div class="vw-body">' + h + '</div><div class="quick vw-acts">' + acts + '</div>';
+    cardTables(dlg);   /* phone test 21 Nov: the item table cut off the Amount column */
     dlg.showModal();
   }
   function showPhoto(id) {
@@ -968,13 +973,13 @@
         '<label class="chk"><input type="checkbox" id="f-nogst"' + (r.noGst ? ' checked' : '') + '> ' + esc(T(sale ? 'qe_nogst' : 'nogst')) + '</label><label class="chk"><input type="checkbox" id="f-round"' + (r.round !== false ? ' checked' : '') + '> ' + esc(T('round')) + '</label>' +
         (sale ? '' : '<label class="chk">' + esc(NS.t('ms.itc')) + ' <select id="f-pitc">' + [['ok', 'ms.itc_ok'], ['blocked', 'ms.itc_blocked'], ['ineligible', 'ms.itc_inel']].map(function (o) { return '<option value="' + o[0] + '"' + ((r.itc || 'ok') === o[0] ? ' selected' : '') + '>' + esc(NS.t(o[1])) + '</option>'; }).join('') + '</select></label>') +   /* r1-gst S-5: credit of the whole bill (lines keep their own) */
         (sale || kind !== 'pbill' ? '' : '<label class="chk">' + esc(NS.t('or.lcby')) + ' <select id="f-lcby">' + [['', 'or.lcby_v'], ['qty', 'or.lcby_q'], ['none', 'or.lcby_n']].map(function (o) { return '<option value="' + o[0] + '"' + ((r.lcBy || '') === o[0] ? ' selected' : '') + '>' + esc(NS.t(o[1])) + '</option>'; }).join('') + '</select></label>') +   /* ERP round 2, I-14: freight lines and charges into the goods' cost */
-        '<div class="sum" data-sum></div></fieldset>' +
+        chgBlock() + '<div class="sum" data-sum></div></fieldset>' +
         '<div class="fg">' + fld('f-narr', NS.t('bw.narr'), inp('f-narr', r.narr || ''), { wide: 1, hint: NS.t('bw.narrh') }) + '</div>' +   /* A-26 (r2-billwise): narration for the books */
         (kind === 'pbill' && !rec ? '<div class="fg">' + fld('f-mode', T('paidnow'), sel('f-mode', (o.quick && qeMode('pbill')) || 'credit', modeOpts(true)), { hint: T('paidnowh') }) + bankFld('f-bank', '', 'f-mode') + '</div>' : '') +
         (sale && !rec ? shipDisp() : '') +
         (sale && !rec ? '<div class="fg">' + fld('f-mode', T('qe_recv'), sel('f-mode', (o.quick && qeMode('sale')) || (/^(shop|resto|pharma)$/.test(BIZ.kind || '') ? 'cash' : 'credit'), modeOpts(true)), { hint: T('qe_recvh') }) + bankFld('f-bank', '', 'f-mode') + '</div>' : '') +
         (sale ? '' : '<div class="fg"><div class="f wide"><label for="f-photo">' + esc(T('photo')) + '</label><input type="file" id="f-photo" accept="image/*"><small class="soft">' + esc(T('photoh')) + '</small><div class="photo-pv" data-photo-pv></div></div></div>');
-      F.lines = JSON.parse(JSON.stringify(r.items)); F.photo = r.photo || '';
+      F.lines = JSON.parse(JSON.stringify(r.items)); F.photo = r.photo || ''; F.charges = JSON.parse(JSON.stringify(r.charges || []));
       if (sale && !party && BIZ.state) h = h.replace('<option value="' + BIZ.state + '">', '<option value="' + BIZ.state + '" selected>');
     } else if (kind === 'exp') {
       var x = rec || { date: today, mode: 'cash', gst: '' };
@@ -1003,7 +1008,7 @@
         fld('f-amt', T('amount'), inp('f-amt', cx.amount || '', { mode: 'decimal', ltr: 1, req: 1 })) +
         fld('f-ref', T('ref'), inp('f-ref', cx.ref || '', { ltr: 1 })) + fld('f-note', T('note'), inp('f-note', cx.notes || ''), { wide: 1 }) + '</div>';
     } else if (kind === 'vdoc') {   /* challan, quotation, order, note, cash memo, self / export invoice (vdocs.js) */
-      F.vd = NSVDocs.make(o, F); h = F.vd.html; F.lines = F.vd.lines; F.photo = ''; F.acctMode = !NS.bizMode(BIZ, CFG).inv; F.noBatch = !NS.bizMode(BIZ, CFG).batch;   /* ERP C-9 */
+      F.vd = NSVDocs.make(o, F); h = F.vd.html; F.lines = F.vd.lines; F.photo = ''; F.charges = JSON.parse(JSON.stringify((F.vd.base && F.vd.base.charges) || [])); F.acctMode = !NS.bizMode(BIZ, CFG).inv; F.noBatch = !NS.bizMode(BIZ, CFG).batch;   /* ERP C-9 */
     } else if (kind === 'ob') {
       var ob = rec || { date: fyStart(today), side: 'recv' };
       h = '<p class="soft">' + esc(T('obh')) + '</p><div class="fg">' + fld('f-side', T('side'), sel('f-side', o.side || ob.side, [['recv', T('s_recv')], ['pay', T('s_pay')], ['cash', T('s_cash')], ['bank', T('s_bank')]])) +
@@ -1024,6 +1029,7 @@
     var al = $('[data-addline]', form);
     if (al) al.addEventListener('click', function () { F.lines.push({ desc: '', hsn: '', qty: 1, rate: '', gst: $('#f-nogst', form).checked ? 0 : F.quick ? qeGst() : 18 }); drawLines(); });
     if (F.lines) drawLines();
+    chgWire();
     if (kind === 'min' || kind === 'mout') { tdsPair('f-tds'); drawAlloc(true); chqShow(); }
     if (kind === 'ob') obShow();
     if (kind === 'contra') contraShow();
@@ -1168,6 +1174,41 @@
     $$('[data-rm]', box).forEach(function (b) { b.addEventListener('click', function () { F.lines.splice(+b.getAttribute('data-rm'), 1); drawLines(); }); });
     drawSum();
   }
+  /* Extra charges (freight, packing, insurance) on App vouchers, as the billing maker saves them: d.charges = [{name, amt, gst}],
+     gst 'main' = the rate of the item with the largest value (owner 21 Nov: "did you forget extra charges in the App?") */
+  var CHG_RATES = [0, 0.1, 0.25, 1.5, 3, 5, 12, 18, 40];
+  function chgBlock() {
+    return '<div class="app-chg" data-chgbox><h4>' + esc(NS.t('b1.charges')) + '</h4><div data-chg></div>' +
+      '<button type="button" class="btn sm" data-addchg>+ ' + esc(NS.t('b1.addchg')) + '</button><p class="soft small">' + esc(NS.t('b1.chgh')) + '</p></div>';
+  }
+  function drawChg() {
+    var box = $('[data-chg]', form); if (!box) return;
+    F.charges = F.charges || [];
+    box.innerHTML = F.charges.map(function (c, i) {
+      var g = c.gst == null || c.gst === '' ? 'main' : String(c.gst);
+      return '<div class="chg-row" data-ci="' + i + '"><label class="f"><span>' + esc(NS.t('b1.chgname')) + '</span><input data-ck="name" list="dl-appchg" value="' + esc(c.name || '') + '"></label>' +
+        '<label class="f"><span>' + esc(NS.t('b1.chgamt')) + '</span><input data-ck="amt" inputmode="decimal" dir="ltr" value="' + esc(c.amt == null ? '' : c.amt) + '"></label>' +
+        '<label class="f"><span>' + esc(NS.t('l.gst')) + '</span><select data-ck="gst"><option value="main">' + esc(NS.t('b1.chgmain')) + '</option>' +
+          CHG_RATES.map(function (r) { return '<option value="' + r + '"' + (String(r) === g ? ' selected' : '') + '>' + r + '%</option>'; }).join('') + '</select></label>' +
+        '<button type="button" class="btn sm" data-chgdel="' + i + '">' + esc(NS.t('it.rm')) + '</button></div>';
+    }).join('') + '<datalist id="dl-appchg"><option value="Freight"><option value="Packing"><option value="Insurance"><option value="Loading"><option value="Cartage"><option value="Installation"></datalist>';
+  }
+  function chgOut() {
+    return (F.charges || []).filter(function (c) { return String(c.name || '').trim() || num(c.amt); })
+      .map(function (c) { return { name: String(c.name || '').trim() || 'Charges', amt: num(c.amt), gst: c.gst == null || c.gst === '' ? 'main' : c.gst }; });
+  }
+  function chgWire() {
+    var box = $('[data-chgbox]', form); if (!box) return;
+    drawChg();
+    $('[data-addchg]', box).addEventListener('click', function () { F.charges.push({ name: '', amt: '', gst: 'main' }); drawChg(); var n = $$('[data-ck=name]', box); if (n.length) n[n.length - 1].focus(); });
+    box.addEventListener('input', function (e) {
+      var r = e.target.closest('[data-ci]'), k = e.target.getAttribute('data-ck'); if (!r || !k) return;
+      F.charges[+r.getAttribute('data-ci')][k] = k === 'gst' && e.target.value === 'main' ? 'main' : e.target.value;
+      drawSum();
+    });
+    box.addEventListener('change', function (e) { if (e.target.getAttribute('data-ck') === 'gst') { var r = e.target.closest('[data-ci]'); F.charges[+r.getAttribute('data-ci')].gst = e.target.value; drawSum(); } });
+    box.addEventListener('click', function (e) { var b = e.target.closest('[data-chgdel]'); if (!b) return; F.charges.splice(+b.getAttribute('data-chgdel'), 1); drawChg(); drawSum(); });
+  }
   function billFromForm() {
     var d = { type: 'pbill', kind: F.kind === 'pret' ? 'return' : 'bill', seller: sellerCopy(), buyer: { name: $('#f-party', form).value.trim(), gstin: $('#f-gstin', form).value.trim().toUpperCase(), state: $('#f-state', form).value },
       no: $('#f-no', form).value.trim(), date: $('#f-date', form).value, noGst: $('#f-nogst', form).checked, round: $('#f-round', form).checked, photo: F.photo || '', itc: $('#f-pitc', form) && $('#f-pitc', form).value !== 'ok' ? $('#f-pitc', form).value : undefined,
@@ -1176,6 +1217,7 @@
     if ($('#f-narr', form)) d.narr = $('#f-narr', form).value.trim();   /* A-26 */
     if ($('#f-pl', form)) d.pl = $('#f-pl', form).value.trim();   /* A-9 */
     if ($('#f-lcby', form)) d.lcBy = $('#f-lcby', form).value || undefined;   /* ERP round 2, I-14 */
+    d.charges = chgOut();
     if ($('#f-due', form)) d.due = $('#f-due', form).value; else d.orig = { no: $('#f-orig', form).value.trim() };
     var t = B.itemTotals(d), total = r2(t.taxable + t.cgst + t.sgst + t.igst);   /* IGST when the supplier's state differs from ours */
     d.total = d.round ? Math.round(total) : total;
@@ -1207,7 +1249,7 @@
       paper: inv.paper || 'a4', design: inv.design || 'classic', copies: 1, date: b.date, due: b.due || '', pos: '', rc: false, recv: '', ref: '',
       seller: sellerCopy(), buyer: { name: b.buyer.name, addr: '', city: '', pin: '', state: b.buyer.state, gstin: b.buyer.gstin, phone: '' }, ship: null, einv: null, irn: null,
       items: b.items.map(function (it) { return Object.assign({}, it, { disc: it.disc || '' }); }), round: b.round, comp: true, notes: inv.notes || '', terms: inv.terms || '',
-      status: 'unpaid', copyLabel: 'orig', valid: '', charges: [], tcs: { on: false, rate: '', base: 'total', sec: '' }, rec: null };
+      status: 'unpaid', copyLabel: 'orig', valid: '', charges: chgOut(), tcs: { on: false, rate: '', base: 'total', sec: '' }, rec: null };
     var pm = C.party.filter(function (p) { return key(p.name) === key(d.buyer.name); })[0];
     if (pm) ['addr', 'city', 'pin', 'phone'].forEach(function (k) { if (pm[k]) d.buyer[k] = pm[k]; });
     var t = B.itemTotals(d), total = r2(t.taxable + t.cgst + t.sgst + t.igst);
@@ -1519,13 +1561,20 @@
     formDoc: function () { if (!F || !form) return null; var d = F.kind === 'sale' ? saleFromForm() : F.vd && F.vd.build ? F.vd.build() : null; if (d) { delete d.tax; if (F.rec && F.rec.id) d.id = F.rec.id; } return d; },
     markPaid: markPaid, openUrl: openUrl, siteHome: siteHome, frameAt: frameAt, docUrl: docUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },
     whatsapp: whatsapp, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
-    vh: function () { return { fld: fld, inp: inp, sel: sel, partyList: partyList, savePartyRole: savePartyRole, drawLines: drawLines, drawSum: drawSum, form: function () { return form; }, cur: function () { return F; } }; },
+    vh: function () { return { chgBlock: chgBlock, chgOut: chgOut, fld: fld, inp: inp, sel: sel, partyList: partyList, savePartyRole: savePartyRole, drawLines: drawLines, drawSum: drawSum, form: function () { return form; }, cur: function () { return F; } }; },
     door: function () { return DOOR; }, banks: banks, bankFld: bankFld, bankSync: bankSync, bankWire: bankWire, bankVal: bankVal, setBacct: setBacct, bankLabel: bankLabel, bankSum: bankSum, banksMeta: function () { return BANKS; }, whenReady: whenReady, switchBiz: switchBiz, setBiz: setBiz, printVoucher: printVoucher, quickEntry: quickEntry
   };
   window.NSApp.redrawLines = function () { if (F && F.lines && form && form.isConnected) drawLines(); };   /* cfields.js: a line field made from the open form shows at once */
+  /* desk.js frVs: while an entry screen is open inside the frame, the App's own Back row steps aside; a frame kept on the shelf
+     may come back with one still open, so the App looks again each time it shows a frame */
+  function frVsSync() {
+    var de = document.documentElement, on = false;
+    try { var f = $('.fr-box.cur iframe') || $('iframe.app-frame'); on = !!(f && f.contentDocument && f.contentDocument.querySelector('dialog.vs[open]')); } catch (e) {}
+    de.classList.toggle('fr-vs', on);
+  }
   function cardTables(root) {
-    $$('table.tbl:not(.tbl-cards):not(.dues-t)', root).forEach(function (tb) {
-      if (tb.closest('.stsheet')) return;
+    $$('table.tbl:not(.tbl-cards):not(.dues-t):not(.vw-facts)', root).forEach(function (tb) {
+      if (tb.closest('.stsheet') && !tb.matches('.lg-print .lg-tbl')) return;   /* phone test 21 Nov: the party ledger preview too (it was 560-790 px wide) */
       var hd = $$('thead th', tb).map(function (th) { return th.textContent.trim(); });
       if (!hd.length) return;
       tb.classList.add('tbl-cards');
@@ -1563,7 +1612,7 @@
       var src = $$('.lg-print .stsheet', pane); if (!src.length) src = $$('.stsheet', pane).filter(function (n) { return !n.closest('dialog'); });
       if (!src.length) src = [paneSheet(pane)];   /* a screen with no sheet of its own (lists, dues, parties...): a clean copy of the screen, else it printed blank pages */
       var box = document.createElement('div'); box.id = 'app-printarea';
-      src.forEach(function (n) { var c = n.cloneNode(true); c.classList.add('lg-paper'); box.appendChild(c); });
+      src.forEach(function (n) { var c = n.cloneNode(true); c.classList.add('lg-paper'); $$('.tbl-cards', c).forEach(function (t) { t.classList.remove('tbl-cards'); }); box.appendChild(c); });
       document.body.appendChild(box); de.classList.add('ap-print');
     });
     window.addEventListener('afterprint', function () { var b = $('#app-printarea'); if (b) b.remove(); de.classList.remove('ap-print'); if (st) st.textContent = ''; });

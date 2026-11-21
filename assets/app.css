@@ -167,7 +167,12 @@ html.has-hub:not(.dk-print) body *{visibility:hidden}
 .bizbar .bzsel{display:inline-flex;align-items:center;gap:8px;min-width:0}
 /* every document opens on an App screen: the App's title row (Back + what is open), then the maker's own copy on the App's
    address (/do/<site>/) in a borderless frame that app.js sizes to the rest of the screen; a soft shimmer until it is in */
+.app-chg{margin:12px 0 4px;padding-top:10px;border-top:1px dashed var(--line)}.app-chg h4{margin:0 0 6px;font-size:.95rem}
+.app-chg .chg-row{display:grid;grid-template-columns:minmax(140px,2fr) minmax(90px,1fr) minmax(120px,1fr) auto;gap:8px;align-items:end;margin-bottom:8px}
+.app-chg .chg-row .f{display:grid;gap:3px}.app-chg .chg-row .f span{font-size:.82rem;color:var(--soft)}.app-chg p.small{margin:.4em 0 0;font-size:.82rem}
+@media (max-width:620px){.app-chg .chg-row{grid-template-columns:1fr 1fr;padding:8px;border:1px solid var(--line);border-radius:10px}.app-chg .chg-row .f:first-child{grid-column:1/-1}}
 .fr-hd{margin-bottom:8px;gap:10px;flex-wrap:nowrap}
+html.fr-vs.app-frame-on .fr-hd{display:none}   /* an entry screen inside the frame has its own Back (desk.js frVs) */
 .fr-hd h2{flex:1 1 auto;min-width:0;margin:0;font-size:clamp(1.05rem,3.6vw,1.3rem);overflow-wrap:anywhere}
 .fr-back{flex:none}
 .fr-box{position:relative}
@@ -389,7 +394,7 @@ html.installed:has(#app:not([data-secs])) .hub{margin-top:14px}
 .nsf-lang{display:grid;gap:6px;max-width:420px}.nsf-lang select{min-height:44px}
 /* phones (owner, 2026-11-06): list tables as cards (app.js cardTables gives every cell its column name) and the screen's main
    buttons in a bar just above the bottom tabs, always in reach of the thumb */
-@media (max-width:620px){
+@media screen and (max-width:620px){
   .tbl-cards thead{display:none}
   .tbl-cards,.tbl-cards tbody,.tbl-cards tfoot{display:block;width:100%}
   .tbl-cards tr{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 14px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
@@ -400,10 +405,14 @@ html.installed:has(#app:not([data-secs])) .hub{margin-top:14px}
   .tbl-cards :is(td,th):first-child{grid-column:1/-1;font-weight:600}
   .tbl-cards td.acts{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;gap:8px}.tbl-cards td.acts::before{display:none}
   .tbl-wrap:has(>.tbl-cards){overflow:visible;background:none}
+  .lg-print .stsheet:has(.tbl-cards){min-width:0;padding:12px}.tbl-wrap:has(>.lg-print .tbl-cards){overflow:visible}   /* phone test 21 Nov: the ledger as cards, the full width of the phone */
+  .tbl-cards td.noprint{grid-column:1/-1;flex-direction:row;justify-content:flex-end}.tbl-cards td.noprint::before{display:none}
   html.ready.has-hub #main>#app{animation-name:ns-fade}   /* a slide-up (transform) would hold the fixed button bar inside the screen */
   html.has-hub:not(.app-frame-on) .hub-main>.pane-hd>:is(.quick,a.btn.primary){position:fixed;inset-inline:0;bottom:calc(66px + env(safe-area-inset-bottom,0px));z-index:34;display:flex;flex-wrap:nowrap;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0;padding:8px 12px;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -4px 12px rgb(0 0 0 / .08)}
   html.has-hub:not(.app-frame-on) .hub-main>.pane-hd>a.btn.primary{inset-inline:12px;justify-content:center;border-radius:12px;padding:12px;bottom:calc(74px + env(safe-area-inset-bottom,0px))}
   html.has-hub:not(.app-frame-on) .hub-main>.pane-hd>.quick .btn{flex:none;min-height:44px}
+  html.has-hub:not(.app-frame-on) .hub-main>.pane-hd>.quick>.primary{order:-1}   /* phone test 21 Nov: the main button (Preview Party Ledger) first, not off-screen */
+  html.has-hub:not(.app-frame-on) .hub-main>.pane-hd>.quick{-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}   /* a soft edge: there is more to swipe */
   html.has-hub:not(.app-frame-on):has(.hub-main>.pane-hd>:is(.quick,a.btn.primary)) body{padding-bottom:calc(128px + env(safe-area-inset-bottom,0px))}
 }
 /* switch business: one tap (owner, 2026-11-11). Up to 4 businesses = a row of buttons; the same list opens from the title bar, the status bar and Alt S */
