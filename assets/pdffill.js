@@ -1,5 +1,5 @@
 /* PDF tools (owner 20 Nov, from the open-source shortlist): Utilities › PDF tools: fill a form, join PDFs, split a PDF.
-   pdf-lib 1.17.1 (MIT), a copy kept in /assets/vendor/ so it works offline. Any PDF with fillable boxes (government forms,
+   pdf-lib (@cantoo/pdf-lib 2.11.1, the maintained fork of pdf-lib, MIT), a copy kept in /assets/vendor/ so it works offline. Any PDF with fillable boxes (government forms,
    bank and insurance forms): NSBiz lists every box, fills the ones it recognises from the business (or a chosen party), the
    user checks and corrects them, and a NEW filled PDF is saved; the file chosen is only read. Boxes are matched by their
    names inside the PDF (name, PAN, GSTIN, TAN, address, city, PIN, state, phone, email, date, place); nothing is guessed
@@ -9,7 +9,7 @@
   'use strict';
   var A = window.NSApp; if (!A) return;
   var $ = NS.$, $$ = NS.$$, esc = NS.esc;
-  var LIB = '/assets/vendor/pdf-lib-1.17.1.min.js';
+  var LIB = '/assets/vendor/pdf-lib-cantoo-2.11.1.min.js';
   var ST = { file: null, name: '', bytes: null, fields: [], vals: {}, who: 'biz', flat: false };
   /* what each kind of box means, by words in its name (lower case, letters only) */
   var MAP = [
@@ -128,7 +128,7 @@
       '<div class="pr-bar"><label class="btn primary" for="sp-file">' + (SP.name ? 'Open another PDF' : 'Open a PDF') + '</label><input type="file" id="sp-file" class="sr" accept=".pdf,application/pdf"></div>';
     if (!SP.name) return h;
     return h + '<p><b>' + esc(SP.name) + '</b>: ' + SP.pages + ' page' + (SP.pages === 1 ? '' : 's') + '.</p>' +
-      '<div class="card"><label>Pages to take out <input id="sp-r" value="' + esc(SP.ranges) + '" placeholder="for example 1-3, 5, 8-10" dir="ltr"></label>' +
+      '<div class="card"><label>Pages to take out <input id="sp-r" value="' + esc(SP.ranges) + '" placeholder="for example 1-3, 5, 8- (8 to the end)" dir="ltr"></label>' +
       '<p class="soft">Use page numbers and ranges with commas. Leave it empty to take every page.</p>' +
       '<p><label><input type="radio" name="sp-k" value="one"' + (SP.each ? '' : ' checked') + '> All these pages in one new PDF</label><br><label><input type="radio" name="sp-k" value="each"' + (SP.each ? ' checked' : '') + '> Each range (or each page, when empty) as its own PDF</label></p>' +
       '<button type="button" class="btn primary" id="sp-save" data-ic="download">Split and save</button></div>';
@@ -156,8 +156,9 @@
     var out = [], bad = false;
     s.split(/[,;]+/).forEach(function (part) {
       part = part.trim(); if (!part) return;
-      var m = part.match(/^(\d+)\s*(?:-|to)\s*(\d+)$/i), a, b;
-      if (m) { a = +m[1]; b = +m[2]; } else if (/^\d+$/.test(part)) { a = b = +part; } else { bad = true; return; }
+      /* an open end runs to the last page ("6-" = 6 to the end), an open start from page 1 ("-3" = 1 to 3) */
+      var m = part.match(/^(\d+)?\s*(?:-|to)\s*(\d+)?$/i), a, b;
+      if (m && (m[1] || m[2])) { a = m[1] ? +m[1] : 1; b = m[2] ? +m[2] : n; } else if (/^\d+$/.test(part)) { a = b = +part; } else { bad = true; return; }
       if (a < 1 || b > n || a > b) { bad = true; return; }
       var g = []; for (var i = a; i <= b; i++) g.push(i - 1); out.push(g);
     });
@@ -181,7 +182,7 @@
           return L.PDFDocument.create().then(function (out) {
             return out.copyPages(src, g).then(function (pg) { pg.forEach(function (p) { out.addPage(p); }); return out.save(); }).then(function (b) {
               var lab = g.length === 1 ? 'page ' + (g[0] + 1) : 'pages ' + (g[0] + 1) + '-' + (g[g.length - 1] + 1);
-              if (!SP.each && r) lab = 'pages ' + SP.ranges.replace(/\s+/g, '').replace(/[^\d,\-]/g, '');
+              if (!SP.each && r) lab = 'pages ' + r.map(function (x) { return x.length === 1 ? x[0] + 1 : (x[0] + 1) + '-' + (x[x.length - 1] + 1); }).join(',');   /* "4-" names the real last page */
               NS.saveFile(new Blob([b], { type: 'application/pdf' }), base + ' ' + lab + '.pdf');
             });
           });

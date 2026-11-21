@@ -610,11 +610,11 @@
   A.addSection('mprint', function () {
     var n = mpCount(), nm = function (s) { var a = $('#ns-side .side-g a[data-ic="d-' + s + '"]'); return a ? (a.textContent || '').trim() : s; };
     return '<div class="pane-hd"><h2>' + esc(T('cr_mprint')) + '</h2></div><div class="lg-bar"><label><span>' + esc(T('cr_doctype')) + '</span> <select data-mpsite>' + MP.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === mpSite ? ' selected' : '') + '>' + esc(nm(x[0])) + '</option>'; }).join('') + '</select></label>' + period() + '</div>' +
-      '<p class="soft">' + esc(T('cr_h_mp')) + '</p><p><b>' + esc(T('cr_found', { n: n })) + '</b></p><div class="quick"><button type="button" class="btn primary" data-mpgo' + (n ? '' : ' disabled') + '>' + esc(T('cr_printall', { n: n })) + '</button></div>';
+      '<p class="soft">' + esc(T('cr_h_mp')) + '</p><p><b>' + esc(T('cr_found', { n: n })) + '</b></p><div class="quick"><button type="button" class="btn primary" data-mpgo' + (n ? '' : ' disabled') + '>' + esc(T('cr_printall', { n: n })) + '</button><button type="button" class="btn" data-mpgo="pdf" data-ic="download"' + (n ? '' : ' disabled') + '>' + esc(T('cr_onepdf', { n: n })) + '</button></div><p class="soft">' + esc(T('cr_h_onepdf')) + '</p>';
   }, function (pane) {
     wirePeriod(pane);
     var s = $('[data-mpsite]', pane); if (s) s.addEventListener('change', function () { mpSite = s.value; A.show(); });
-    var g = $('[data-mpgo]', pane); if (g) g.addEventListener('click', function () { var r = A.range(), u = A.toolUrl(mpSite) + '?printall=' + r[0] + ',' + r[1]; if (!A.openUrl(u)) location.href = u; });
+    $$('[data-mpgo]', pane).forEach(function (g) { g.addEventListener('click', function () { var r = A.range(), u = A.toolUrl(mpSite) + '?printall=' + r[0] + ',' + r[1] + (g.getAttribute('data-mpgo') === 'pdf' ? '&pdf=1' : ''); if (!A.openUrl(u)) location.href = u; }); });   /* &pdf=1: one PDF (pdf-lib) */
   });
 
   /* ---------- Ledger of any account (cash, bank, sales, an expense head, GST, capital...): opened from the Chart of Accounts and the Trial Balance ---------- */
