@@ -631,7 +631,7 @@
       return '<option value="' + esc(g.id) + '"' + (g.id === cur ? ' selected' : '') + '>' + new Array(g.depth + 1).join('\u2003') + esc(gname(g)) + '</option>'; }).join('') + '</select></label>';
   }
   /* the statement is printed in English like every document */
-  var ENDOC = { salary: 'Salary slip', rent: 'Rent receipt', petty: 'Petty cash', emi: 'Loan EMI', salpay: 'Salary paid', sadv: 'Staff advance', loan: 'Loan', pettyl: 'Petty cash', rentin: 'Rent received', sal: 'Salary slip', expinv: 'Export invoice', advadj: 'GST on advance adjusted', jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice', oinc: 'Other income', don: 'Donation or subscription received', taxpay: 'Tax paid', gstset: 'GST set-off', wo: 'Write-off', pdd: 'Provision for doubtful debts' };
+  var ENDOC = { salary: 'Salary slip', rent: 'Rent receipt', petty: 'Petty cash', emi: 'Loan EMI', salpay: 'Salary paid', sadv: 'Employee advance', loan: 'Loan', pettyl: 'Petty cash', rentin: 'Rent received', sal: 'Salary slip', expinv: 'Export invoice', advadj: 'GST on advance adjusted', jv: 'Journal entry', fa: 'Fixed asset', stk: 'Stock entry', invoice: 'Invoice', cashmemo: 'Cash memo', credit: 'Credit note', debit: 'Debit note', receipt: 'Receipt', adv: 'Advance received', ref: 'Refund paid', voucher: 'Payment', pbill: 'Purchase bill', pret: 'Purchase return', exp: 'Expense', ob: 'Opening balance', self: 'Self invoice', oinc: 'Other income', don: 'Donation or subscription received', taxpay: 'Tax paid', gstset: 'GST set-off', wo: 'Write-off', pdd: 'Provision for doubtful debts' };
   function enName(d) {
     var ty = d.type || 'invoice';
     return ENDOC[ty === 'note' ? d.kind : ty === 'receipt' && d.kind !== 'pay' ? d.kind : ty === 'pbill' && d.kind === 'return' ? 'pret' : ty] || ty;
@@ -762,7 +762,7 @@
   function voucherSheet(d) {
     var b = BIZ || d.seller || {}, sadv = d.type === 'sadv', back = sadv && d.kind === 'back', amt = num(d.amount), who = sadv ? d.emp : B.partyName(d);
     var head = sadv ? '' : (EXP.indexOf(d.cat) >= 0 ? NS.tEn('app.ex_' + d.cat) : (function () { var h = window.NSHeads && NSHeads.find(d.cat); return h && h.en || d.cat || ''; })());
-    var title = back ? 'ADVANCE RETURN RECEIPT' : sadv ? 'STAFF ADVANCE VOUCHER' : 'EXPENSE VOUCHER';
+    var title = back ? 'ADVANCE RETURN RECEIPT' : sadv ? 'EMPLOYEE ADVANCE VOUCHER' : 'EXPENSE VOUCHER';
     var row = function (k, v) { return v ? '<tr><th scope="row">' + esc(k) + '</th><td>' + v + '</td></tr>' : ''; };
     var line = '<span class="vch-blank"></span>';
     return '<div class="stsheet sh vch" dir="ltr" lang="en" data-sheet>' + (d.cancelled ? '<div class="stamp cx-stamp">CANCELLED</div>' : '') +
@@ -1591,7 +1591,7 @@
     /* a page shown in the App's frame asks for another page (core.js): open it on an App screen */
     window.addEventListener('message', function (e) {
       /* Esc from a screen shown in a frame from its own site (Declarations, look-up tools...): it cannot press the App's Back itself */
-      if (e.data && e.data.nsEsc && e.source && $('iframe.app-frame') && e.source === $('iframe.app-frame').contentWindow) { if (!$('dialog[open]')) { var fb = $('[data-fback]'); if (fb) fb.click(); } return; }
+      if (e.data && e.data.nsEsc && e.source && [].some.call(document.querySelectorAll('iframe.app-frame'), function (fr) { return fr.contentWindow === e.source; })) { if (!$('dialog[open]')) { var fb = $('[data-fback]'); if (fb) fb.click(); } return; }
       var u, d = e.data; if (!d || typeof d.nsOpen !== 'string') return;
       try { u = new URL(d.nsOpen); } catch (er) { return; }
       var from; try { from = new URL(e.origin); } catch (er) { return; }

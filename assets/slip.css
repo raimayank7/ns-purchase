@@ -1,0 +1,41 @@
+/* Payslip portal: the payslip sheet (engine/slipsheet.js), the employee page (engine/slipview.js) and the HR dialog (engine/slipportal.js) */
+.sps { background: #fff; color: #111; border: 1px solid #d5dbe3; border-radius: 10px; padding: 16px; max-width: 760px; margin: 12px auto; font-size: 14px; line-height: 1.45; }
+.sps b { color: inherit; }
+.sps-hd { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; border-bottom: 2px solid #0e746a; padding-bottom: 8px; margin-bottom: 10px; }
+.sps-co { font-size: 17px; }
+.sps-hd span { color: #444; }
+.sps-id { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 2px 18px; margin-bottom: 12px; }
+.sps-id div { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dotted #cfd6de; padding: 2px 0; }
+.sps-id span { color: #555; }
+.sps-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.sps-t { width: 100%; border-collapse: collapse; }
+.sps-t th, .sps-t td { padding: 5px 6px; border-bottom: 1px solid #e2e6ec; text-align: left; }
+.sps-t thead th { background: #eef3f7; color: #222; font-size: 13px; }
+.sps-t tfoot th { border-top: 2px solid #9aa5b1; background: #f6f8fa; }
+.sps-t .n { text-align: right; white-space: nowrap; }
+.sps-net { display: flex; justify-content: space-between; align-items: baseline; margin: 12px 0 2px; padding: 10px 12px; background: #e8f5f2; border-radius: 8px; font-size: 18px; }
+.sps .soft, .sps-ft { color: #555; font-size: 12.5px; margin: 4px 0 0; }
+/* employee page */
+.slp-card { max-width: 560px; margin-left: auto; margin-right: auto; }
+.slp-pin { display: flex; gap: 8px; }
+.slp-pin input { flex: 1; letter-spacing: .25em; }
+.slp-months { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.slp-months .btn[aria-pressed="true"] { background: var(--accent, #0e746a); color: #fff; }
+.slp-msg.bad { border-left: 4px solid #c0392b; }
+.slp-wait { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: slpspin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes slpspin { to { transform: rotate(360deg); } }
+@media (max-width: 480px) { .sps { padding: 12px; font-size: 13.5px; } .sps-cols { grid-template-columns: 1fr; } }
+@media print {
+  .hd, .ft, .hero, #ns-side, .side-btn, .gt-noprint, .remind, .sv-open, [data-i18n-label], .slp-form, .slp-bar, .pdf-wa, #ns-toast { display: none !important; }
+  body { background: #fff !important; }
+  .sps { border: 0; box-shadow: none; max-width: none; margin: 0; padding: 0; }
+  .gt-card { border: 0 !important; box-shadow: none !important; padding: 0 !important; background: none !important; }
+}
+/* HR dialog */
+.spd .spd-link { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.spd .spd-link input { flex: 1 1 260px; min-width: 0; font-family: monospace; font-size: 12.5px; }
+.spd .spd-pin { font-family: monospace; letter-spacing: .12em; }
+.spd .spd-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.spd .spd-warn { color: #9a5b00; }
+.spd .spd-prog { height: 8px; border-radius: 4px; background: rgba(120,130,140,.25); overflow: hidden; margin: 8px 0; }
+.spd .spd-prog i { display: block; height: 100%; width: 0; background: #0e746a; transition: width .2s; }
