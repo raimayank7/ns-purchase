@@ -170,13 +170,69 @@
   var linked = false;   /* ERP Round 1, C-1: once per App start, vouchers with no business id get the id of the one business their seller name matches */
   function load() {
     if (!linked && NSStore.linkBiz) { linked = true; return NSStore.linkBiz().then(load, load); }
-    return Promise.all(['biz', 'party', 'item', 'doc'].map(function (s) { return NSStore.list(s); }).concat([NSStore.meta('settings'), NSStore.meta('groups'), NSStore.meta('followups'), NSStore.meta('banks')])).then(function (r) {
+    return Promise.all(['biz', 'party', 'item'].map(function (s) { return NSStore.list(s); }).concat([NSStore.meta('settings'), NSStore.meta('groups'), NSStore.meta('followups'), NSStore.meta('banks'), NSStore.meta('carry')])).then(function (r0) {
+      var r = [r0[0], r0[1], r0[2], null, r0[3], r0[4], r0[5], r0[6]];
+      return yearDocs(r, r0[7] || {}).then(function (docs) { r[3] = docs; return r; });
+    }).then(function (r) {
       apply(r);
       var s = sigOf(r), ch = s !== SIG; MEM = r; SIG = s;   /* stamped after apply: its one-time settings copy is part of it */
       readyFns.splice(0).forEach(function (f) { try { f(); } catch (e) {} });
       if (NS.gateway) setTimeout(NS.gateway, 0);   /* the box above Dashboard: drawn again once the business is known (it could stay empty when drawn before the data arrived) */
       return ch;
     });
+  }
+  /* SQLite Stage 3 (owner, 21 Nov 2026), like Tally / Busy: the App reads only the open years of this tab's business. Years closed
+     in Year end (in an unbroken run from the first year) stay in their own files; their balances come in as opening records
+     (NSAcct.carryForward: each party's open bills, cash, banks, stock, one journal for the other accounts), worked out once and
+     kept in the data home (meta 'carry', per business) with the closed years' fingerprint, so a change there works them out
+     again. A report or period that starts before the open years reads every year (needYears). Carried records are only on
+     screen: they have ids 'cy-…' and cyc:1, and the store refuses to save or delete them. */
+  var CYV = 1, YEARS = { biz: '', fy: '', all: false }, wantAll = false;
+  function closedOf(raw, b, L) {
+    if (!b || !b.id || !window.NSAcct) return [];
+    var c = (NS.cfgFor ? NS.cfgFor(raw || {}, b, L) : raw || {}).closed || {}, out = [];
+    NSAcct.closedKeys(b).forEach(function (k) { (c[k] || []).forEach(function (f) { if (out.indexOf(f) < 0) out.push(f); }); });
+    return out;
+  }
+  function pickBiz(L, raw) { var want = NS.curBiz(); return L.filter(function (b) { return b.id === want; })[0] || L.filter(function (b) { return b.id === (raw || {}).defBiz; })[0] || L[0] || null; }
+  var LAST = null;   /* the documents of the last read, with the data home's stamp and what was asked: a screen change with no save in between reads nothing again */
+  function yearDocs(r, carry) {
+    var b0 = pickBiz(r[0] || [], r[4]), ask = JSON.stringify([b0 && b0.id || '', wantAll, wantAll ? [] : closedOf(r[4], b0, r[0] || []), carry[b0 && b0.id] ? carry[b0.id].sig : '']);
+    var st = NSStore.docStat ? NSStore.docStat(true).catch(function () { return null; }) : Promise.resolve(null);
+    return st.then(function (s) {
+      var stamp = s && s.stamp;
+      if (stamp && LAST && LAST.stamp === stamp && LAST.ask === ask) { YEARS = LAST.years; return LAST.docs; }
+      return yearDocs0(r, carry).then(function (docs) { LAST = stamp ? { stamp: stamp, ask: ask, docs: docs, years: YEARS } : null; return docs; });
+    });
+  }
+  function yearDocs0(r, carry) {
+    var b = pickBiz(r[0] || [], r[4]), shut = wantAll ? [] : closedOf(r[4], b, r[0] || []);
+    if (!shut.length || !NSStore.docsFrom) { YEARS = { biz: b && b.id || '', fy: '', all: true }; return NSStore.list('doc'); }
+    var q = {}; q[b.id] = shut;
+    return NSStore.docsFrom(q).then(function (res) {
+      var cut = res.cut && res.cut[b.id];
+      YEARS = { biz: b.id, fy: cut ? cut.fy : '', first: cut ? cut.first : '', all: !cut };
+      if (!cut) return res.docs;
+      var cs = (NS.cfgFor ? NS.cfgFor(r[4] || {}, b, r[0]) : r[4] || {}) || {}, sig = CYV + '|' + cut.fy + '|' + cut.sig + '|' + JSON.stringify([cs.stockValue || '', cs.billwise || '', (r[2] || []).length]);
+      var have = carry[b.id];
+      if (have && have.sig === sig && Array.isArray(have.recs)) return res.docs.concat(have.recs);
+      /* first start after closing a year (or a change in a closed year): every year is read once and the openings are kept */
+      return NSStore.list('doc').then(function (all) {
+        apply([r[0], r[1], r[2], all, r[4], r[5], r[6], r[7]]);
+        var seller = JSON.parse(JSON.stringify(b)); delete seller.id; delete seller.created; delete seller.updated;
+        var recs = NSAcct.carryForward(all.filter(function (d) { return !d.date || d.date <= NSAcct.fyEnd(cut.fy); }), r[2], b.name, cut.fy, seller), now = Date.now();
+        recs.forEach(function (x, i) { x.id = 'cy-' + cut.fy + '-' + (i + 1); x.cyc = 1; x.bizId = b.id; x.created = x.updated = now; });
+        NSStore.meta('carry').then(function (m) { m = m || {}; m[b.id] = { sig: sig, fy: cut.fy, at: now, recs: recs }; return NSStore.meta('carry', m); }).catch(function () {});
+        return res.docs.concat(recs);
+      });
+    }, function () { YEARS = { biz: b.id, fy: '', all: true }; return NSStore.list('doc'); });
+  }
+  /* a date before the open years: read every year (once), then draw the screen again */
+  function needYears(from) {
+    if (wantAll || YEARS.all || !YEARS.fy || !from || !window.NSAcct || from > NSAcct.fyEnd(YEARS.fy)) return false;
+    wantAll = true; NS.toast && NS.toast(T('yrs_older'));
+    setTimeout(function () { load().then(function () { if (cur !== 'do') paint(); }); }, 0);
+    return true;
   }
   function apply(r) {
       C = { biz: r[0], party: r[1], item: r[2], doc: r[3] }; CFG = r[4] || {}; GRP = r[5] || {}; FU = r[6] || {}; BANKS = r[7] || {};
@@ -197,7 +253,14 @@
   }
   function bizName() { return BIZ ? BIZ.name : ''; }
   /* the vouchers of this tab's business: by business id (C-1), else by the seller's name */
-  function mine() { var b = key(bizName()), id = BIZ && BIZ.id; return C.doc.filter(function (d) { return id && d.bizId ? d.bizId === id : key(d.seller && d.seller.name) === b; }); }
+  var MINE = null;
+  function mine() {
+    var b = key(bizName()), id = BIZ && BIZ.id;
+    if (MINE && MINE.doc === C.doc && MINE.b === b && MINE.id === id && B.memoOn && B.memoOn()) return MINE.list;   /* the same list while one screen is drawn (Stage 3) */
+    var l = C.doc.filter(function (d) { return id && d.bizId ? d.bizId === id : key(d.seller && d.seller.name) === b; });
+    MINE = { doc: C.doc, b: b, id: id, list: l };
+    return l;
+  }
   /* ---------- bank accounts of the business (ERP masters step 3) ----------
      The bank on the business record is the default bank (account 'bank'); extra banks live in data home meta 'banks' =
      { <business id>: [{ id, name, acc, ifsc, branch }] } and post to NSBooks.bankKey(name). A money entry keeps its bank in d.bacct.
@@ -293,7 +356,8 @@
       paint(focus && !first);
     });
   }
-  function paint(focus) {
+  function paint(focus) { if (B.memo) B.memo(true); try { return paint0(focus); } finally { if (B.memo) B.memo(false); } }   /* Stage 3: every panel of one drawing shares the same dues and balances */
+  function paint0(focus) {
       painted = true;
       var pane = $('[data-pane]');
       $('[data-mode]').textContent = T(NSStore.mode() === 'vault' ? 'vault' : 'local');
@@ -438,7 +502,7 @@
   var stFrom = '', stTo = '';
   /* the report period: one for every report (NS.period, ERP review R-3); f / t change it */
   function range(f, t) {
-    if (NS.period) { if (f || t) NS.periodSet(f, t); var p = NS.period(); stFrom = p.from; stTo = p.to; return [stFrom, stTo]; }
+    if (NS.period) { if (f || t) NS.periodSet(f, t); var p = NS.period(); stFrom = p.from; stTo = p.to; needYears(stFrom); return [stFrom, stTo]; }
     if (f) stFrom = f; if (t) stTo = t; if (!stTo) stTo = NS.today(); if (!stFrom) stFrom = fyStart(stTo); return [stFrom, stTo];
   }
   /* follow-ups on dues: when a party was last reminded and the date it promised to pay (data home meta 'followups', per business) */
@@ -1441,7 +1505,7 @@
     T: T, B: B, addSection: function (name, html, wire) { EXT[name] = { html: html, wire: wire }; }, addHome: function (f) { HOME.push(f); }, cfg: function () { return CFG; }, show: show, openForm: openForm,
     newDoc: function (v) { var u = toolUrl(v) === '#' ? siteHome(v) : toolUrl(v); if (!openUrl(u)) location.href = u; },
     newDocs: function () { return NEWDOCS.filter(function (n) { return TOOLS.some(function (x) { return x[0] === n[0]; }) || INAPP[n[0]]; }).map(function (n) { return [n[0], NS.t(n[2] || 'Doc.' + n[1])]; }); },
-    mine: mine, biz: function () { return BIZ; }, bizName: bizName, data: function () { return C; }, docName: docName, catName: catName, enName: enName, amountOf: amountOf,
+    mine: mine, needYears: needYears, years: function () { return YEARS; }, biz: function () { return BIZ; }, bizName: bizName, data: function () { return C; }, docName: docName, catName: catName, enName: enName, amountOf: amountOf,
     rowsHtml: rowsHtml, leftMap: leftMap, searchBar: searchBar, match: match, byDate: byDate, fyStart: fyStart, toolUrl: toolUrl, myUrl: myUrl, ldate: ldate,
     range: range, trail: function () { return trail; }, viewDoc: function (id) { viewDoc(id); },
     formDoc: function () { if (!F || !form) return null; var d = F.kind === 'sale' ? saleFromForm() : F.vd && F.vd.build ? F.vd.build() : null; if (d) { delete d.tax; if (F.rec && F.rec.id) d.id = F.rec.id; } return d; },

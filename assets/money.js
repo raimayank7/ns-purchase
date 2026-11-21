@@ -11,6 +11,13 @@
   var A = window.NSApp; if (!A) return;
   var $ = NS.$, $$ = NS.$$, esc = NS.esc, num = NS.num, r2 = NS.r2, money = NS.money, B = NSBooks, key = B.key, T = A.T;
   function m(v) { return v ? money(v, false) : ''; }
+  /* SQLite Stage 3 (big data): a long book shows its newest CAP lines first, like Tally; totals, balances and Excel count every
+     line; "Show all" draws the rest (the long list then becomes a fast grid, bigtable.js) */
+  var CAP = 500, showAll = {};
+  function capRows(list, id, cols) {
+    if (showAll[id] || list.length <= CAP) return list.join('');
+    return '<tr class="noprint"><td colspan="' + cols + '"><button type="button" class="btn sm" data-showall="' + id + '">' + esc(T('lg_showall', { n: list.length })) + '</button> <span class="soft">' + esc(T('lg_hidden', { n: list.length - CAP })) + '</span></td></tr>' + list.slice(-CAP).join('');
+  }
   function csvCell(v) { v = v == null ? '' : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
   function download(name, rows) {
     var a = NS.el('a', { href: URL.createObjectURL(new Blob(['﻿' + rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n')], { type: 'text/csv;charset=utf-8' })), download: name });
@@ -262,22 +269,22 @@
       if (dbo.det) {
         CSV = [['Date', 'Entry', 'Account', 'Debit', 'Credit', 'Narration']];
         sheet = '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Entry</th><th>Account</th><th class="n">Debit</th><th class="n">Credit</th><th class="noprint"></th></tr></thead><tbody>' +
-          (ent.length ? ent.map(function (d) {
+          (ent.length ? capRows(ent.map(function (d) {
             var L = B.postings(d), en = particulars(d), nr = nar(d);
             return L.map(function (l, i) {
               td = r2(td + l.dr); tc = r2(tc + l.cr); CSV.push([d.date, en, accName(l.a, d), l.dr || '', l.cr || '', i === 0 ? nr : '']);
               return '<tr' + (i === 0 ? ' class="first" data-k="' + esc(d.id) + '"' : '') + '><td>' + (i === 0 ? A.ldate(d.date) : '') + '</td><td>' + (i === 0 ? esc(en) + (nr ? '<br><span class="soft lg-narr">' + esc(nr) + '</span>' : '') : '') + '</td><td>' + (l.cr ? '&nbsp;&nbsp;To ' : '') + esc(accName(l.a, d)) + '</td><td class="n">' + m(l.dr) + '</td><td class="n">' + m(l.cr) + '</td><td class="noprint">' + (i === 0 ? eye(d.id) : '') + '</td></tr>';
             }).join('');
-          }).join('') : '<tr><td colspan="6">' + esc(T('none')) + '</td></tr>') +
+          }), 'day', 6) : '<tr><td colspan="6">' + esc(T('none')) + '</td></tr>') +
           '</tbody><tfoot><tr><th colspan="3">Total</th><th class="n">' + money(td, false) + '</th><th class="n">' + money(tc, false) + '</th><th class="noprint"></th></tr></tfoot></table>';
       } else {   /* one line per voucher: the amount and the party (Tally's condensed day book) */
         CSV = [['Date', 'Entry', 'Voucher type', 'Amount', 'Narration']];
         sheet = '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Entry</th><th>Voucher type</th><th class="n">Amount</th><th class="noprint"></th></tr></thead><tbody>' +
-          (ent.length ? ent.map(function (d) {
+          (ent.length ? capRows(ent.map(function (d) {
             var v = r2(B.postings(d).reduce(function (s, l) { return s + l.dr; }, 0)), en = particulars(d), nr = nar(d); td = r2(td + v);
             CSV.push([d.date, en, B.vtype(d), v, nr]);
             return '<tr data-k="' + esc(d.id) + '"><td>' + A.ldate(d.date) + '</td><td>' + esc(en) + (nr ? '<br><span class="soft lg-narr">' + esc(nr) + '</span>' : '') + '</td><td>' + esc(B.vtype(d) === 'other' ? '' : T('lg_vt_' + B.vtype(d))) + '</td><td class="n">' + money(v, false) + '</td><td class="noprint">' + eye(d.id) + '</td></tr>';
-          }).join('') : '<tr><td colspan="5">' + esc(T('none')) + '</td></tr>') +
+          }), 'day', 5) : '<tr><td colspan="5">' + esc(T('none')) + '</td></tr>') +
           '</tbody><tfoot><tr><th colspan="3">Total (' + ent.length + ')</th><th class="n">' + money(td, false) + '</th><th class="noprint"></th></tr></tfoot></table>';
       }
     } else {
@@ -286,11 +293,11 @@
       CSV = [['Date', 'Particulars', 'Reference', 'In', 'Out', 'Balance', 'Other account', 'Narration'], [r[0], 'Opening balance', '', '', '', Bk.open]];
       sheet = '<table class="tbl st lg-tbl"><thead><tr><th>Date</th><th>Particulars</th><th class="n">In (Receipts)</th><th class="n">Out (Payments)</th><th class="n">Balance</th><th class="noprint"></th></tr></thead><tbody>' +
         '<tr><td>' + A.ldate(r[0]) + '</td><td>Opening balance</td><td></td><td></td><td class="n">' + money(Bk.open, false) + '</td><td class="noprint"></td></tr>' +
-        Bk.rows.map(function (x) {
+        capRows(Bk.rows.map(function (x) {
           var op = A.oppText ? A.oppText(x.d, bk) : '', nr = A.narrOf ? A.narrOf(x.d) : '';
           ti = r2(ti + x.dr); to = r2(to + x.cr); CSV.push([x.date, particulars(x.d), x.d.ref || '', x.dr || '', x.cr || '', x.bal, op, nr]);
           return '<tr data-k="' + esc(x.d.id) + '"><td>' + A.ldate(x.date) + '</td><td>' + esc(particulars(x.d)) + (x.d.ref ? ' <span class="soft">(' + esc(x.d.ref) + ')</span>' : '') + (op ? '<br><span class="soft">' + esc(op) + '</span>' : '') + (nr ? '<br><span class="soft lg-narr">' + esc(nr) + '</span>' : '') + '</td><td class="n">' + m(x.dr) + '</td><td class="n">' + m(x.cr) + '</td><td class="n">' + money(x.bal, false) + '</td><td class="noprint">' + eye(x.d.id) + '</td></tr>';
-        }).join('') +
+        }), 'book', 6) +
         '</tbody><tfoot><tr><th colspan="2">Closing balance</th><th class="n">' + money(ti, false) + '</th><th class="n">' + money(to, false) + '</th><th class="n">' + money(Bk.close, false) + '</th><th class="noprint"></th></tr></tfoot></table>' +
         (bk === 'cash' && Bk.close < -0.004 ? '<p class="st-ft"><b>Cash balance below zero: an entry is missing or wrong.</b></p>' : '');
     }
@@ -314,6 +321,7 @@
   }, function (pane) {
     wireOut(pane);
     $$('[data-bk]', pane).forEach(function (b) { b.addEventListener('click', function () { bk = b.getAttribute('data-bk'); A.show(); }); });
+    $$('[data-showall]', pane).forEach(function (b) { b.addEventListener('click', function () { showAll[b.getAttribute('data-showall')] = 1; A.show(); }); });
     var dv = $('[data-dbvt]', pane); if (dv) dv.addEventListener('change', function () { dbo.vt = dv.value; dbSave(); A.show(); });
     var dq = $('[data-dbq]', pane); if (dq) dq.addEventListener('change', function () { dbo.q = dq.value.trim(); A.show(); });
     var dd = $('[data-dbdet]', pane); if (dd) dd.addEventListener('change', function () { dbo.det = dd.checked; dbSave(); A.show(); });
