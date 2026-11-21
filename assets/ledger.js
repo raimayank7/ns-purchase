@@ -103,6 +103,8 @@
     if (k !== lastK) { shown = false; lastK = k; restoreView(k); }   /* a different party starts with the preview closed and its own last view */
     var p = partyOf(k), r = A.range(), today = NS.today(), G = A.groups(), g = B.groupTree(G).filter(function (x) { return x.id === A.gidOf(k); })[0];
     var line = p.bal > 0.004 ? T('theyowe', { p: p.name, a: money(p.bal) }) : p.bal < -0.004 ? T('weowe', { p: p.name, a: money(-p.bal) }) : T('settled', { p: p.name });
+    /* cheques received from this party and not cleared yet: the balance above is already lower by them (they sit in Cheques in hand) */
+    var pend = A.mine().filter(function (d) { return d.type === 'receipt' && d.mode === 'cheque' && d.chq && (d.chq.st === 'hand' || d.chq.st === 'dep') && B.partiesOf(d)[k]; }).reduce(function (t, d) { return t + (+d.amount || 0); }, 0);
     var body = !shown ? '' : view === 'bills' ? billsSheet(k, p, r) : view === 'letter' ? letterSheets(k, p, r) : ledgerSheet(k, p, r, types);
     var names = partyNames(), ents = A.mine().filter(function (d) { return B.partiesOf(d)[k] && B.role(d) && (d.date || '') >= r[0] && (d.date || '') <= r[1]; }).sort(A.byDate);
     return '<p><a href="#parties" class="link" data-back>' + esc(T('back')) + '</a></p>' +
@@ -120,7 +122,7 @@
           '<button type="button" class="btn" role="menuitem" data-noic data-lgpdf><b>PDF</b><small>The ledger page, to save or share</small></button>' +
           (view !== 'letter' ? '<button type="button" class="btn" role="menuitem" data-noic data-lgxl><b>Excel</b><small>Ledger and bill-wise sheets (.xlsx)</small></button>' +
           '<button type="button" class="btn" role="menuitem" data-noic data-lgcsv><b>CSV</b><small>The ledger as plain rows for any program (.csv)</small></button>' : '') + '</div></details>') + '</div></div>' +
-      '<p class="big">' + esc(line) + '</p>' +
+      '<p class="big">' + esc(line) + '</p>' + (pend > 0.004 ? '<p class="soft">' + esc(T('lg_pendchq', { a: money(pend) })) + '</p>' : '') +
       '<div class="lg-bar">' + seg('lgview', [['all', T('lg_all')], ['items', T('lg_items')], ['bills', T('lg_bills')], ['letter', T('lg_letter')]], view) +
       period() +
       (view === 'all' ? '<div class="lg-vt" role="group" aria-label="' + esc(T('lg_vt')) + '"><span class="soft">' + esc(T('lg_vt')) + '</span> <button type="button" class="btn sm" data-vt="" aria-pressed="' + !types.length + '">' + esc(T('all')) + '</button>' +

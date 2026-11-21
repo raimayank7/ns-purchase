@@ -908,6 +908,12 @@
     mine().forEach(function (d) { var n = B.partyName(d); if (n && !seen[key(n)]) { seen[key(n)] = 1; out.push(n); } });
     return '<datalist id="dl-party">' + out.sort().map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>';
   }
+  /* a date in another financial year than today's is asked about before the bill is saved (R-002: 01-06-2027 saved with no word) */
+  function fyAsk(d) {
+    var fy = NS.fy(d.date), cur = NS.fy(NS.today());
+    if (!d.date || fy === cur) return Promise.resolve();
+    return (NS.ask ? NS.ask(NS.t('c.fyout', { d: NS.fmtDate(d.date), fy: fy, cur: cur })) : Promise.resolve(window.confirm(NS.t('c.fyout', { d: NS.fmtDate(d.date), fy: fy, cur: cur })))).then(function (ok) { if (!ok) throw new Error('cancel'); });
+  }
   function nextNo(type, pre, date) {
     if (PRE && PRE.k === type) return PRE.no;
     return nxAuto(NS.nextNo(mine(), nxApp(type, pre, date)));   /* one numbering engine (core.js, ERP A-6) */
@@ -1338,8 +1344,10 @@
       /* the number is checked against the saved bills NOW, not the list read when the form opened: another tab or a second person
          may have used it meanwhile (P3-6). A number the App suggested moves on to the next free one; a typed one is refused. */
       var smode0 = $('#f-mode', form) ? $('#f-mode', form).value : 'credit';
-      return (smode0 === 'credit' && NS.creditAsk ? NS.creditAsk(bizName(), party, d.total, d.date, F.rec && F.rec.id) : Promise.resolve()).then(function () { return NS.stockGuard ? NS.stockGuard(d, F.rec && F.rec.id) : null; }).then(function () { return NSStore.list('doc'); }).then(function (all) {   /* A-15: credit limit / overdue bills (warn or block, per party) */   /* ERP round 1: stock checks (stockguard.js) */
+      return fyAsk(d).then(function () { return smode0 === 'credit' && NS.creditAsk ? NS.creditAsk(bizName(), party, d.total, d.date, F.rec && F.rec.id) : null; }).then(function () { return NS.stockGuard ? NS.stockGuard(d, F.rec && F.rec.id) : null; }).then(function () { return NSStore.list('doc'); }).then(function (all) {   /* A-15: credit limit / overdue bills (warn or block, per party) */   /* ERP round 1: stock checks (stockguard.js) */
       var dupOf = function (no) { return all.filter(function (x) { return x.id !== d.id && (x.type || 'invoice') === 'invoice' && key(x.no) === key(no) && NS.fy(x.date) === NS.fy(d.date) && key(x.seller && x.seller.name) === key(bizName()); })[0]; };
+      /* a bill whose date was changed into another financial year takes that year's next number, not the one suggested for today (R-002) */
+      if (F.autoNo && d.no === F.autoNo && !dupOf(d.no)) { var want = NS.nextInvNo(all, bizName(), d.date, CFG, d.vt); if (want && want !== d.no && NS.fy(d.date) !== NS.fy(NS.today())) { var was0 = d.no; d.no = F.autoNo = want; $('#f-no', form).value = d.no; F.renumMsg = NS.t('c.renumfy', { a: was0, b: d.no, fy: NS.fy(d.date) }); } }
       if (dupOf(d.no)) {
         if (F.autoNo && d.no === F.autoNo) { var was = d.no; d.no = F.autoNo = NS.nextInvNo(all, bizName(), d.date, CFG, d.vt); $('#f-no', form).value = d.no; F.renumMsg = NS.t('c.renum', { a: was, b: d.no }); }
         else { NS.toast(T('qe_dup', { no: d.no }), 'bad'); $('#f-no', form).focus(); throw 'dup'; }

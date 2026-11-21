@@ -39,7 +39,7 @@
       var rec = Object.assign({}, e, { name: nm, biz: e.biz != null ? e.biz : A.bizName(), code: val('sf-code'), desig: val('sf-desig'), dept: val('sf-dept'), doj: val('sf-doj'), left: val('sf-left'),
         pan: val('sf-pan').toUpperCase(), uan: val('sf-uan'), esi: val('sf-esi'), bankName: val('sf-bank'), bankAcc: val('sf-acc'), bankIfsc: val('sf-ifsc').toUpperCase(),
         earn: earn.map(function (l, i) { return { desc: l.desc, amt: val('sf-e' + i) }; }) });
-      S.put(rec).then(function () { closeDlg(); NS.toast(A.T('saved')); A.show(); }, function (err) { NS.toast(err && err.message === 'dup' ? F('dup', { n: nm }) : F('nosave'), 'bad'); });
+      S.put(rec).then(function () { closeDlg(); NS.toast(A.T('saved')); reload(); }, function (err) { NS.toast(err && err.message === 'dup' ? F('dup', { n: nm }) : F('nosave'), 'bad'); });
     });
   }
   function closeDlg() { var d = $('.acx-dlg[open]'); if (d) d.close(); }
@@ -257,7 +257,7 @@
     $$('[data-sfback]', pane).forEach(function (b) { b.addEventListener('click', function () { advForm(null, 'back', b.getAttribute('data-sfback')); }); });
     $$('[data-sfrm]', pane).forEach(function (b) { b.addEventListener('click', function () {
       var e = EMPS.filter(function (x) { return x.id === b.getAttribute('data-sfrm'); })[0]; if (!e) return;
-      ask(F('rmq', { n: e.name })).then(function (yes) { if (yes) S.remove(e.id).then(function () { NS.toast(A.T('deleted')); A.show(); }); });
+      ask(F('rmq', { n: e.name })).then(function (yes) { if (yes) S.remove(e.id).then(function () { NS.toast(A.T('deleted')); reload(); }); });
     }); });
     $$('[data-sfin]', pane).forEach(function (b) { b.addEventListener('click', function () {
       var d = byId(b.getAttribute('data-sfin')); if (!d || X.closed(d.date)) return;
@@ -280,6 +280,8 @@
   });
   /* the employee list is read before the section draws (meta, not a document store), then the screen is drawn again */
   var loaded = '';
+  /* after a save or delete: read the list again first, then draw (drawing first showed the old list until a reload) */
+  function reload() { var b = A.bizName() || ''; S.list(b).then(function (l) { EMPS = l; loaded = b + '|' + l.length + '|' + l.map(function (e) { return e.updated || 0; }).join(','); A.show(); }, function () { A.show(); }); }
   function refresh() {
     var b = A.bizName() || '';
     S.list(b).then(function (l) { EMPS = l; var was = loaded; loaded = b + '|' + l.length + '|' + l.map(function (e) { return e.updated || 0; }).join(','); if (was !== loaded && /^#stf/.test(location.hash)) A.show(); });
