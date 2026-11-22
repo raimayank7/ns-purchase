@@ -1434,7 +1434,7 @@
     }
     if (k === 'vdoc') {
       var how = andPrint;
-      return F.vd.save(form).then(function (saved) { if (!saved) return; F.savedNo = saved.no; F.renumMsg = F.vd.renum; done(); if (!how && NSVDocs.after) how = NSVDocs.after(saved); if (how) NSVDocs.out(saved, how === 'share' ? 'share' : 'print'); });   /* C-15: print / share after saving */
+      return F.vd.save(form).then(function (saved) { if (!saved) return; F.savedNo = saved.no; F.renumMsg = F.vd.renum; done(); if (!how && NSVDocs.after) how = NSVDocs.after(saved); if (how === 'share') NSVDocs.out(saved, 'share'); else if (how) { if (NSApp.chooseCopies) NSApp.chooseCopies('vdoc', saved).then(function (cp) { if (cp) NSVDocs.out(saved, 'print', cp); }); else NSVDocs.out(saved, 'print'); } });   /* C-15: print / share after saving */
     }
     if (k === 'exp') {
       d = Object.assign(rec || { type: 'exp', app: 1 }, { date: $('#f-date', form).value, seller: sellerCopy(), cat: catCode($('#f-cat', form).value.trim()), amount: r2(num($('#f-amt', form).value)), mode: $('#f-mode', form).value,

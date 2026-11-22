@@ -753,6 +753,13 @@ html.ns-soft .app-frame{transition:none}
 .vt-vch .vt-tag{text-align:right;font:700 .72rem/1 sans-serif;letter-spacing:.08em;margin:0 0 6px}.vt-vch .vt-party{margin:8px 0}.vt-vch .vt-to{color:#6B7280;font-size:.85em;margin-right:4px}.vt-vch .vt-items{margin:8px 0}.vt-vch .vt-post{margin:8px 0}.vt-vch .vt-words,.vt-vch .vt-narr{margin:6px 0}
 .vt-pb{break-after:page;page-break-after:always;height:0}
 .vt-cp{height:34px;padding:2px 6px;border-radius:6px;max-width:220px}
+.vt-cpd{width:min(420px,calc(100vw - 32px));padding:0;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink)}
+.vt-cpd .dlg-hd{padding:14px 18px 4px}.vt-cpd .dlg-hd h2{margin:0;font-size:1.15rem}
+.vt-cpf{border:0;margin:0;padding:6px 18px 0}.vt-cpf legend{font-weight:600;padding:0;margin-bottom:6px}
+.vt-cpl{display:flex;gap:10px;align-items:center;min-height:44px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;margin:0 0 8px;cursor:pointer}
+.vt-cpl input{width:20px;height:20px;margin:0;flex:none}.vt-cpl:has(input:checked){border-color:var(--primary)}
+.vt-cpn{margin:4px 18px 0;font-size:.88rem}.vt-cpw{margin:6px 18px 0;color:var(--bad,#c62828);font-weight:600}
+.vt-cpd .dlg-foot{display:flex;gap:8px;padding:14px 18px 16px}
 /* NSBiz Helper add-on: "From the add-on" (#inbox, addonin.js) */
 .ai-card h3{margin:0 0 2px}
 .ai-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px 12px;margin:8px 0}
