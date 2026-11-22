@@ -108,7 +108,7 @@
   var JN = { files: [] }, SP = { name: '', bytes: null, pages: 0, ranges: '', each: false };
   function tabs() {
     var m = ST.mode || 'fill', t = function (k, l) { return '<button type="button" class="btn' + (m === k ? ' primary' : '') + '" data-pfm="' + k + '">' + l + '</button>'; };
-    return '<div class="pr-bar pf-tabs">' + t('fill', 'Fill a form') + t('join', 'Join PDFs') + t('split', 'Split a PDF') + '</div>';
+    return '<div class="pr-bar pf-tabs">' + t('fill', 'Fill a form') + t('join', 'Join PDFs') + t('split', 'Split a PDF') + t('sign', 'Sign with DSC') + '</div>';
   }
   function joinHtml() {
     var rows = JN.files.map(function (f, i) {
@@ -190,6 +190,48 @@
       }, Promise.resolve());
     }).then(function () { NS.toast(groups.length === 1 ? 'Saved the new PDF' : 'Saved ' + groups.length + ' PDF files'); }, function () { NS.toast('Could not split this PDF. It may be protected against changes.', 'bad'); });
   }
+  /* ---------- Sign a PDF with the person's DSC (USB token), through the NSBiz Helper program (phase 9): pdfsign.js ---------- */
+  var SG = { name: '', bytes: null, certs: null, thumb: '', reason: 'Approved', place: '', stamp: true, err: '' };
+  function signHtml() {
+    var h = '<div class="pane-hd"><h2>Sign a PDF with your DSC</h2></div><p class="soft">Sign a bill, letter or return PDF with your Class 3 DSC (USB token), the standard PDF signature that Adobe Reader and the portals check. The token\u2019s own window asks for your PIN: NSBiz never sees it. The file you open is not changed; the signed copy is saved as a new file.</p>';
+    if (!NS.helperUp) return h + '<div class="card"><p class="note">This needs the <b>NSBiz Helper program</b> on this PC, with the browser add-on (in the add-on\u2019s window: Helper program on this PC), and your token\u2019s own software (its driver) installed, as for the GST or MCA portal.</p><button type="button" class="btn" id="sg-again">Check again</button></div>';
+    h += '<div class="pr-bar"><label class="btn primary" for="sg-file">' + (SG.name ? 'Open another PDF' : 'Open a PDF') + '</label><input type="file" id="sg-file" class="sr" accept=".pdf,application/pdf"></div>';
+    if (!SG.name) return h;
+    var C = SG.certs;
+    return h + '<p><b>' + esc(SG.name) + '</b></p><div class="card">' +
+      (C === null ? '<p class="soft">Looking for your certificates\u2026</p>' : !C.length ? '<p class="note">No signing certificate found. Plug in the token and check that its software shows the certificate, then press Check again.</p>' :
+        '<label>Certificate <select id="sg-cert">' + C.map(function (c) { return '<option value="' + esc(c.thumb) + '"' + (c.thumb === SG.thumb ? ' selected' : '') + '>' + esc(c.name + ' \u00b7 ' + c.issuer + ' \u00b7 valid till ' + c.till + (c.where === 'test' ? ' (test)' : '')) + '</option>'; }).join('') + '</select></label>') +
+      '<p><label>Reason <input id="sg-reason" value="' + esc(SG.reason) + '"></label> <label>Place <input id="sg-place" value="' + esc(SG.place) + '" placeholder="City"></label></p>' +
+      '<p><label><input type="checkbox" id="sg-stamp"' + (SG.stamp ? ' checked' : '') + '> Show "Digitally signed by \u2026" on the last page</label></p>' +
+      (SG.err ? '<p class="note bad">' + esc(SG.err) + '</p>' : '') +
+      '<div class="pr-bar"><button type="button" class="btn primary" id="sg-go" data-ic="download"' + (C && C.length ? '' : ' disabled') + '>Sign and save</button><button type="button" class="btn" id="sg-again">Check again</button></div></div>';
+  }
+  function signCerts() { SG.certs = null; return NS.helper('certs').then(function (r) { SG.certs = r.certs || []; if (!SG.thumb && SG.certs[0]) SG.thumb = SG.certs[0].thumb; }, function (e) { SG.certs = []; SG.err = e.message; }).then(function () { A.show(); }); }
+  function signGo() {
+    var S = window.NSPdfSign, c = (SG.certs || []).filter(function (x) { return x.thumb === SG.thumb; })[0];
+    if (!S || !c || !SG.bytes) return;
+    SG.err = ''; NS.toast('Signing\u2026 your token may ask for its PIN in its own window.');
+    var p = null;
+    NS.loadJs(LIB).then(function () { return S.prepare(SG.bytes, { name: c.name, reason: SG.reason, place: SG.place, stamp: SG.stamp }); }).then(function (x) {
+      p = x; return NS.helper('signCms', { thumb: c.thumb, b64: NS.u8b64(S.toSign(p)), reason: SG.reason });
+    }).then(function (r) {
+      var out = S.finish(p, NS.b64u8(r.cms)), nm = SG.name.replace(/\.pdf$/i, '') + ' (signed).pdf';
+      NS.saveFile(new Blob([out], { type: 'application/pdf' }), nm); NS.toast('Signed by ' + (r.name || c.name) + ': saved as "' + nm + '".');
+    }).catch(function (e) { SG.err = String(e && e.message || e); A.show(); });
+  }
+  function wireSign(pane) {
+    var f = $('#sg-file', pane); if (f) f.addEventListener('change', function () {
+      var x = f.files[0]; f.value = ''; if (!x) return;
+      x.arrayBuffer().then(function (b) { SG.name = x.name; SG.bytes = new Uint8Array(b); SG.err = window.NSPdfSign && NSPdfSign.signedAlready(SG.bytes) ? 'This PDF is already signed. Signing it again here would break the earlier signature.' : ''; return signCerts(); });
+    });
+    var ag = $('#sg-again', pane); if (ag) ag.addEventListener('click', function () { SG.err = ''; NS.helperCheck().then(function () { return NS.helperUp && SG.name ? signCerts() : A.show(); }); });
+    var sc = $('#sg-cert', pane); if (sc) sc.addEventListener('change', function () { SG.thumb = sc.value; });
+    var sr = $('#sg-reason', pane); if (sr) sr.addEventListener('input', function () { SG.reason = sr.value; });
+    var sp = $('#sg-place', pane); if (sp) sp.addEventListener('input', function () { SG.place = sp.value; });
+    var st = $('#sg-stamp', pane); if (st) st.addEventListener('change', function () { SG.stamp = st.checked; });
+    var go = $('#sg-go', pane); if (go) go.addEventListener('click', signGo);
+  }
+  document.addEventListener('ns-helper', function () { if (/^#pdffill/.test(location.hash) && ST.mode === 'sign') A.show(); });
   function wireJS(pane) {
     $$('[data-pfm]', pane).forEach(function (b) { b.addEventListener('click', function () { ST.mode = b.getAttribute('data-pfm'); A.show(); }); });
     var jf = $('#jn-file', pane); if (jf) jf.addEventListener('change', function () { if (jf.files.length) addJoin([].slice.call(jf.files)); jf.value = '';   /* copy first: clearing the box empties its live file list */ });
@@ -206,7 +248,7 @@
     var ss = $('#sp-save', pane); if (ss) ss.addEventListener('click', saveSplit);
   }
   window.NSPdfTools = { parseRanges: parseRanges };
-  A.addSection('pdffill', function () { var m = ST.mode || 'fill'; return tabs() + (m === 'join' ? joinHtml() : m === 'split' ? splitHtml() : html()); }, function (pane) { wireJS(pane); if ((ST.mode || 'fill') === 'fill') wire(pane); });
+  A.addSection('pdffill', function () { var m = ST.mode || 'fill'; return tabs() + (m === 'join' ? joinHtml() : m === 'split' ? splitHtml() : m === 'sign' ? signHtml() : html()); }, function (pane) { wireJS(pane); if (ST.mode === 'sign') wireSign(pane); if ((ST.mode || 'fill') === 'fill') wire(pane); });
   function menu() {
     var nav = $('.hub-nav'), app = $('#app'); if (!nav || !app || app.getAttribute('data-secs') || $('[data-sec="pdffill"]', nav)) return;
     nav.appendChild(NS.el('a', { href: '#pdffill', 'data-sec': 'pdffill' }, '<span>' + esc(NS.t('app.pdffill')) + '</span>'));

@@ -81,7 +81,7 @@
   }
   function m(n) { return money(n, false); }
   function html() {
-    var w = work(), f = ST.form, desk = !!window.NSDesktopXL;
+    var w = work(), f = ST.form, desk = !!window.NSDesktopXL || NS.helperUp;   /* the Windows program, or the NSBiz Helper program through the add-on (phase 9) */
     var tr = function (r) { return '<tr><td>' + esc(r.name) + (r.cap ? ' <span class="soft">(capital goods)</span>' : r.made ? ' <span class="soft">(made here)</span>' : '') + '</td><td>' + esc(r.gstin ? r.gstin + ' · ' + (r.no || '') + ' · ' + A.ldate(r.date) : '—') + '</td><td class="n">' + NS.qty(r.qty) + ' ' + esc(r.unit || '') + '</td><td class="n">' + m(r.value) + '</td><td class="n">' + m(r.igst) + '</td><td class="n">' + m(r.cgst) + '</td><td class="n">' + m(r.sgst) + '</td></tr>'; };
     var all = w.inv.concat(w.cap, w.none);
     return '<div class="pane-hd"><h2>GST stock forms (ITC-01, ITC-03, GSTR-10)</h2></div>' +
@@ -95,7 +95,7 @@
       (f === 'gstr10' ? '<label>Cancellation order reference no. <input data-gs="ref" value="' + esc(ST.ref) + '"></label><label>Date of the order <input type="date" data-gs="ordDate" value="' + esc(ST.ordDate) + '"></label>' : '') + '</div>' +
       '<div class="tiles"><div class="tile"><span>Value of stock</span><b>' + m(w.tot.value) + '</b></div><div class="tile"><span>IGST</span><b>' + m(w.tot.igst) + '</b></div><div class="tile"><span>CGST</span><b>' + m(w.tot.cgst) + '</b></div><div class="tile"><span>SGST/UTGST</span><b>' + m(w.tot.sgst) + '</b></div></div>' +
       '<div class="quick no-print"><button type="button" class="btn primary" data-gsfill="0" data-ic="xls">Fill the official ' + esc(f === 'gstr10' ? 'GSTR-10' : f === 'itc01' ? 'ITC-01' : 'ITC-03') + ' tool (Excel)</button><button type="button" class="btn sm" data-gsfill="1" data-noic>Change template file</button><button type="button" class="btn" data-gsxl data-ic="xls">Excel of these rows</button></div>' +
-      (desk ? '' : '<p class="note">Filling the official tool needs NSBiz for Windows: these tools are older Excel files that only Excel itself can fill without breaking them. In the browser, use "Excel of these rows" and copy the rows into the tool.</p>') +
+      (desk ? '' : '<p class="note">Filling the official tool needs NSBiz for Windows, or the NSBiz Helper program with the browser add-on: these tools are older Excel files that only Excel itself can fill without breaking them. In the browser, use "Excel of these rows" and copy the rows into the tool.</p>') +
       (f === 'itc01' && (w.none.length || w.cap.length) ? '<p class="soft">' + (w.none.length + w.cap.length) + ' row(s) without a supplier\'s invoice are not written into ITC-01 (it lists invoices only).</p>' : '') +
       '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Item</th><th>Supplier GSTIN · bill · date</th><th class="n">Quantity</th><th class="n">Value</th><th class="n">IGST</th><th class="n">CGST</th><th class="n">SGST/UTGST</th></tr></thead><tbody>' +
       (all.map(tr).join('') || '<tr><td colspan="7" class="soft">No stock in hand on this date.</td></tr>') + '</tbody></table></div>';
@@ -103,12 +103,13 @@
   function fill(change) {
     var f = ST.form, g = String(me().gstin || '').toUpperCase(), tp = null;
     if (!/^\d{2}[A-Z0-9]{13}$/.test(g)) { NS.toast('Add the GSTIN of this business first (My data › Businesses).'); return; }
-    if (!window.NSDesktopXL) { NS.toast('This needs NSBiz for Windows (it uses your Excel). In the browser, use "Excel of these rows".'); return; }
+    var XLF = window.NSDesktopXL || (NS.helperUp ? NS.helperXL : null);
+    if (!XLF) { NS.toast('This needs NSBiz for Windows or the NSBiz Helper program (it uses your Excel). In the browser, use "Excel of these rows".'); return; }
     var w = work(), sp = spec(w);
     NS.xlFill.template(FORMS[f].kind, change).then(function (x) {
       tp = x; if (!tp) return;
       NS.toast('Excel is filling ' + tp.file.name + '… (this can take a minute)');
-      return tp.file.arrayBuffer().then(function (ab) { return window.NSDesktopXL.fill(new Uint8Array(ab), (/\.[a-z]+$/i.exec(tp.file.name) || [FORMS[f].ext])[0], sp); }).then(function (r) {
+      return tp.file.arrayBuffer().then(function (ab) { return XLF.fill(new Uint8Array(ab), (/\.[a-z]+$/i.exec(tp.file.name) || [FORMS[f].ext])[0], sp); }).then(function (r) {
         if (!r || !r.ok || !r.bytes) { if (r && r.noexcel) NS.toast('Microsoft Excel is needed on this computer to fill this tool.', 'bad'); else NS.toast('Excel could not fill it: ' + ((r && r.errors || []).join('; ') || 'no answer'), 'bad'); return; }
         NS.xlFill.good(FORMS[f].kind, tp);
         var ext = (/\.[a-z]+$/i.exec(tp.file.name) || [FORMS[f].ext])[0], nm = g + '_' + f.toUpperCase() + '_' + ST.date + ' NSBiz' + ext, bl = new Blob([r.bytes]);
@@ -128,5 +129,6 @@
       NS.loadLazy(['xlsx.js']).then(function () { NS.saveFile(NS.xlsx.write([['Stock ' + ST.date, [H].concat(R)]]), 'gst-stock-' + ST.form + '-' + ST.date + '.xlsx'); });
     });
   }
+  document.addEventListener('ns-helper', function () { if (/^#gststk/.test(location.hash)) A.show(); });   /* the helper answered after the screen was drawn */
   A.addSection('gststk', html, wire);
 })();

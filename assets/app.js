@@ -325,6 +325,21 @@
   /* ---------- sections ---------- */
   function route() {
     var h = decodeURIComponent(location.hash.slice(1)), p = h.split('/');
+    /* addresses the NSBiz Helper add-on opens (toolbar, shortcuts, reminders): #qe/<kind> = quick entry,
+       #pay/<min|mout>/<bill id> = record a payment against that bill; then back to the screen the App was on */
+    /* #biz/<id>: switch to that business (the add-on's panel on the GST portal, when the portal shows another of your businesses) */
+    if (p[0] === 'biz' && p[1]) {
+      history.replaceState(null, '', '#' + (backTo && !/^(qe|pay|biz)\//.test(backTo) ? backTo : 'home'));
+      route(); whenReady(function () { setBiz(p.slice(1).join('/')); });
+      return;
+    }
+    if ((p[0] === 'qe' && p[1]) || (p[0] === 'pay' && /^(min|mout)$/.test(p[1] || '') && p[2])) {
+      history.replaceState(null, '', '#' + (backTo && !/^(qe|pay)\//.test(backTo) ? backTo : 'home'));
+      route();
+      if (p[0] === 'qe') quickEntry(p[1]);
+      else whenReady(function () { openForm(p[1], { forId: p.slice(2).join('/') }); });
+      return;
+    }
     /* where the App has been, so the title row's Back goes back the way the user came (a maker opened from another maker too) */
     if (trail.length > 1 && trail[trail.length - 2] === h) trail.pop(); else if (trail[trail.length - 1] !== h) trail.push(h);
     cur = p[0] === 'do' && !DOOR ? 'do' : SECS.indexOf(p[0]) >= 0 || EXT[p[0]] ? p[0] : 'home'; arg = p.slice(1).join('/');
@@ -887,18 +902,23 @@
     });
   }
 
-  function whatsapp(k) {
-    var D = mine(), P = B.parties(D, bizName()), p = P[k]; if (!p || p.bal <= 0) return;
+  /* the payment reminder for one party: { url (wa.me with the message), ph, name } or null when nothing is due */
+  function waReminder(k) {
+    var D = mine(), P = B.parties(D, bizName()), p = P[k]; if (!p || p.bal <= 0) return null;
     var open = B.bills(D, bizName(), k).bills.filter(function (b) { return b.side === 'recv'; });
     var msg = T('wamsg', { p: p.name, a: money(p.bal), b: bizName(), d: ldate(NS.today()),
       bills: open.length ? T('wabills', { l: open.slice(0, 8).map(function (b) { return (b.no || docName(b)) + ' ' + ldate(b.date) + ' ' + money(b.left); }).join(', ') }) : '',
       upi: BIZ.upi ? NS.t('uf.waupi', { u: BIZ.upi, a: money(p.bal) }) : '' });
     var ph = phoneOf(k, P);
     if (ph.length === 10) ph = '91' + ph;
-    if (!ph) NS.toast(T('nophone', { p: p.name }));
+    return { url: 'https://wa.me/' + (ph.length >= 11 ? ph : '') + '?text=' + encodeURIComponent(msg), ph: ph, name: p.name };
+  }
+  function whatsapp(k) {
+    var w = waReminder(k); if (!w) return;
+    if (!w.ph) NS.toast(T('nophone', { p: w.name }));
     else if (fuGet(k).last === NS.today()) NS.toast(T('fu_again'));
-    window.open('https://wa.me/' + (ph.length >= 11 ? ph : '') + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');
-    if (ph) fuSet(k, { last: NS.today() });
+    window.open(w.url, '_blank', 'noopener');
+    if (w.ph) fuSet(k, { last: NS.today() });
   }
 
   /* ---------- forms ---------- */
@@ -1560,7 +1580,7 @@
     range: range, trail: function () { return trail; }, viewDoc: function (id) { viewDoc(id); },
     formDoc: function () { if (!F || !form) return null; var d = F.kind === 'sale' ? saleFromForm() : F.vd && F.vd.build ? F.vd.build() : null; if (d) { delete d.tax; if (F.rec && F.rec.id) d.id = F.rec.id; } return d; },
     markPaid: markPaid, openUrl: openUrl, siteHome: siteHome, frameAt: frameAt, docUrl: docUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },
-    whatsapp: whatsapp, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
+    whatsapp: whatsapp, waReminder: waReminder, fuMark: function (k) { fuSet(k, { last: NS.today() }); }, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
     vh: function () { return { chgBlock: chgBlock, chgOut: chgOut, fld: fld, inp: inp, sel: sel, partyList: partyList, savePartyRole: savePartyRole, drawLines: drawLines, drawSum: drawSum, form: function () { return form; }, cur: function () { return F; } }; },
     door: function () { return DOOR; }, banks: banks, bankFld: bankFld, bankSync: bankSync, bankWire: bankWire, bankVal: bankVal, setBacct: setBacct, bankLabel: bankLabel, bankSum: bankSum, banksMeta: function () { return BANKS; }, whenReady: whenReady, switchBiz: switchBiz, setBiz: setBiz, printVoucher: printVoucher, quickEntry: quickEntry
   };
