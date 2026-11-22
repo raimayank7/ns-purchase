@@ -66,7 +66,12 @@
 
   /* ---------- GSTR-6: ITC distribution by an Input Service Distributor ---------- */
   function units() { return (me().isdUnits || []).filter(function (u) { return okGstin(u.gstin) && num(u.share) > 0; }); }
-  function isdBills() { return A.mine().filter(function (d) { return d.type === 'pbill' && d.kind !== 'return' && !d.deleted && !d.cancelled && !d.noGst && inMonth(d.date); }).sort(A.byDate); }
+  /* an ISD passes on the credit of input SERVICES only (s.2(61)): the lines with a SAC code (99...) of the month's purchase bills;
+     a bill of goods, or a line without a code, is left out (owner 22 Nov: the screen used to take every bill with GST) */
+  function sac(it) { return /^99/.test(String(it.hsn || '').trim()); }
+  function isdAll() { return A.mine().filter(function (d) { return d.type === 'pbill' && d.kind !== 'return' && !d.deleted && !d.cancelled && !d.noGst && inMonth(d.date); }).sort(A.byDate); }
+  function isdBills() { return isdAll().filter(function (d) { return (d.items || []).some(sac); }).map(function (d) { return Object.assign({}, d, { items: d.items.filter(sac), charges: [], _tot: B.itemTotals(d).total }); }); }
+  function isdLeft() { return isdAll().filter(function (d) { return (d.items || []).some(function (it) { return String(it.desc || '').trim() && !sac(it); }); }).length; }
   function isdTotals(L) { return L.reduce(function (a, d) { var t = B.itemTotals(d), bk = B.itcBlk ? B.itcBlk(d) : null; ['igst', 'cgst', 'sgst'].forEach(function (h) { var x = num(t[h]), bl = bk ? num(bk.blk[h]) + num(bk.inel[h]) : 0; a.el[h] = r2(a.el[h] + x - bl); a.inel[h] = r2(a.inel[h] + bl); }); a.txv = r2(a.txv + num(t.taxable)); return a; }, { txv: 0, el: { igst: 0, cgst: 0, sgst: 0 }, inel: { igst: 0, cgst: 0, sgst: 0 } }); }
   /* each branch's part: its share of the credit; another state = all as IGST; same state = as it is */
   function split(tot, U) {
@@ -82,7 +87,7 @@
   }
   function isdSaved() { return A.mine().filter(function (d) { return d.type === 'isddist' && !d.deleted && d.month === ST.month; })[0]; }
   function isdHtml() {
-    var U = units(), Lb = isdBills(), T = isdTotals(Lb), sv = isdSaved(), rows = sv ? sv.lines : split(T, U);
+    var U = units(), Lb = isdBills(), T = isdTotals(Lb), sv = isdSaved(), rows = sv ? sv.lines : split(T, U), left = isdLeft();
     return '<div class="pane-hd"><h2>ITC distribution (GSTR-6)</h2></div>' +
       '<p class="soft">For a head office registered as an Input Service Distributor (ISD): the credit on the month\'s input-service bills is passed to the branches by their share (section 20, rule 39). ' +
       'A branch in another state gets it all as IGST; a branch in the same state gets IGST, CGST and SGST as they are. Blocked or ineligible credit is distributed as ineligible. File GSTR-6 by the 13th of the next month.</p>' +
@@ -90,7 +95,8 @@
       '<div class="card"><h3>Branches and their share</h3><p class="soft">Share = the branch\'s turnover in the state for the period the rule names (usually the last financial year), or any ratio you use. Saved with this business.</p>' +
       '<div data-units>' + (me().isdUnits || []).concat([{}]).map(function (u, i) { return '<div class="tools-row"><label>Branch GSTIN <input data-iu="gstin" data-ii="' + i + '" value="' + esc(u.gstin || '') + '" maxlength="15"></label><label>Name <input data-iu="name" data-ii="' + i + '" value="' + esc(u.name || '') + '"></label><label>Share <input data-iu="share" data-ii="' + i + '" value="' + esc(u.share || '') + '" inputmode="decimal"></label></div>'; }).join('') + '</div>' +
       '<button type="button" class="btn sm" data-iusave>Save branches</button></div>' +
-      '<div class="tiles"><div class="tile"><span>Input-service bills</span><b>' + Lb.length + '</b></div><div class="tile"><span>Eligible credit</span><b>' + m(T.el.igst + T.el.cgst + T.el.sgst) + '</b></div><div class="tile"><span>Ineligible</span><b>' + m(T.inel.igst + T.inel.cgst + T.inel.sgst) + '</b></div></div>' +
+      (left ? '<p class="note">' + left + (left === 1 ? ' purchase bill of this month has' : ' purchase bills of this month have') + ' goods or lines without a SAC code: those lines are left out, because an ISD distributes the credit on input services only. Give each service line its SAC code (starting 99) in the purchase bill to include it.</p>' : '') +
+      '<div class="tiles"><div class="tile"><span>Bills with input services</span><b>' + Lb.length + '</b></div><div class="tile"><span>Eligible credit</span><b>' + m(T.el.igst + T.el.cgst + T.el.sgst) + '</b></div><div class="tile"><span>Ineligible</span><b>' + m(T.inel.igst + T.inel.cgst + T.inel.sgst) + '</b></div></div>' +
       '<div class="quick no-print"><button type="button" class="btn" data-isdsave>' + (sv ? 'Distribute again' : 'Save this distribution') + '</button>' + utilButtons('gstr6', 'GSTR-6') + '</div>' +
       (sv ? '<p class="soft">Saved distribution of ' + esc(ST.month) + ' (ISD invoices ' + esc(sv.lines.map(function (l) { return l.no; }).filter(Boolean).join(', ')) + ').</p>' : '<p class="soft">Not saved yet: saving gives each branch its ISD invoice number.</p>') +
       '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Branch</th><th>ITC</th><th>ISD invoice</th><th class="n">IGST</th><th class="n">CGST</th><th class="n">SGST</th></tr></thead><tbody>' +
@@ -139,7 +145,7 @@
         isdBills().forEach(function (d) {
           var sup = d.buyer || {}, ss = String(sup.state || g15(sup.gstin).slice(0, 2) || ms), inter = ss !== ms, by = {};
           (d.items || []).forEach(function (it) { var g = num(it.gst), q = num(it.qty) * num(it.rate), tx = r2(q - q * num(it.disc) / 100), b = by[g] || (by[g] = { tx: 0 }); b.tx = r2(b.tx + tx); });
-          var tot = r2(B.itemTotals(d).total);
+          var tot = r2(d._tot != null ? d._tot : B.itemTotals(d).total);   /* the whole invoice value, as on the supplier's bill */
           Object.keys(by).forEach(function (g) { var t = r2(by[g].tx * g / 100); rows.push(['', g15(sup.gstin), dmy(d.date, '-'), d.no || '', tot, NS.xlFill.posFrom(POS, ms.padStart(2, '0') + '-'), inter ? 'Interstate' : 'Intrastate', num(g) / 100, by[g].tx, inter ? t : 0, inter ? 0 : r2(t / 2), inter ? 0 : r2(t - r2(t / 2)), 0, '', '', 'Add']); });
         });
         S.putRows(6, rows); return rows.length;
