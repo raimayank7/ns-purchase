@@ -588,6 +588,8 @@ html.vch-on .vch-print,html.vch-on .vch-print *{visibility:visible!important}   
 }
 
 /* sale bill: Ship to and Dispatch details (app.js shipDisp); the UOM column of the voucher grid */
+.sd-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;padding:8px 12px;border:1px solid var(--line);border-radius:10px;font-size:.92rem}.sd-line .sd-sum{flex:1;min-width:0}.sd-sep{color:var(--soft);margin:0 4px}
+.sd-dlg{max-width:860px;width:calc(100vw - 32px);border:1px solid var(--line);border-radius:12px;padding:0;background:var(--surface);color:inherit}.sd-dlg .sd-body{padding:12px 16px;max-height:70vh;overflow:auto}.sd-dlg .sd-foot{display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--line)}.sd-dlg h4{margin:12px 0 6px;font-size:.9rem}
 .qe-sd{margin:10px 0;border:1px solid var(--line);border-radius:10px;padding:8px 12px}.qe-sd summary{cursor:pointer;font-weight:600}.qe-sd h4{margin:12px 0 6px;font-size:.9rem}.qe-sd .fg{margin-top:8px}
 @media (min-width:1100px) and (pointer:fine){.vg .line{grid-template-columns:34px minmax(0,3fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,.7fr) minmax(0,1fr) minmax(0,.7fr) minmax(0,.7fr) minmax(0,1.2fr) 34px}}
 /* journal entry as a ledger grid (more.js jvForm) */
@@ -770,3 +772,10 @@ html.ns-soft .app-frame{transition:none}
 .ai-img{display:block;max-width:100%;max-height:380px;margin:8px 0;border:1px solid var(--line);border-radius:var(--r,8px)}
 .ai-qr{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:8px 0}.ai-qr dt{color:var(--soft)}.ai-qr dd{margin:0;word-break:break-all}
 .ai-card .note.good{border-left:3px solid #1d7a34}.ai-card .note.bad{border-left:3px solid #b42318}
+
+/* Ship to and dispatch details box: the whole width, in groups (23 Nov) */
+.sd-dlg .sd-g{margin:0 0 14px}.sd-dlg .sd-g h4{margin:4px 0 8px;font-size:.82rem;letter-spacing:.04em;text-transform:uppercase;color:var(--soft)}
+.sd-dlg .sd-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 14px}.sd-dlg .sd-grid[hidden]{display:none}
+.sd-dlg .sd-f{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:.85rem}.sd-dlg .sd-f span{font-weight:600;color:var(--soft)}.sd-dlg .sd-f input,.sd-dlg .sd-f select{width:100%;min-height:38px}
+.sd-dlg .sd-w{grid-column:span 2}
+@media (max-width:900px){.sd-dlg .sd-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-width:520px){.sd-dlg .sd-grid{grid-template-columns:1fr}.sd-dlg .sd-w{grid-column:auto}}

@@ -989,6 +989,7 @@
         fld('f-date', T('date'), inp('f-date', r.date, { type: 'date', req: 1 })) +
         (kind === 'pret' ? fld('f-orig', T('origno'), inp('f-orig', r.orig && r.orig.no || '', { ltr: 1, list: 'dl-pborig' }) + '<datalist id="dl-pborig">' + mine().filter(function (x) { return x.type === 'pbill' && x.kind !== 'return' && x.no; }).sort(byDate).slice(0, 300).map(function (x) { return '<option value="' + esc(x.no) + '" label="' + esc(B.partyName(x) + ' · ' + NS.fmtDate(x.date)) + '">'; }).join('') + '</datalist>') : fld('f-due', T('due'), inp('f-due', r.due || '', { type: 'date' }))) +
         (window.NSApp.gdField && !sale && bm.godown ? NSApp.gdField(r.gd) : '') + (window.NSApp.ledFld && kind !== 'pret' ? NSApp.ledFld(sale ? 'sl' : 'pl', sale ? r.sl : r.pl) : '') + '</div>' +
+        (sale ? shipDisp(r) : '') +   /* owner 23 Nov: Ship to and Dispatch details above the items, also on a saved bill */
         '<fieldset><legend>' + esc(T('items')) + '</legend><div data-lines></div><button type="button" class="btn sm" data-addline>' + esc(T('addline')) + '</button>' +
         '<label class="chk"><input type="checkbox" id="f-nogst"' + (r.noGst ? ' checked' : '') + '> ' + esc(T(sale ? 'qe_nogst' : 'nogst')) + '</label><label class="chk"><input type="checkbox" id="f-round"' + (r.round !== false ? ' checked' : '') + '> ' + esc(T('round')) + '</label>' +
         (sale ? '' : '<label class="chk">' + esc(NS.t('ms.itc')) + ' <select id="f-pitc">' + [['ok', 'ms.itc_ok'], ['blocked', 'ms.itc_blocked'], ['ineligible', 'ms.itc_inel']].map(function (o) { return '<option value="' + o[0] + '"' + ((r.itc || 'ok') === o[0] ? ' selected' : '') + '>' + esc(NS.t(o[1])) + '</option>'; }).join('') + '</select></label>') +   /* r1-gst S-5: credit of the whole bill (lines keep their own) */
@@ -996,7 +997,6 @@
         chgBlock() + '<div class="sum" data-sum></div></fieldset>' +
         '<div class="fg">' + fld('f-narr', NS.t('bw.narr'), inp('f-narr', r.narr || ''), { wide: 1, hint: NS.t('bw.narrh') }) + '</div>' +   /* A-26 (r2-billwise): narration for the books */
         (kind === 'pbill' && !rec ? '<div class="fg">' + fld('f-mode', T('paidnow'), sel('f-mode', (o.quick && qeMode('pbill')) || 'credit', modeOpts(true)), { hint: T('paidnowh') }) + bankFld('f-bank', '', 'f-mode') + '</div>' : '') +
-        (sale && !rec ? shipDisp() : '') +
         (sale && !rec ? '<div class="fg">' + fld('f-mode', T('qe_recv'), sel('f-mode', (o.quick && qeMode('sale')) || (/^(shop|resto|pharma)$/.test(BIZ.kind || '') ? 'cash' : 'credit'), modeOpts(true)), { hint: T('qe_recvh') }) + bankFld('f-bank', '', 'f-mode') + '</div>' : '') +
         (sale ? '' : '<div class="fg"><div class="f wide"><label for="f-photo">' + esc(T('photo')) + '</label><input type="file" id="f-photo" accept="image/*"><small class="soft">' + esc(T('photoh')) + '</small><div class="photo-pv" data-photo-pv></div></div></div>');
       F.lines = JSON.parse(JSON.stringify(r.items)); F.photo = r.photo || ''; F.charges = JSON.parse(JSON.stringify(r.charges || []));
@@ -1063,6 +1063,7 @@
     $$('[data-qe]', form).forEach(function (b) { b.addEventListener('click', function () { openForm(b.getAttribute('data-qe'), { quick: 1 }); }); });
     var qc = $('[data-qecus]', form); if (qc) qc.addEventListener('click', qeCustomize);
     var so = $('#f-shipon', form); if (so) so.addEventListener('change', function () { $('#f-shipbox', form).hidden = !so.checked; if (so.checked) $('#f-shname', form).focus(); });
+    sdWire(form);
     dlg.showModal();
     var first = F.quick ? $('#f-party,#f-cat', form) : $('input:not([type=date]),select', form); if (first && (F.quick || !first.value)) first.focus(); else { var any = $('input:not([type=hidden]):not([type=checkbox]),select', form); if (any) any.focus(); }   /* never leave the cursor on Back (P2-14: Contra) */
   }
@@ -1246,20 +1247,51 @@
   }
   /* a sale bill made here is the same record the billing maker saves (docs.js blank() + totals), numbered by its rule */
   /* Bill to / Ship to and Dispatch details of a sale bill (owner 2026-11-18): folded until opened; saved as the billing maker saves them */
-  function shipDisp() {
-    var f = function (id, k, o) { o = o || {}; return '<label class="f" for="' + id + '"><span>' + esc(NS.t(k)) + '</span>' + (o.sel ? '<select id="' + id + '">' + o.sel + '</select>' : '<input id="' + id + '"' + (o.type ? ' type="' + o.type + '"' : '') + (o.ltr ? ' dir="ltr"' : '') + '>') + '</label>'; };
+  function shipDisp(r) {
+    r = r || {}; var sh = r.ship || null, dp = r.disp || {}, VAL = { 'f-shname': sh && sh.name, 'f-shaddr': sh && sh.addr, 'f-shcity': sh && sh.city, 'f-shpin': sh && sh.pin, 'f-shgstin': sh && sh.gstin,
+      'f-dpthrough': dp.through, 'f-dpdest': dp.dest, 'f-dpveh': dp.veh, 'f-dptname': dp.tname, 'f-dplr': dp.lr, 'f-dplrdate': dp.lrdate,
+      /* the e-way bill number and date fill themselves from the portal's reply loaded into the bill (einv.js keeps it in d.irn) */
+      'f-dpewb': dp.ewb || (r.irn && r.irn.ewb), 'f-dpewbdt': dp.ewbdate || (r.irn && NS.ewbDay(r.irn.ewbDt)),
+      'f-dpwt': dp.wt, 'f-dpmark': dp.mark, 'f-dppo': dp.po, 'f-dppodate': dp.podate, 'f-dppkgs': dp.pkgs };
+    var f = function (id, k, o) { o = o || {}; var val = VAL[id] ? ' value="' + esc(VAL[id]) + '"' : ''; return '<label class="sd-f' + (o.wide ? ' sd-w' : '') + '" for="' + id + '"><span>' + esc(NS.t(k)) + '</span>' + (o.sel ? '<select id="' + id + '">' + o.sel + '</select>' : '<input id="' + id + '"' + (o.type ? ' type="' + o.type + '"' : '') + (o.ltr ? ' dir="ltr"' : '') + val + '>') + '</label>'; };
+    var any = !!(sh || Object.keys(dp).some(function (k) { return dp[k]; }));
     var st = '<option value=""></option>' + NS.STATES.map(function (s) { return '<option value="' + s[0] + '">' + esc(s[1]) + '</option>'; }).join('');
-    return '<details class="qe-sd"><summary>' + esc(NS.t('dp.sum')) + '</summary>' +
-      '<label class="chk"><input type="checkbox" id="f-shipon"> ' + esc(NS.t('dp.shipon')) + '</label><div class="fg" id="f-shipbox" hidden>' +
-      f('f-shname', 'dp.shname') + f('f-shaddr', 'dp.shaddr') + f('f-shcity', 'dp.shcity') + f('f-shpin', 'dp.shpin', { ltr: 1 }) + f('f-shstate', 'dp.shstate', { sel: st }) + f('f-shgstin', 'dp.shgstin', { ltr: 1 }) + '</div>' +
-      '<h4>' + esc(NS.t('dp.t')) + '</h4><div class="fg">' + f('f-dpthrough', 'dp.through') + f('f-dpdest', 'dp.dest') +
-      f('f-dpmode', 'dp.mode', { sel: ['', 'Road', 'Rail', 'Air', 'Ship', 'Courier', 'By hand'].map(function (x) { return '<option>' + x + '</option>'; }).join('') }) +
-      f('f-dpveh', 'dp.veh', { ltr: 1 }) + f('f-dptname', 'dp.tname') + f('f-dplr', 'dp.lr', { ltr: 1 }) + f('f-dplrdate', 'dp.lrdate', { type: 'date' }) + f('f-dpewb', 'dp.ewb', { ltr: 1 }) + '</div></details>';
+    var mode = dp.mode || '', shs = sh && sh.state || '';
+    st = st.replace('value="' + shs + '"', 'value="' + shs + '" selected');
+    /* owner 23 Nov: one line above the items (what is filled, and a button); the boxes in a box of their own, so the bill does not grow */
+    return '<div class="sd-line"><span class="sd-sum" data-sdsum></span><button type="button" class="btn sm" data-sdopen data-ic="edit">' + esc(NS.t('dp.sum')) + '</button></div>' +
+      '<dialog class="sd-dlg" data-sddlg aria-label="' + esc(NS.t('dp.sum')) + '"><div class="dlg-hd"><h2>' + esc(NS.t('dp.sum')) + '</h2></div><div class="sd-body">' +
+      /* owner 23 Nov: the whole width, in groups (Ship to, Transport, Goods and order, E-way bill) */
+      '<section class="sd-g"><h4>' + esc(NS.t('dp.shipto')) + '</h4><label class="chk"><input type="checkbox" id="f-shipon"' + (sh ? ' checked' : '') + '> ' + esc(NS.t('dp.shipon')) + '</label><div class="sd-grid" id="f-shipbox"' + (sh ? '' : ' hidden') + '>' +
+      f('f-shname', 'dp.shname', { wide: 1 }) + f('f-shgstin', 'dp.shgstin', { ltr: 1 }) + f('f-shstate', 'dp.shstate', { sel: st }) + f('f-shaddr', 'dp.shaddr', { wide: 1 }) + f('f-shcity', 'dp.shcity') + f('f-shpin', 'dp.shpin', { ltr: 1 }) + '</div></section>' +
+      '<section class="sd-g"><h4>' + esc(NS.t('dp.grp_tr')) + '</h4><div class="sd-grid">' +
+      f('f-dpthrough', 'dp.through') + f('f-dpdest', 'dp.dest') + f('f-dpmode', 'dp.mode', { sel: ['', 'Road', 'Rail', 'Air', 'Ship', 'Courier', 'By hand'].map(function (x) { return '<option' + (x && x === mode ? ' selected' : '') + '>' + x + '</option>'; }).join('') }) +
+      f('f-dptname', 'dp.tname') + f('f-dpveh', 'dp.veh', { ltr: 1 }) + f('f-dplr', 'dp.lr', { ltr: 1 }) + f('f-dplrdate', 'dp.lrdate', { type: 'date' }) + '</div></section>' +
+      '<section class="sd-g"><h4>' + esc(NS.t('dp.grp_goods')) + '</h4><div class="sd-grid">' +
+      f('f-dppkgs', 'dp.pkgs') + f('f-dpwt', 'dp.wt') + f('f-dpmark', 'dp.mark', { wide: 1 }) + f('f-dppo', 'dp.po', { ltr: 1 }) + f('f-dppodate', 'dp.podate', { type: 'date' }) + '</div></section>' +
+      '<section class="sd-g"><h4>' + esc(NS.t('dp.grp_ewb')) + '</h4><div class="sd-grid">' +
+      f('f-dpttype', 'dp.ttype', { wide: 1, sel: NS.EWB_TT.map(function (x) { return '<option value="' + x[0] + '"' + ((dp.ttype || '') === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') }) +
+      f('f-dpewb', 'dp.ewb', { ltr: 1 }) + f('f-dpewbdt', 'dp.ewbdt', { type: 'date' }) + '</div></div><div class="sd-foot"><button type="button" class="btn primary" data-sdok>' + esc(NS.t('dp.done')) + '</button></div></dialog>';
+  }
+  /* the one line: Ship to <name or same as the customer> · Dispatch <vehicle, transporter, LR> */
+  function sdWire(form) {
+    var line = $('[data-sdsum]', form), dl = $('[data-sddlg]', form); if (!line || !dl) return;
+    var v = function (id) { var e = $('#' + id, form); return e ? String(e.value || '').trim() : ''; };
+    var put = function () {
+      var on = $('#f-shipon', form) && $('#f-shipon', form).checked, sh = on && (v('f-shname') || v('f-shaddr')) ? [v('f-shname'), v('f-shcity')].filter(Boolean).join(', ') : '';
+      var dp = [v('f-dpveh'), v('f-dptname'), v('f-dplr') ? 'LR ' + v('f-dplr') : '', v('f-dppkgs') ? v('f-dppkgs') + ' pkgs' : '', v('f-dpwt'), v('f-dppo') ? 'PO ' + v('f-dppo') : '', v('f-dpewb') ? 'EWB ' + v('f-dpewb') : ''].filter(Boolean).join(' · ');
+      line.innerHTML = '<b>' + esc(NS.t('dp.shipto')) + ':</b> ' + esc(sh || NS.t('dp.same')) + ' <span class="sd-sep">|</span> <b>' + esc(NS.t('dp.t')) + ':</b> ' + esc(dp || NS.t('dp.none'));
+    };
+    put();
+    $('[data-sdopen]', form).addEventListener('click', function () { dl.showModal(); var f = $('input:not([type=checkbox]):not(:disabled), select:not(:disabled)', dl) || $('#f-shipon', form); if (f) f.focus(); });
+    $('[data-sdok]', form).addEventListener('click', function () { dl.close(); });
+    dl.addEventListener('close', function () { put(); var b = $('[data-sdopen]', form); if (b) b.focus(); });
+    dl.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); dl.close(); } });
   }
   function shipDispOf(d) {
     var v = function (id) { var e = $('#' + id, form); return e ? String(e.value || '').trim() : ''; };
     if ($('#f-shipon', form) && $('#f-shipon', form).checked && (v('f-shname') || v('f-shaddr'))) d.ship = { name: v('f-shname') || d.buyer.name, addr: v('f-shaddr'), city: v('f-shcity'), pin: v('f-shpin'), state: v('f-shstate') || d.buyer.state, gstin: v('f-shgstin').toUpperCase() };
-    var dp = { through: v('f-dpthrough'), dest: v('f-dpdest'), mode: v('f-dpmode'), veh: v('f-dpveh').toUpperCase(), tname: v('f-dptname'), lr: v('f-dplr'), lrdate: v('f-dplrdate'), ewb: v('f-dpewb') };
+    var dp = { through: v('f-dpthrough'), dest: v('f-dpdest'), mode: v('f-dpmode'), veh: v('f-dpveh').toUpperCase(), tname: v('f-dptname'), lr: v('f-dplr'), lrdate: v('f-dplrdate'), ewb: v('f-dpewb'), ewbdate: v('f-dpewbdt'), wt: v('f-dpwt'), mark: v('f-dpmark'), po: v('f-dppo'), podate: v('f-dppodate'), pkgs: v('f-dppkgs'), ttype: v('f-dpttype') };
     if (Object.keys(dp).some(function (k) { return dp[k]; })) { d.disp = dp; d.tr = { veh: dp.veh, tname: dp.tname, lr: dp.lr }; }
     return d;
   }
@@ -1279,6 +1311,7 @@
     if ($('#f-narr', form)) d.narr = $('#f-narr', form).value.trim();   /* A-26 */   /* A-9: sales ledger of this bill */
     if (!F.rec) { if (F.vt) d.vt = F.vt; NS.vtApply(d, NS.vtCfg(CFG, 'invoice', '', F.vt)); }   /* C-11 / A-7: this voucher type's defaults and series */
     if (F.conv) { d.fromId = F.conv.fromId; d.against = F.conv.against; d.ref = F.conv.ref || ''; if (F.conv.einv) d.einv = F.conv.einv; if (F.conv.ship) d.ship = F.conv.ship; }
+    if (F.chl && F.chl.length && !d.against) d.against = 'Delivery challan ' + F.chl.join(', ');   /* Bill against a challan (orders.js) */
     return shipDispOf(d);
   }
   function drawSum() {
