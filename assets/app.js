@@ -1422,7 +1422,7 @@
         if (!hit) jobs.push(NSStore.put('item', { desc: it.desc, hsn: it.hsn, unit: it.unit, rate: it.rate, prate: '', gst: it.gst, kind: 'goods' }));   /* a new item learns its sale rate; a saved one keeps its price list */
       });
       return Promise.all(jobs).then(function () { return NSStore.put('doc', d); }).then(function (saved) {
-        F.savedNo = saved.no; if (saved.fromId && window.NSVDocs) NSVDocs.markFrom(saved);
+        F.savedNo = saved.no; F.savedRec = saved; if (saved.fromId && window.NSVDocs) NSVDocs.markFrom(saved);
         if (smode === 'credit') return saved;
         /* paid at once: a receipt linked to this bill, and the bill is marked paid (as Money received does) */
         var rv = { type: 'receipt', app: 1, kind: 'pay', no: nextNo('receipt', 'RCT', saved.date), date: saved.date, paper: 'a4', design: 'classic', copies: 1, copyLabel: '', gstAdv: false, rate: '18', pos: '', sac: '', rv: '', rvDate: '', refDate: '', bank: '', balance: '', status: '',
@@ -1434,7 +1434,7 @@
     }
     if (k === 'vdoc') {
       var how = andPrint;
-      return F.vd.save(form).then(function (saved) { if (!saved) return; F.savedNo = saved.no; F.renumMsg = F.vd.renum; done(); if (!how && NSVDocs.after) how = NSVDocs.after(saved); if (!how && NSApp.askPrint) NSApp.askPrint('vdoc', saved); if (how === 'share') NSVDocs.out(saved, 'share'); else if (how) { if (NSApp.chooseCopies) NSApp.chooseCopies('vdoc', saved).then(function (cp) { if (cp) NSVDocs.out(saved, 'print', cp); }); else NSVDocs.out(saved, 'print'); } });   /* C-15: print / share after saving */
+      return F.vd.save(form).then(function (saved) { if (!saved) return; F.savedNo = saved.no; F.savedRec = saved; F.renumMsg = F.vd.renum; done(); if (!how && NSVDocs.after) how = NSVDocs.after(saved); if (!how && NSApp.askPrint) NSApp.askPrint('vdoc', saved); if (how === 'share') NSVDocs.out(saved, 'share'); else if (how) { if (NSApp.chooseCopies) NSApp.chooseCopies('vdoc', saved).then(function (cp) { if (cp) NSVDocs.out(saved, 'print', cp); }); else NSVDocs.out(saved, 'print'); } });   /* C-15: print / share after saving */
     }
     if (k === 'exp') {
       d = Object.assign(rec || { type: 'exp', app: 1 }, { date: $('#f-date', form).value, seller: sellerCopy(), cat: catCode($('#f-cat', form).value.trim()), amount: r2(num($('#f-amt', form).value)), mode: $('#f-mode', form).value,
@@ -1473,10 +1473,16 @@
   }
   function done() {
     var again = F && F.quick && !F.rec ? F.kind : '', no = F && F.savedNo;
-    var rm = F && F.renumMsg, kd = F && F.kind; PRE = null; dlg.close(); NS.toast(rm || (again ? T('qe_saved', { no: no || '' }) : T('saved')), rm ? 'warn' : ''); NS.checkReminder && NS.checkReminder(); show();
+    var rm = F && F.renumMsg, kd = F && F.kind, sr = F && F.savedRec; PRE = null; dlg.close(); NS.toast(rm || (again ? T('qe_saved', { no: no || '' }) : T('saved')), rm ? 'warn' : ''); NS.checkReminder && NS.checkReminder(); show();
     /* owner 22 Nov: ask to print after saving a bill or voucher (vdoc documents ask in their own save path) */
-    var TY = { sale: 'invoice', min: 'receipt', mout: 'voucher', pbill: 'pbill', pret: 'pbill', exp: 'exp' };
-    if (!again && no && TY[kd] && NSApp.askPrint && !(NSApp._noAsk && Date.now() - NSApp._noAsk < 5000)) load().then(function () { var d = mine().filter(function (x) { return (x.type || 'invoice') === TY[kd] && (x.no === no || x.vno === no); }).sort(function (a, b) { return (b.updated || b.created || 0) - (a.updated || a.created || 0); })[0]; if (d) NSApp.askPrint(kd, d); });
+    var TY = { sale: 'invoice', min: 'receipt', mout: 'voucher', pbill: 'pbill', pret: 'pbill', exp: 'exp', contra: 'contra' };
+    /* owner 23 Nov: the saved voucher stays on screen (New, Print, Next are there); the "Print it now?" box comes on top of it */
+    if (!again && (sr || (no && TY[kd]))) load().then(function () {
+      var d = sr && sr.id ? mine().filter(function (x) { return x.id === sr.id; })[0] || sr : mine().filter(function (x) { return (x.type || 'invoice') === TY[kd] && (x.no === no || x.vno === no); }).sort(function (a, b) { return (b.updated || b.created || 0) - (a.updated || a.created || 0); })[0];
+      if (!d) return;
+      if (!(dlg && dlg.open)) openForm(kd, { rec: d });
+      if (kd !== 'vdoc' && TY[kd] && NSApp.askPrint && !(NSApp._noAsk && Date.now() - NSApp._noAsk < 5000)) NSApp.askPrint(kd, d);
+    });
     if (again) load().then(function () { openForm(again, { quick: 1 }); });   /* quick entry: the next one, blank (after the saved one is in the list, so the next number is right) */
   }
   /* ---------- quick entry: the five everyday entries, keyboard first ---------- */
