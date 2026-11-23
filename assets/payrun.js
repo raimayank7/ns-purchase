@@ -368,7 +368,7 @@
       var e = ST.emps.filter(function (x) { return x.id === b.getAttribute('data-pwwork'); })[0]; if (!e) return;
       var h = workHtml(e);
       X.open(F('workof', { n: e.name }), h + '<p><button type="button" class="btn sm" data-pwwp data-ic="print">' + esc(A.T('print')) + '</button></p>', function () { var dl = $('.acx-dlg[open]'); if (dl) dl.close(); }, function (f) {
-        $('[data-pwwp]', f).addEventListener('click', function () { var w = window.open('', '_blank'); if (!w) return; w.document.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Tax working ' + esc(e.name) + '</title><style>body{font:13px system-ui,sans-serif;margin:14mm}table{border-collapse:collapse;width:100%}td{border:1px solid #aaa;padding:4px 6px}.n{text-align:right}.pw-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}</style></head><body><h2>' + esc(A.bizName() || '') + ': income-tax working on salary</h2>' + h + '<script>window.print()<\/script></body></html>'); w.document.close(); });
+        $('[data-pwwp]', f).addEventListener('click', function () { var w = window.open('', '_blank'); if (!w) return; w.document.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Tax working ' + esc(e.name) + '</title><style>body{font:13px system-ui,sans-serif;margin:14mm}table{border-collapse:collapse;width:100%}td{border:1px solid #aaa;padding:4px 6px}.n{text-align:right}.pw-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}' + NS.pageBoxes(true) + '</style></head><body><h2>' + esc(A.bizName() || '') + ': income-tax working on salary</h2>' + h + '<script>window.print()<\/script></body></html>'); w.document.close(); });
       });
     }); });
   }
@@ -491,7 +491,7 @@
   function ffPrint(e, d, w) {
     var b = A.biz() || {}, win = window.open('', '_blank'); if (!win) { NS.toast(F('popup'), 'bad'); return; }
     var f = w.f, ff = d.ff || {};
-    win.document.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Full and final settlement ' + esc(e.name) + '</title><style>body{font:13px/1.45 system-ui,sans-serif;margin:16mm}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{border:1px solid #999;padding:5px 7px;text-align:left}.n{text-align:right}h1{font-size:19px;margin:0}h2{font-size:15px}.s{margin-top:40px;display:flex;justify-content:space-between}</style></head><body>' +
+    win.document.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Full and final settlement ' + esc(e.name) + '</title><style>body{font:13px/1.45 system-ui,sans-serif;margin:16mm}table{width:100%;border-collapse:collapse;margin:8px 0}th,td{border:1px solid #999;padding:5px 7px;text-align:left}.n{text-align:right}h1{font-size:19px;margin:0}h2{font-size:15px}.s{margin-top:40px;display:flex;justify-content:space-between}' + NS.pageBoxes(false) + '</style></head><body>' +
       '<h1>' + esc(b.name || A.bizName() || '') + '</h1><p>' + esc([b.addr, b.city].filter(Boolean).join(', ')) + '</p><h2>Full and final settlement</h2>' +
       '<table><tr><th>Employee</th><td>' + esc(e.name) + '</td><th>Code</th><td>' + esc(e.code || '') + '</td></tr><tr><th>Joined</th><td>' + esc(e.doj || '') + '</td><th>Last working day</th><td>' + esc(ff.date || '') + '</td></tr><tr><th>Reason</th><td>' + esc(F('why_' + ff.why)) + '</td><th>PAN / UAN</th><td>' + esc((e.pan || '—') + ' / ' + (e.uan || '—')) + '</td></tr></table>' +
       ffTable(f, w).replace(/<p class="soft">.*<\/p>$/, '') + '<p>Net payable in words: ' + esc(NS.inWords(Math.max(0, f.net))) + '</p>' +

@@ -194,7 +194,7 @@
   var SG = { name: '', bytes: null, certs: null, thumb: '', reason: 'Approved', place: '', stamp: true, err: '' };
   function signHtml() {
     var h = '<div class="pane-hd"><h2>Sign a PDF with your DSC</h2></div><p class="soft">Sign a bill, letter or return PDF with your Class 3 DSC (USB token), the standard PDF signature that Adobe Reader and the portals check. The token\u2019s own window asks for your PIN: NSBiz never sees it. The file you open is not changed; the signed copy is saved as a new file.</p>';
-    if (!NS.helperUp) return h + '<div class="card"><p class="note">This needs the <b>NSBiz Helper program</b> on this PC, with the browser add-on (in the add-on\u2019s window: Helper program on this PC), and your token\u2019s own software (its driver) installed, as for the GST or MCA portal.</p><button type="button" class="btn" id="sg-again">Check again</button></div>';
+    if (!NS.helperUp) return h + '<div class="card"><p class="note">This needs the <b>NSBiz Helper program</b> on this PC, with the browser add-on (in the add-on\u2019s window: Helper program on this PC), and your token\u2019s own software (its driver) installed, as for the GST or MCA portal. <a href="#" data-hx-status>See what is missing (My data \u203a NSBiz Helper)</a></p><button type="button" class="btn" id="sg-again">Check again</button></div>';
     h += '<div class="pr-bar"><label class="btn primary" for="sg-file">' + (SG.name ? 'Open another PDF' : 'Open a PDF') + '</label><input type="file" id="sg-file" class="sr" accept=".pdf,application/pdf"></div>';
     if (!SG.name) return h;
     var C = SG.certs;
