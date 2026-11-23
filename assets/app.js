@@ -1476,7 +1476,7 @@
     var rm = F && F.renumMsg, kd = F && F.kind; PRE = null; dlg.close(); NS.toast(rm || (again ? T('qe_saved', { no: no || '' }) : T('saved')), rm ? 'warn' : ''); NS.checkReminder && NS.checkReminder(); show();
     /* owner 22 Nov: ask to print after saving a bill or voucher (vdoc documents ask in their own save path) */
     var TY = { sale: 'invoice', min: 'receipt', mout: 'voucher', pbill: 'pbill', pret: 'pbill', exp: 'exp' };
-    if (!again && no && TY[kd] && NSApp.askPrint) load().then(function () { var d = mine().filter(function (x) { return (x.type || 'invoice') === TY[kd] && (x.no === no || x.vno === no); }).sort(function (a, b) { return (b.updated || b.created || 0) - (a.updated || a.created || 0); })[0]; if (d) NSApp.askPrint(kd, d); });
+    if (!again && no && TY[kd] && NSApp.askPrint && !(NSApp._noAsk && Date.now() - NSApp._noAsk < 5000)) load().then(function () { var d = mine().filter(function (x) { return (x.type || 'invoice') === TY[kd] && (x.no === no || x.vno === no); }).sort(function (a, b) { return (b.updated || b.created || 0) - (a.updated || a.created || 0); })[0]; if (d) NSApp.askPrint(kd, d); });
     if (again) load().then(function () { openForm(again, { quick: 1 }); });   /* quick entry: the next one, blank (after the saved one is in the list, so the next number is right) */
   }
   /* ---------- quick entry: the five everyday entries, keyboard first ---------- */
