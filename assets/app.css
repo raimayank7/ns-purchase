@@ -782,3 +782,13 @@ html.ns-soft .app-frame{transition:none}
 
 /* long account names wrap instead of pushing the page sideways on phones (Chart of Accounts, 25 Nov) */
 .coa-tbl a,.coa-tbl td{white-space:normal;overflow-wrap:anywhere}
+/* the App and the Windows program are software, not a website: a slim title bar with a small logo, so the screens get the room (owner 25 Nov) */
+html:has(#app:not([data-secs])) .hd .wrap{min-height:46px;padding-top:3px;padding-bottom:3px;row-gap:4px}
+html:has(#app:not([data-secs])) .hd .brand .mk{height:34px}
+html:has(#app:not([data-secs])) .hd .brand b.nsb{font-size:26px}
+html:has(#app:not([data-secs])) .hd .brand small{display:none}
+html:has(#app:not([data-secs])) .hd nav>a,html:has(#app:not([data-secs])) .hd nav>.btn,html:has(#app:not([data-secs])) .hd nav>button,html:has(#app:not([data-secs])) .hd nav>select{min-height:34px;padding-top:4px;padding-bottom:4px}
+@media (max-width:520px){html:has(#app:not([data-secs])) .hd .brand .mk{height:28px}html:has(#app:not([data-secs])) .hd .brand b.nsb{font-size:21px}}
+/* phones: one row. My data shows its icon only (its name stays for screen readers); the colour theme is in Ctrl K and Settings */
+@media (max-width:520px){html:has(#app:not([data-secs])) .hd nav>button[data-act]{font-size:0;gap:0;padding-inline:9px;min-width:40px}html:has(#app:not([data-secs])) .hd nav>button[data-act] svg{width:18px;height:18px;margin:0}html:has(#app:not([data-secs])) .hd .wrap{flex-wrap:nowrap}html:has(#app:not([data-secs])) .hd nav{flex-wrap:nowrap}}
+@media (max-width:420px){html:has(#app:not([data-secs])) .hd nav>[data-theme-btn]{display:none}}

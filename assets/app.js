@@ -178,6 +178,7 @@
       apply(r);
       var s = sigOf(r), ch = s !== SIG; MEM = r; SIG = s;   /* stamped after apply: its one-time settings copy is part of it */
       readyFns.splice(0).forEach(function (f) { try { f(); } catch (e) {} });
+      if (!window.__nsAppData) { window.__nsAppData = 1; setTimeout(function () { document.dispatchEvent(new Event('ns-app-data')); }, 0); }   /* the loading screen waits for this (core.js, owner 25 Nov) */
       if (NS.gateway) setTimeout(NS.gateway, 0);   /* the box above Dashboard: drawn again once the business is known (it could stay empty when drawn before the data arrived) */
       return ch;
     });
@@ -441,7 +442,7 @@
       ((A.cash || 0) < -0.004 ? '<p class="note">' + esc(T('negcash')) + ' <button type="button" class="btn sm" data-form="ob">' + esc(T('ob')) + '</button></p>' : '') +
       '<div class="card" data-dash="quick"><h3>' + esc(T('quick')) + '</h3><div class="quick">' +
         '<a class="btn primary" data-q="newinv" href="' + toolUrl('billing') + '">+ ' + esc(T('newinv')) + '</a>' +
-        '<button type="button" class="btn primary" data-quick aria-keyshortcuts="Alt+Q">' + esc(T('qe_title')) + ' <kbd>Alt Q</kbd></button>' +
+        '<button type="button" class="btn primary" data-quick aria-keyshortcuts="Control+Alt+Q">' + esc(T('qe_title')) + ' <kbd>Ctrl Alt Q</kbd></button>' +
         ['min', 'mout', 'pbill', 'exp', 'ob', 'sale', 'contra', 'pret'].map(function (f) { return '<button type="button" class="btn" data-form="' + f + '">+ ' + esc(T(f === 'sale' ? 'qe_sale' : f)) + '</button>'; }).join('') + '</div></div>' +
       '<div class="card" data-dash="overdue"><h3>' + esc(T('overdue')) + '</h3>' + (bw.length ? '<ul class="rows">' + bw.map(function (b) {
         return '<li><a href="#st/' + encodeURIComponent(key(b.party)) + '"><b>' + esc(b.party) + '</b><span class="soft">' + esc(docName(b)) + ' ' + esc(b.no) + ' · ' + ldate(b.date) + ' · ' + esc(T('days', { n: B.daysBetween(b.date, today) })) + '</span></a><b class="amt">' + money(b.left) + '</b></li>'; }).join('') + '</ul>'
