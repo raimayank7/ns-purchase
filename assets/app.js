@@ -1375,6 +1375,21 @@
     if (!plan) return submitNow();
     return reserveNo(plan[0], plan[1], date).then(function (no) { PRE = no ? { k: plan[0], no: no } : null; submitNow(); });
   }
+  /* sales check 24 Nov: a line with quantity 0 or text, a minus rate, or a GST rate that does not exist was saved as it was
+     (a bill of Rs 0, a bill of minus Rs 71, a 7% line). Every bill line is checked before saving; the box is shown. */
+  function lineBad(d, form) {
+    var rates = NS.gstRatesFor(d.date), nogst = $('#f-nogst', form) && $('#f-nogst', form).checked;
+    var rows = $$('[data-lines] [data-lk="desc"]', form);
+    for (var i = 0; i < (F.lines || []).length; i++) {
+      var L = F.lines[i]; if (!String(L.desc || '').trim() && !num(L.rate)) continue;
+      var box = function (k) { return $('[data-li="' + i + '"][data-lk="' + k + '"]', form) || rows[i]; };
+      var n = i + 1, q = String(L.qty == null ? '' : L.qty).trim();
+      if (q !== '' && !(num(q) > 0)) return [box('qty'), T('l_qty', { n: n })];
+      if (num(L.rate) < 0) return [box('rate'), T('l_neg', { n: n })];
+      if (!nogst && rates.indexOf(num(L.gst)) < 0) return [box('gst'), T('l_gst', { n: n, r: L.gst, list: rates.join(', ') })];
+    }
+    return null;
+  }
   function submitNow() {
     if (F.biz !== bizName()) { NS.toast(NS.t('ux.bizmoved', { b: bizName() }), 'bad'); dlg.close(); show(); return; }   /* never save under a business the form did not show */
     var k = F.kind, miss = $$('[required]', form).filter(function (i) { return !String(i.value).trim(); });
@@ -1409,6 +1424,7 @@
     if (k === 'pbill' || k === 'pret') {
       d = billFromForm();
       if (!d.items.length) { NS.toast(T('need', { f: T('items') }), 'bad'); return; }
+      var lb0 = lineBad(d, form); if (lb0) { NS.toast(lb0[1], 'bad'); if (lb0[0]) lb0[0].focus(); return; }
       if (rec) d = Object.assign(rec, d, { id: rec.id });
       var dup = k === 'pbill' && C.doc.filter(function (x) { return x.type === 'pbill' && x.kind !== 'return' && x.id !== (rec && rec.id) && key(x.no) === key(d.no) && key(B.partyName(x)) === key(party) && key(x.seller && x.seller.name) === key(bizName()); })[0];
       if (dup && !NS.okSync(T('samebill', { no: d.no, p: party }))) return;   /* (a check before saving the App's own entry; NS.ask is used where Save waits for an answer) */
@@ -1436,6 +1452,7 @@
       /* F1-11: changing a saved sale bill keeps it (same id, paid status, ship-to and dispatch), never a second copy */
       if (F.rec) d = Object.assign(JSON.parse(JSON.stringify(F.rec)), d, { id: F.rec.id, status: F.rec.status, paidBy: F.rec.paidBy, ship: d.ship || F.rec.ship || null, disp: d.disp || F.rec.disp });
       if (!d.items.length) { NS.toast(T('need', { f: T('items') }), 'bad'); return; }
+      var lb1 = lineBad(d, form); if (lb1) { NS.toast(lb1[1], 'bad'); if (lb1[0]) lb1[0].focus(); return; }
       /* the number is checked against the saved bills NOW, not the list read when the form opened: another tab or a second person
          may have used it meanwhile (P3-6). A number the App suggested moves on to the next free one; a typed one is refused. */
       var smode0 = $('#f-mode', form) ? $('#f-mode', form).value : 'credit';
@@ -1466,6 +1483,7 @@
       }).catch(function (e) { if (e !== 'dup' && !(e && e.message === 'cancel')) throw e; });
     }
     if (k === 'vdoc') {
+      var lb2 = F.lines && lineBad({ date: $('#f-date', form) ? $('#f-date', form).value : NS.today() }, form); if (lb2) { NS.toast(lb2[1], 'bad'); if (lb2[0]) lb2[0].focus(); return; }   /* sales check 24 Nov: the same line checks on every other document */
       var how = andPrint;
       return F.vd.save(form).then(function (saved) { if (!saved) return; F.savedNo = saved.no; F.savedRec = saved; F.renumMsg = F.vd.renum; done(); if (!how && NSVDocs.after) how = NSVDocs.after(saved); if (!how && NSApp.askPrint) NSApp.askPrint('vdoc', saved); if (how === 'share') NSVDocs.out(saved, 'share'); else if (how) { if (NSApp.chooseCopies) NSApp.chooseCopies('vdoc', saved).then(function (cp) { if (cp) NSVDocs.out(saved, 'print', cp); }); else NSVDocs.out(saved, 'print'); } });   /* C-15: print / share after saving */
     }
