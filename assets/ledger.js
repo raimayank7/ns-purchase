@@ -605,18 +605,26 @@
   var mpSite = 'billing';
   var MP = [['billing', 'invoice'], ['cash-memo', 'cashmemo'], ['quotation', 'quote'], ['proforma', 'proforma'], ['sales-order', 'so'], ['challan', 'challan'], ['purchase-order', 'po'],
     ['credit-note', 'note:credit'], ['debit-note', 'note:debit'], ['self-invoice', 'self'], ['receipt', 'receipt'], ['voucher', 'voucher']];
+  /* owner 25 Nov: choose the copies (Original, Duplicate, Triplicate, Extra) printed for each document; the maker takes ?cp= */
+  var MPCP = { billing: ['orig', 'dup', 'trip', 'extra'], challan: ['dcorig', 'dcdup', 'dctrip', 'extra'], 'credit-note': ['orig', 'dupsup', 'extra'], 'debit-note': ['orig', 'dupsup', 'extra'] };
+  function mpCopies() { var all = MPCP[mpSite]; if (!all) return null; var v = null; try { v = JSON.parse(localStorage.getItem('ns-mp-cp-' + mpSite) || 'null'); } catch (e) {} v = (v || [all[0]]).filter(function (k) { return all.indexOf(k) >= 0; }); return v.length ? v : [all[0]]; }
+  var mpNos = '';   /* owner 25 Nov: "1-5" or "1,3,6" or full bill numbers; empty = all in the dates */
   function mpCount() {
-    var r = A.range(), ty = MP.filter(function (x) { return x[0] === mpSite; })[0][1], k = ty.split(':');
-    return A.mine().filter(function (d) { return (d.type || 'invoice') === k[0] && (!k[1] || (k[1] === 'debit' ? d.kind === 'debit' : d.kind !== 'debit')) && (d.date || '') >= r[0] && (d.date || '') <= r[1]; }).length;
+    var r = A.range(), ty = MP.filter(function (x) { return x[0] === mpSite; })[0][1], k = ty.split(':'), pick = NS.noPick(mpNos) || function () { return false; };
+    return A.mine().filter(function (d) { return (d.type || 'invoice') === k[0] && (!k[1] || (k[1] === 'debit' ? d.kind === 'debit' : d.kind !== 'debit')) && (d.date || '') >= r[0] && (d.date || '') <= r[1] && pick(d.no); }).length;
   }
   A.addSection('mprint', function () {
     var n = mpCount(), nm = function (s) { var a = $('#ns-side .side-g a[data-ic="d-' + s + '"]'); return a ? (a.textContent || '').trim() : s; };
     return '<div class="pane-hd"><h2>' + esc(T('cr_mprint')) + '</h2></div><div class="lg-bar"><label><span>' + esc(T('cr_doctype')) + '</span> <select data-mpsite>' + MP.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === mpSite ? ' selected' : '') + '>' + esc(nm(x[0])) + '</option>'; }).join('') + '</select></label>' + period() + '</div>' +
-      '<p class="soft">' + esc(T('cr_h_mp')) + '</p><p><b>' + esc(T('cr_found', { n: n })) + '</b></p><div class="quick"><button type="button" class="btn primary" data-mpgo' + (n ? '' : ' disabled') + '>' + esc(T('cr_printall', { n: n })) + '</button><button type="button" class="btn" data-mpgo="pdf" data-ic="download"' + (n ? '' : ' disabled') + '>' + esc(T('cr_onepdf', { n: n })) + '</button></div><p class="soft">' + esc(T('cr_h_onepdf')) + '</p>';
+      (MPCP[mpSite] ? '<div class="lg-bar mp-cp" role="group" aria-label="Copies"><span>Copies</span> ' + MPCP[mpSite].map(function (k) { return '<label class="chk"><input type="checkbox" data-mpcp="' + k + '"' + (mpCopies().indexOf(k) >= 0 ? ' checked' : '') + '> ' + esc(NS.t('cp.' + k)) + '</label>'; }).join(' ') + '</div>' : '') +
+      '<div class="lg-bar"><label><span>Bill numbers</span> <input type="text" data-mpnos value="' + esc(mpNos) + '" placeholder="All. Or 1-5, or 1,3,6, or INV/26-27/003" autocomplete="off" style="min-width:min(320px,100%)"></label>' + (NS.noPick(mpNos) ? '' : ' <span class="bad">Type numbers like 1-5 or 1,3,6</span>') + '</div>' +
+      '<p class="soft">' + esc(T('cr_h_mp')) + '</p><p><b data-mpn>' + esc(T('cr_found', { n: n })) + '</b></p><div class="quick"><button type="button" class="btn primary" data-mpgo' + (n ? '' : ' disabled') + '>' + esc(T('cr_printall', { n: n })) + '</button><button type="button" class="btn" data-mpgo="pdf" data-ic="download"' + (n ? '' : ' disabled') + '>' + esc(T('cr_onepdf', { n: n })) + '</button></div><p class="soft">' + esc(T('cr_h_onepdf')) + '</p>';
   }, function (pane) {
     wirePeriod(pane);
     var s = $('[data-mpsite]', pane); if (s) s.addEventListener('change', function () { mpSite = s.value; A.show(); });
-    $$('[data-mpgo]', pane).forEach(function (g) { g.addEventListener('click', function () { var r = A.range(), u = A.toolUrl(mpSite) + '?printall=' + r[0] + ',' + r[1] + (g.getAttribute('data-mpgo') === 'pdf' ? '&pdf=1' : ''); if (!A.openUrl(u)) location.href = u; }); });   /* &pdf=1: one PDF (pdf-lib) */
+    var ni = $('[data-mpnos]', pane), nt = 0; if (ni) ni.addEventListener('input', function () { mpNos = ni.value; clearTimeout(nt); nt = setTimeout(function () { var at = ni.selectionStart; A.show(); var n2 = $('[data-mpnos]'); if (n2) { n2.focus(); try { n2.setSelectionRange(at, at); } catch (e) {} } }, 500); });
+    $$('[data-mpcp]', pane).forEach(function (c) { c.addEventListener('change', function () { var on = $$('[data-mpcp]', pane).filter(function (x) { return x.checked; }).map(function (x) { return x.getAttribute('data-mpcp'); }); if (!on.length) { c.checked = true; return; } try { localStorage.setItem('ns-mp-cp-' + mpSite, JSON.stringify(on)); } catch (e) {} }); });
+    $$('[data-mpgo]', pane).forEach(function (g) { g.addEventListener('click', function () { var r = A.range(), cps = mpCopies(), u = A.toolUrl(mpSite) + '?printall=' + r[0] + ',' + r[1] + (g.getAttribute('data-mpgo') === 'pdf' ? '&pdf=1' : '') + (cps ? '&cp=' + cps.join(',') : '') + (String(mpNos).trim() ? '&nos=' + encodeURIComponent(String(mpNos).trim()) : ''); if (!A.openUrl(u)) location.href = u; }); });   /* &pdf=1: one PDF (pdf-lib) */
   });
 
   /* ---------- Ledger of any account (cash, bank, sales, an expense head, GST, capital...): opened from the Chart of Accounts and the Trial Balance ---------- */
