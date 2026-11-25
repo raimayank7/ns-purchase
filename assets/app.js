@@ -159,7 +159,7 @@
   /* EXT: sections added by other files (NSApp.addSection); DOOR: the sections a door site shows (#app data-secs), first = start */
   var EXT = {}, DOOR = null, HOME = [];
 
-  var C = { biz: [], party: [], item: [], doc: [] }, CFG = {}, GRP = {}, BIZ = null, cur = 'home', arg = '', q = '', filt = 'all', grp = '';
+  var C = { biz: [], party: [], item: [], doc: [] }, CFG = {}, GRP = {}, BIZ = null, cur = 'home', arg = '', q = '', filt = 'all', grp = '', sortBy = 'new', typeBy = '', DUE = {};
 
   /* MEM = what the data home gave last, SIG = its stamp (count and save times of every list, plus the settings): a screen
      shows from memory at once and is drawn again only when the stamp changed (owner, 2026-11-11: shortcuts felt stuck) */
@@ -457,6 +457,21 @@
   /* one line per record, with its actions */
   /* record types another part of the App edits through NSApp.editX (acctx, more, finrep, mfg, staff); canEdit lets them say no (a GST set-off) */
   var XEDIT = /^(jv|fa|stk|wo|oinc|taxpay|pdd|sadv|loan|emi)$/;
+  /* phones (phone.css): one row = party, number and date on the left; amount and "overdue by N days" on the right */
+  function overdueDays(id) { var du = DUE[id]; if (!du || du >= NS.today()) return 0; return B.daysBetween(du, NS.today()); }
+  function phRow(d, left, ty) {
+    var party = B.partyName(d) || (d.cat ? catName(d.cat) : '') || docName(d), l = left[d.id], st = '', cl = '';
+    if (l != null) {
+      var od = l > 0.004 ? overdueDays(d.id) : 0;
+      if (l <= 0.004) { st = T('paid'); cl = ' ok'; }
+      else if (od) { st = NS.t(od === 1 ? 'ph.od1' : 'ph.od', { n: od }); cl = ' bad'; }
+      else if (l < amountOf(d) - 0.004) { st = T('left', { a: money(l) }); cl = ' warn'; }
+      else { st = T('unpaid'); cl = ' warn'; }
+    }
+    return '<span class="ph-r"><span class="ph-l"><b>' + esc(party) + '</b><span class="soft">' + esc((d.no || d.billNo ? (B.partyName(d) ? '' : docName(d) + ' ') + (d.no || d.billNo) : docName(d)) + ' · ') + '<span class="nw">' + esc(ldate(d.date)) + '</span>' + '</span></span>' +
+      '<span class="ph-a"><b>' + money(amountOf(d)) + '</b>' + (st ? '<span class="ph-s' + cl + '">' + esc(st) + '</span>' : '') + '</span></span>' +
+      '<button type="button" class="ph-m" data-phrow aria-label="' + esc(NS.t('ph.rowmore')) + '" aria-expanded="false">' + NS.icSvg('more') + '</button>';
+  }
   function rowsHtml(list, opts) {
     opts = opts || {};
     if (!list.length) return '<p class="soft">' + esc(T('none')) + '</p>';
@@ -489,34 +504,44 @@
       if (NS.cxBtn && d.no && (d.cancelled || B.role(d))) acts.push(NS.cxBtn(d, 'btn sm ib'));   /* A-3: Cancel voucher / Undo cancel */
       if (appMade || xed) acts.push(ib('data-del="' + d.id + '"', 'trash', T('del'), 'danger'));
       return '<li><div class="ln"><span><b>' + esc(docName(d)) + ' ' + esc(d.no || d.billNo || (ty === 'exp' && d.vno) || '') + '</b> ' + pills + '<span class="soft"> · <span class="nw">' + ldate(d.date) + '</span>' + (B.partyName(d) ? ' · ' + esc(B.partyName(d)) : d.cat ? ' · ' + esc(catName(d.cat)) : '') + '</span></span>' +
-        '<b class="amt">' + money(amountOf(d)) + '</b></div><div class="acts">' + acts.join('') + '</div></li>';
+        '<b class="amt">' + money(amountOf(d)) + '</b>' + phRow(d, left, ty) + '</div><div class="acts">' + acts.join('') + '</div></li>';
     }).join('') + '</ul>';
   }
-  function leftMap(D) { var m = {}; D.forEach(function (d) { if (/^(sale|buy|sdeb)$/.test(B.role(d))) m[d.id] = 0; }); B.bills(D, bizName()).bills.forEach(function (b) { m[b.id] = b.left; }); return m; }
+  function leftMap(D) { var m = {}; D.forEach(function (d) { if (/^(sale|buy|sdeb)$/.test(B.role(d))) m[d.id] = 0; }); B.bills(D, bizName()).bills.forEach(function (b) { m[b.id] = b.left; DUE[b.id] = b.due || ''; }); return m; }
   function searchBar(filters) {
     return '<div class="tools-row"><label class="sr" for="app-q">' + esc(T('search')) + '</label><input id="app-q" type="search" data-q value="' + esc(q) + '" placeholder="' + esc(T('search')) + '">' +
-      (filters ? '<div class="seg" role="group">' + filters.map(function (f) { return '<button type="button" class="btn sm" data-filt="' + f + '" aria-pressed="' + (filt === f) + '">' + esc(T(f)) + '</button>'; }).join('') + '</div>' : '') + '</div>';
+      (filters ? '<div class="seg" role="group">' + filters.map(function (f) { return '<button type="button" class="btn sm' + (/^(overdue|in|out)$/.test(f) ? ' ph-only' : '') + '" data-filt="' + f + '" aria-pressed="' + (filt === f) + '">' + esc(/^(overdue|in|out)$/.test(f) ? NS.t('ph.f_' + f) : T(f)) + '</button>'; }).join('') + '</div>' : '') + '</div>';
   }
   function match(d) { return !q || JSON.stringify([d.no, d.billNo, B.partyName(d), d.cat, d.ref]).toLowerCase().indexOf(q.toLowerCase()) >= 0; }
+  function sorted(list) {
+    if (sortBy === 'old') return list.slice().sort(function (a, b) { return byDate(b, a); });
+    if (sortBy === 'high') return list.slice().sort(function (a, b) { return Math.abs(amountOf(b)) - Math.abs(amountOf(a)); });
+    if (sortBy === 'low') return list.slice().sort(function (a, b) { return Math.abs(amountOf(a)) - Math.abs(amountOf(b)); });
+    return list;
+  }
+  function typeOk(d) { return !typeBy || (d.type || 'invoice') === typeBy; }
   function byDate(a, b) { return (b.date || '').localeCompare(a.date || '') || (b.updated || 0) - (a.updated || 0); }
 
   function salesHtml() {
     var D = mine(), L = leftMap(D);
     var list = D.filter(function (d) { return SALES[d.type || 'invoice'] && !(d.type === 'note' && d.side === 'purchase'); }).filter(match).filter(function (d) {
-      if (filt === 'unpaid') return L[d.id] > 0.004; if (filt === 'paid') return L[d.id] != null && L[d.id] <= 0.004; return true; }).sort(byDate);
-    return '<div class="pane-hd"><h2>' + esc(T('sales')) + '</h2><a class="btn primary" href="' + toolUrl('billing') + '">+ ' + esc(T('newinv')) + '</a></div>' + searchBar(['all', 'unpaid', 'paid']) + rowsHtml(list.slice(0, 200), { left: L });
+      if (filt === 'unpaid') return L[d.id] > 0.004; if (filt === 'overdue') return L[d.id] > 0.004 && overdueDays(d.id) > 0; if (filt === 'paid') return L[d.id] != null && L[d.id] <= 0.004; return true; }).filter(typeOk).sort(byDate);
+    list = sorted(list);
+    return '<div class="pane-hd" data-phkind="sales"><h2>' + esc(T('sales')) + '</h2><a class="btn primary" href="' + toolUrl('billing') + '">+ ' + esc(T('newinv')) + '</a></div>' + searchBar(['all', 'unpaid', 'overdue', 'paid']) + rowsHtml(list.slice(0, 200), { left: L });
   }
   function buyHtml() {
     var D = mine(), L = leftMap(D);
     var list = D.filter(function (d) { return /^(pbill|exp|self|po)$/.test(d.type) || d.type === 'voucher' && !d.forBill || d.type === 'note' && d.side === 'purchase'; }).filter(match).filter(function (d) {
-      if (filt === 'unpaid') return L[d.id] > 0.004 || d.type === 'exp' && d.mode === 'credit'; if (filt === 'paid') return L[d.id] != null && L[d.id] <= 0.004; return true; }).sort(byDate);
-    return '<div class="pane-hd"><h2>' + esc(T('buy')) + '</h2><div class="quick">' + ['pbill', 'exp', 'pret'].map(function (f) { return '<button type="button" class="btn' + (f === 'pbill' ? ' primary' : '') + '" data-form="' + f + '">+ ' + esc(T(f)) + '</button>'; }).join('') + (window.NSApp && NSApp.scan ? '<button type="button" class="btn" data-scan data-ic="camera">' + esc(NS.t('cap.btn')) + '</button>' : '') + '</div></div>' +
-      searchBar(['all', 'unpaid', 'paid']) + rowsHtml(list.slice(0, 200), { left: L });
+      if (filt === 'unpaid') return L[d.id] > 0.004 || d.type === 'exp' && d.mode === 'credit'; if (filt === 'overdue') return L[d.id] > 0.004 && overdueDays(d.id) > 0; if (filt === 'paid') return L[d.id] != null && L[d.id] <= 0.004; return true; }).filter(typeOk).sort(byDate);
+    list = sorted(list);
+    return '<div class="pane-hd" data-phkind="buy"><h2>' + esc(T('buy')) + '</h2><div class="quick">' + ['pbill', 'exp', 'pret'].map(function (f) { return '<button type="button" class="btn' + (f === 'pbill' ? ' primary' : '') + '" data-form="' + f + '">+ ' + esc(T(f)) + '</button>'; }).join('') + (window.NSApp && NSApp.scan ? '<button type="button" class="btn" data-scan data-ic="camera">' + esc(NS.t('cap.btn')) + '</button>' : '') + '</div></div>' +
+      searchBar(['all', 'unpaid', 'overdue', 'paid']) + rowsHtml(list.slice(0, 200), { left: L });
   }
   function moneyHtml() {
-    var list = mine().filter(function (d) { return d.type === 'receipt' || d.type === 'voucher' && d.forBill || d.type === 'ob' || d.type === 'contra'; }).filter(match).sort(byDate);
-    return '<div class="pane-hd"><h2>' + esc(T('money')) + '</h2><div class="quick"><button type="button" class="btn primary" data-form="min">+ ' + esc(T('min')) + '</button><button type="button" class="btn" data-form="mout">+ ' + esc(T('mout')) + '</button><button type="button" class="btn" data-form="ob">+ ' + esc(T('ob')) + '</button></div></div>' +
-      searchBar() + rowsHtml(list.slice(0, 200));
+    var list = mine().filter(function (d) { return d.type === 'receipt' || d.type === 'voucher' && d.forBill || d.type === 'ob' || d.type === 'contra'; }).filter(match).filter(function (d) { return filt === 'in' ? d.type === 'receipt' : filt === 'out' ? d.type === 'voucher' : true; }).filter(typeOk).sort(byDate);
+    list = sorted(list);
+    return '<div class="pane-hd" data-phkind="money"><h2>' + esc(T('money')) + '</h2><div class="quick"><button type="button" class="btn primary" data-form="min">+ ' + esc(T('min')) + '</button><button type="button" class="btn" data-form="mout">+ ' + esc(T('mout')) + '</button><button type="button" class="btn" data-form="ob">+ ' + esc(T('ob')) + '</button></div></div>' +
+      searchBar(['all', 'in', 'out']) + rowsHtml(list.slice(0, 200));
   }
 
   var stFrom = '', stTo = '';
@@ -731,7 +756,7 @@
     NS.setCurBiz(id);
     /* makers kept ready hold documents of the business just left: the next one starts fresh, in the new business */
     if (shelf) $$('.fr-box', shelf).forEach(function (x) { x.remove(); });
-    q = ''; filt = 'all';
+    q = ''; filt = 'all'; sortBy = 'new'; typeBy = '';
     if (cur === 'do' || cur === 'st') go(cur === 'do' && backTo && !/^(do|st)\//.test(backTo) ? backTo : 'home'); else show(true);
     apply(MEM || [C.biz, C.party, C.item, C.doc, null, GRP]);
     NS.toast('✓ ' + b.name);
@@ -1640,7 +1665,7 @@
     rowsHtml: rowsHtml, leftMap: leftMap, searchBar: searchBar, match: match, byDate: byDate, fyStart: fyStart, toolUrl: toolUrl, myUrl: myUrl, ldate: ldate,
     range: range, trail: function () { return trail; }, viewDoc: function (id) { viewDoc(id); },
     formDoc: function () { if (!F || !form) return null; var d = F.kind === 'sale' ? saleFromForm() : F.vd && F.vd.build ? F.vd.build() : null; if (d) { delete d.tax; if (F.rec && F.rec.id) d.id = F.rec.id; } return d; },
-    markPaid: markPaid, openUrl: openUrl, siteHome: siteHome, frameAt: frameAt, docUrl: docUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; },
+    markPaid: markPaid, openUrl: openUrl, siteHome: siteHome, frameAt: frameAt, docUrl: docUrl, cfg: function () { return CFG; }, q: function () { return q; }, filt: function (f) { if (f != null) filt = f; return filt; }, sortBy: function (v) { if (v != null) sortBy = v; return sortBy; }, typeBy: function (v) { if (v != null) typeBy = v; return typeBy; }, overdueDays: overdueDays, cur: function () { return cur; }, arg: function () { return arg; },
     whatsapp: whatsapp, waReminder: waReminder, fuMark: function (k) { fuSet(k, { last: NS.today() }); }, phoneOf: phoneOf, groups: function () { return GRP; }, gidOf: gidOf, gname: gname, grpSel: grpSel, grpKeep: grpKeep, grp: function (g) { if (g != null) grp = g; return grp; },
     vh: function () { return { chgBlock: chgBlock, chgOut: chgOut, fld: fld, inp: inp, sel: sel, partyList: partyList, savePartyRole: savePartyRole, drawLines: drawLines, drawSum: drawSum, form: function () { return form; }, cur: function () { return F; } }; },
     door: function () { return DOOR; }, banks: banks, bankFld: bankFld, bankSync: bankSync, bankWire: bankWire, bankVal: bankVal, setBacct: setBacct, bankLabel: bankLabel, bankSum: bankSum, banksMeta: function () { return BANKS; }, whenReady: whenReady, switchBiz: switchBiz, setBiz: setBiz, printVoucher: printVoucher, quickEntry: quickEntry

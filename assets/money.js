@@ -121,7 +121,7 @@
     w.document.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Debit note ' + esc(d.no || '') + '</title><style>' +
       'body{font:14px/1.45 system-ui,Segoe UI,Arial,sans-serif;color:#111;margin:24px}h1{font-size:20px;text-align:center;margin:0 0 14px;letter-spacing:.06em}' +
       '.two{display:flex;justify-content:space-between;gap:24px;margin-bottom:12px}table{border-collapse:collapse;width:100%;margin:10px 0}th,td{border:1px solid #999;padding:5px 7px;text-align:left}' +
-      'th{background:#eef2f6}.n{text-align:right;white-space:nowrap}.sign{margin-top:48px;text-align:right}.ft{color:#555;font-size:12px;margin-top:18px}@page{size:A4;margin:14mm}' + NS.pageBoxes(false) + '</style></head><body>' +
+      'th{background:#eef2f6}.n{text-align:right;white-space:nowrap}.sign{margin-top:48px;text-align:right}.ft{color:#555;font-size:12px;margin-top:18px}@page{size:A4;margin:14mm}' + NS.pageBoxes(false) + NS.creditCss + '</style></head><body>' +
       '<h1>DEBIT NOTE</h1><div class="two"><div><b>' + esc(b.name) + '</b><br>' + esc(b.addr || '').replace(/\n/g, '<br>') + (b.gstin ? '<br>GSTIN ' + esc(b.gstin) : '') + '</div>' +
       '<div style="text-align:right">Debit note no. <b>' + esc(d.no || '') + '</b><br>Date ' + A.ldate(d.date) + (d.orig && d.orig.no ? '<br>Against your bill no. <b>' + esc(d.orig.no) + '</b>' : '') + '</div></div>' +
       '<div><b>To:</b> ' + esc(s.name || '') + (s.gstin ? ', GSTIN ' + esc(s.gstin) : '') + (s.state ? ', State ' + esc(NS.stateName(s.state) || s.state) : '') + '</div>' +
@@ -133,7 +133,7 @@
       (t.round ? '<tr><th colspan="6">Round off</th><th class="n">' + money(t.round, false) + '</th></tr>' : '') +
       '<tr><th colspan="6">Total</th><th class="n">' + money(t.total, false) + '</th></tr></tfoot></table><p>' + esc(NS.inWords(t.total)) + '</p>' +
       '<p class="ft">Please send us your credit note for this return under section 34 of the CGST Act, so the GST can be adjusted on both sides.</p>' +
-      '<div class="sign">For ' + esc(b.name) + '<br><br><br>Authorised signatory</div><p class="ft">' + NS.creditText + '</p><script>onload=function(){print()}<\/script></body></html>');
+      '<div class="sign">For ' + esc(b.name) + '<br><br><br>Authorised signatory</div>' + NS.creditDoc() + '<script>onload=function(){print()}<\/script></body></html>');
     w.document.close();
   }
 
