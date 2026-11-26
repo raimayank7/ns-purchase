@@ -383,6 +383,8 @@
       $('[data-mode]').textContent = T(NSStore.mode() === 'vault' ? 'vault' : 'local');
       labels();
       document.documentElement.classList.toggle('app-in', !!BIZ);
+      /* a business moving from other software starts with no business: the import screen makes it */
+      if (!BIZ && cur === 'mig' && EXT.mig && !DOOR) { pane.innerHTML = EXT.mig.html(arg); if (EXT.mig.wire) EXT.mig.wire(pane, arg); return; }
       if (!BIZ) { pane.innerHTML = noBiz(); wireSample(pane); return; }
       /* a remembered party screen whose party was deleted (sample data removed): go to the dashboard */
       if (cur === 'st' && arg && !C.party.some(function (p) { return key(p.name) === arg; }) && !B.parties(mine(), bizName())[arg]) { location.replace('#home'); return; }
@@ -402,6 +404,7 @@
   }
   function noBiz() {
     return '<div class="card"><h2>' + esc(T('nobiz')) + '</h2><p>' + esc(T('nobizp')) + '</p><p><a class="btn primary" href="' + myUrl('#biz/new') + '">' + esc(T('addbiz')) + '</a></p></div>' +
+      (EXT.mig && !DOOR ? '<div class="card"><h3>Moving from other software?</h3><p>Bring your parties, items, opening balances and past bills across from Tally, Evershine and others. The business is made for you.</p><p><a class="btn" href="#mig">Bring data from other software</a></p></div>' : '') +
       (window.NSSample && !DOOR ? '<div class="card sample-try"><h3>' + esc(T('sm_try')) + '</h3><p>' + esc(T('sm_tryp')) + '</p><p><button type="button" class="btn" data-sample>' + esc(T('sm_try')) + '</button></p></div>' : '');
   }
   /* sample data: shown on every screen while it is there, with one tap to take it away */

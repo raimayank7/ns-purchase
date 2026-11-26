@@ -484,6 +484,7 @@ html.vch-on .vch-print .stsheet{position:static;width:auto;max-width:720px;margi
 /* bank statement import: the "What is it" column keeps room for its choice and name (it was squeezed when the side menu opened) */
 .bi-t th:last-child,.bi-t td:last-child{min-width:240px;width:26%}.bi-t td:last-child select,.bi-t td:last-child input{width:100%;box-sizing:border-box}
 @media (max-width:860px){.bi-t th:last-child,.bi-t td:last-child{min-width:190px}}
+.bi-pager{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}.bi-why.bi-guess{color:var(--warn,#b45309)}.bi-desc{overflow-wrap:anywhere;max-width:420px}.tools-row input[type=search]{min-width:200px}.bi-colprev{max-height:220px;margin:6px 0 12px}.bi-colprev td{white-space:nowrap;font-size:.85em}
 
 /* the notification centre (home.js): the bell in the header and its list */
 .desk-bell{position:relative;padding-inline:9px}.desk-bell svg{width:18px;height:18px;display:block}
@@ -792,3 +793,12 @@ html:has(#app:not([data-secs])) .hd nav>a,html:has(#app:not([data-secs])) .hd na
 /* phones: one row. My data shows its icon only (its name stays for screen readers); the colour theme is in Ctrl K and Settings */
 @media (max-width:520px){html:has(#app:not([data-secs])) .hd nav>button[data-act]{font-size:0;gap:0;padding-inline:9px;min-width:40px}html:has(#app:not([data-secs])) .hd nav>button[data-act] svg{width:18px;height:18px;margin:0}html:has(#app:not([data-secs])) .hd .wrap{flex-wrap:nowrap}html:has(#app:not([data-secs])) .hd nav{flex-wrap:nowrap}}
 @media (max-width:420px){html:has(#app:not([data-secs])) .hd nav>[data-theme-btn]{display:none}}
+
+/* Messages: own WhatsApp hand-over and the 'send it on WhatsApp?' box after a bill */
+.msg-hand .msg-text{white-space:pre-wrap;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--field,transparent)}
+.msg-ask{position:fixed;inset-inline-end:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:60;max-width:min(420px,calc(100vw - 32px));padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface,#fff);color:var(--ink);box-shadow:0 8px 28px rgba(0,0,0,.22)}
+.msg-ask p{margin:.2rem 0 .5rem}.msg-ask .soft{max-height:6.5em;overflow:auto;white-space:pre-wrap}
+@media (max-width:760px){.msg-ask{inset-inline:12px;bottom:calc(76px + env(safe-area-inset-bottom,0px))}}
+@media print{.msg-ask{display:none}}
+/* Bring data from other software (migrate.js) */
+.mg-sw{display:flex;flex-wrap:wrap;gap:8px 18px;margin:6px 0 14px}.mg-opt{display:flex;align-items:center;gap:6px;min-height:36px}.mg-yr{display:inline-flex;align-items:flex-start;gap:4px;margin-right:10px;max-width:100%}.mg-hist li{margin:6px 0}.mg-prog{width:180px}

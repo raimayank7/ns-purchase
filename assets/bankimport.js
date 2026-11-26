@@ -17,7 +17,7 @@
   /* ---------- the narration ---------- */
   var STOP = {}; ('upi neft imps rtgs ach nach ecs chq cheque clg clearing by to from transfer trf tfr payment pay paid ref txn trxn mob mobile bank ltd pvt private limited and the ' +
     'inward outward credit debit upiint upiin ybl ibl axl apl okhdfcbank okaxis oksbi okicici paytm phonepe gpay googlepay phone sbi hdfc icici axis pnb bob ifsc utr tpt mmt int self acct account ' +
-    'via cash dep deposit wdl withdrawal atm pos ecom towards sent received rec bill bil for with online mps ft fund funds hdfcn sbin icic utib barb punb kkbk').split(' ').forEach(function (w) { STOP[w] = 1; });
+    'mobile banking transfer via cash dep deposit wdl withdrawal atm pos ecom towards sent received rec bill bil for with online mps ft fund funds hdfcn sbin icic utib barb punb kkbk').split(' ').forEach(function (w) { STOP[w] = 1; });
   function segments(desc) { return String(desc || '').split(/[\/|~]|\s-\s|-(?=[A-Za-z])/).map(function (s) { return s.trim(); }).filter(Boolean); }
   function words(seg) {
     return String(seg).toLowerCase().replace(/[0-9]+/g, ' ').split(/[^a-z]+/).filter(function (w) { return w.length >= 3 && !STOP[w]; });
@@ -44,90 +44,217 @@
     });
   }
 
-  /* ---------- plain-words hints ---------- */
+  /* ---------- the payee: the name a bank prints in the narration (25 Nov 2026, after a real ICICI statement) ----------
+     Banks write the name between codes: RTGS/ICICR4202.../CIUB0000219/GARG TRADING COMPANY, NEFT-SBIN2261...-M S ASHOK KUMAR
+     SONS-ATTNINBINVOICE-0000107...-SBIN0001550, CLG/SAECO STRIPS PRIVATE LT/062451/CBI/..., MMT/IMPS/6094.../salary/sonu/CIUB...,
+     UPI/6138.../remark/shahafajil.sidd/Kotak Mahindra /KOT..., TRFR TO: LUDHIANA WIRES. The parts with numbers mixed in (references,
+     IFSC codes, account numbers), the channel words and the bank names are dropped; of what is left, the longest part is the name.
+     Before this the first word left over was taken, which was often a code (icicr, ciub): one choice then spread to unrelated lines. */
+  var CHAN = {}; ('upi neft rtgs imps mmt inf inft clg trf trfr ach nach ecs bil onl ift ft chq cheque by to from ib int ft nft tpt mob mobile banking ' +
+    'transfer transfered transferred inward outward fund funds bulk net online cms ref txn').split(' ').forEach(function (w) { CHAN[w] = 1; });
+  var PURP = /^(salary|salaries|wages?|rent|advance|payment|pay|paid|upi pay|bill|bills|invoice|inv|fees?|emi|loan|refund|ac|a c|acct|account|self|na|n a|others?|misc|attninbinvoice|sent using.*|payment from.*|paid via.*|payment to.*|collect request.*|pay to.*|trf to.*|neft txn|imps txn)$/i;
+  var BANKSEG = /\b(bank|bnk)\b|^(state bank|punjab national|kotak mahindra|axis|hdfc|icici|sbi|pnb|canara|union|indian|central|idbi|yes|indusind|federal|paytm payments|airtel payments|ptax|ybl|ibl|axl|okhdfcbank|okaxis|oksbi|okicici)\b/i;
+  var SUFFIX = { pvt: 1, private: 1, ltd: 1, limited: 1, llp: 1, co: 1, company: 1, corp: 1, corporation: 1, inc: 1, the: 1, and: 1, m: 1, s: 1, ms: 1, mrs: 1, mr: 1, sh: 1, shri: 1, smt: 1, lt: 1, pv: 1 };
+  /* letters only, without the words every firm name carries: 'M/S Sharu Industries Pvt. Ltd.' -> 'sharuindustries' */
+  function core(name) {
+    var w = String(name || '').toLowerCase().replace(/&/g, ' and ').replace(/\([^)]*\)/g, ' ').replace(/[^a-z ]+/g, ' ').split(/\s+/).filter(Boolean);
+    var k = w.filter(function (x) { return !SUFFIX[x]; }); if (!k.length) k = w;
+    var c = k.join('');
+    /* a name the bank printed as one word keeps its tail on: SHARUINDUSTRIESPRIVATELIMITED */
+    return c.replace(/(privatelimited|pvtltd|private|limited|pvt|ltd|llp|company|co)$/, '') || c;
+  }
+  function title(s) { return String(s || '').toLowerCase().replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }).replace(/\s+/g, ' ').trim(); }
+  function isCode(seg) {
+    var t = seg.replace(/\s+/g, ''), dg = (t.match(/\d/g) || []).length, lt = (t.match(/[a-z]/gi) || []).length;
+    if (!lt) return true;
+    if (/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/.test(t)) return true;   /* IFSC */
+    return dg >= 3 && dg * 2 >= lt;
+  }
+  function cleanSeg(seg) {
+    var x = String(seg).replace(/\b\w*X{4,}\w*\b/g, ' ').replace(/@.*$/, '').replace(/[._]+/g, ' ').replace(/[^A-Za-z&' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    x = x.replace(/^(m\s*\/?\s*s|ms|messrs|trfr to|trf to|by|to)\s+/i, '').trim();
+    x = x.replace(/^(ach\s+[dc]\s+|(pos|tp|ach|wdl|tfr|dep|inb|nach|ecs|upi|imps|neft|rtgs|micr|cts)\s+)+/i, '').replace(/\s+pos(\s+debit)?$|\s+debit$/i, '').trim();
+    return x.replace(/\s+[A-Za-z]$/, '');   /* a name the bank cut off: 'CHINTPURNI CHARAN I' */
+  }
+  function candidates(desc) {
+    var d = String(desc || ''), out = [], purpose = '';
+    var segs = d.split(/[\/|~:;*\[\]]|\s+-\s*|-(?=\S)/);
+    /* where some banks always print the other side's name (HDFC UPI-NAME-vpa@bank-..., SBI UPI/DR/ref/NAME/..., card POS 4160XXXX NAME) */
+    [/^\s*UPI-([^-]+?)-[^-\s]*@/i, /UPI\/(?:DR|CR)\/\d+\/([^\/]+)/i, /^\s*POS\s+\S*X{3,}\S*\s+(.+?)\s*$/i].forEach(function (re) {
+      var m = re.exec(d), c = m && cleanSeg(m[1]); if (c && c.replace(/[^a-z]/gi, '').length >= 3 && !PURP.test(c.toLowerCase())) out.push({ s: c, sc: 1000 });
+    });
+    var upi = /^\s*upi\b/i.test(d) && d.split('/').length >= 4;
+    segs.forEach(function (seg, i) {
+      seg = seg.trim(); if (!seg || isCode(seg)) return;
+      var c = cleanSeg(seg), lw = c.toLowerCase();
+      if (!c || c.replace(/[^a-z]/gi, '').length < 3) return;
+      var ws = lw.split(' ').filter(function (w) { return w && !CHAN[w] && !STOP[w]; });
+      if (!ws.length) return;
+      if (PURP.test(lw)) { purpose = purpose || lw; return; }
+      if (BANKSEG.test(lw) && ws.length <= 3) return;
+      var sc = c.replace(/[^a-z]/gi, '').length;
+      if (upi && i === 3) sc += 40;              /* UPI/ref/remark/address/bank/...: the address names the other side */
+      if (upi && i === 2) sc -= 20;              /* the remark is often the payer's own note */
+      out.push({ s: c, sc: sc });
+    });
+    out.sort(function (a, b) { return b.sc - a.sc; });
+    return { names: out.map(function (o) { return o.s; }), purpose: purpose };
+  }
+  /* the payee of a line: { name: 'Garg Trading Company', core: 'gargtrading', purpose: 'salary' } (name '' when none) */
+  function payee(desc) {
+    var c = candidates(desc), n = c.names[0] || '', k = core(n);
+    if (k.length < 3) { n = ''; k = ''; }
+    return { name: n ? title(n) : '', core: k, purpose: c.purpose };
+  }
+  /* bulk transfer files (INF/INFT/<ref>/<batch>/<name>): lines of one batch are usually the same kind of payment (wages) */
+  function batchOf(desc) { var m = String(desc || '').match(/^\s*INFT?\/[^\/]*\/[^\/]*\/\s*(\d{4,})\s*\//i); return m ? m[1] : ''; }
+  /* edit distance, stopped early (for names spelt a little differently: LUDHIANA GASSES / Ludhiana Gases) */
+  function near(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) return false;
+    var prev = [], cur, i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      cur = [i]; var low = i;
+      for (j = 1; j <= b.length; j++) { cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); if (cur[j] < low) low = cur[j]; }
+      if (low > max) return false; prev = cur;
+    }
+    return prev[b.length] <= max;
+  }
+  /* party index: find the saved party a payee is, by its letters (spaces, Pvt Ltd, M/S, a name the bank cut short, a letter or two off) */
+  function partyIndex(names) {
+    var list = (names || []).map(function (n) { return { n: n, c: core(n) }; }).filter(function (p) { return p.c.length >= 3; }), by = {};
+    var first = {}, memo = {}, long8 = list.filter(function (p) { return p.c.length >= 8; });
+    list.forEach(function (p) { (by[p.c] = by[p.c] || []).push(p); (first[p.c[0]] = first[p.c[0]] || []).push(p); });
+    function find(pc, flat) {
+      if (!pc) return null;
+      if (memo.hasOwnProperty(pc)) return memo[pc] || (flat ? scan(flat) : null);
+      var f = find0(pc); memo[pc] = f;
+      return f || (flat ? scan(flat) : null);
+    }
+    function scan(flat) { var h = long8.filter(function (p) { return flat.indexOf(p.c) >= 0; }); return pick(h); }   /* the name runs into other words */
+    function pick(hits) {
+      if (!hits.length) return null;
+      var best = Math.max.apply(null, hits.map(function (p) { return p.c.length; })), top = hits.filter(function (p) { return p.c.length === best; });
+      return top.length === 1 ? { p: top[0], how: 'like' } : null;
+    }
+    function find0(pc) {
+      if (by[pc]) return by[pc].length === 1 ? { p: by[pc][0], how: 'exact' } : null;
+      var same = first[pc[0]] || [];
+      var hits = same.filter(function (p) {
+        return (pc.length >= 8 && p.c.indexOf(pc) === 0) || (p.c.length >= 6 && pc.indexOf(p.c) === 0);   /* the bank cut the name short, or added words */
+      });
+      if (!hits.length && pc.length >= 6) hits = same.filter(function (p) { return p.c.length >= 6 && near(pc, p.c, pc.length >= 12 ? 2 : 1); });
+      return pick(hits);
+    }
+    return { find: find, size: list.length };
+  }
+  function ruleHit(r, py, ptk) {
+    if (/^p:/.test(r.pat)) { var rc = r.pat.slice(2); return !!py.core && (py.core === rc || (rc.length >= 8 && py.core.indexOf(rc) === 0) || (py.core.length >= 8 && rc.indexOf(py.core) === 0)); }
+    return hasAll(ptk, r.pat);   /* rules saved before 25 Nov: their words must be in the payee's name, not in the codes around it */
+  }
+
+  /* ---------- plain-words hints (checked before names: 'LONG GER INDUSTRY CO LTDCHARGE' is a charge, not a payment to the party) ---------- */
   var HINT = [
-    ['cr', /\b(cash\s*(dep|deposit)|cdm|by\s*cash)\b/i, { kind: 'contra', from: 'cash' }, 'h_cashdep'],
+    ['cr', /\b(cash\s*(dep|deposit)|cdm|by\s*cash)\b|cash dep/i, { kind: 'contra', from: 'cash' }, 'h_cashdep'],
     ['cr', /\b(int(erest)?\.?\s*(credit|paid|pd|cr|on)|credit\s*interest|int\s*pd|savings?\s*interest|fd\s*interest)\b/i, { kind: 'oinc', name: 'Interest received' }, 'h_int'],
-    ['dr', /\b(atm\s*(wdl|withdrawal|cash)|cash\s*(wdl|withdrawal)|self\s*(chq|cheque)|chq\s*self|to\s*self|nfs\s*cash)\b/i, { kind: 'contra', from: 'bank' }, 'h_cashwd'],
-    ['dr', /\b(sms\s*(chg|charge)s?|chrg|charges?|gst\s*(on|@)|annual\s*maint|amc\s*chg|debit\s*card\s*(fee|annual)|min(imum)?\s*bal|processing\s*fee|cheque\s*book|chq\s*book)\b/i, { kind: 'exp', name: 'Bank charges' }, 'h_chg']
+    ['cr', /^\s*rev(ersal)?\b.*\b(atw|nwd|eaw|atm)\b/i, { kind: 'contra', from: 'cash' }, 'h_atmrev'],
+    ['dr', /^\s*(atw|nwd|eaw)-|\b(atm\s*(wdl|withdrawal|cash)|cash\s*(wdl|withdrawal|paid)|self\s*(chq|cheque)|chq\s*self|to\s*self|nfs\s*cash)\b|cash paid/i, { kind: 'contra', from: 'bank' }, 'h_cashwd'],
+    ['dr', /\bint\.?\s*coll\b|\binterest\s*(debit|charged|collected|on\s*(od|cc|loan))|\b(od|cc)\s*int(erest)?\b|\bint\.?\s*(dr|debit)\b/i, { kind: 'exp', name: 'Interest on loans' }, 'h_intpaid'],
+    ['dr', /\b(sms\s*(chg|charge)s?|chrg|chgs?|gst\s*(on|@)|annual\s*maint|amc\s*chg|debit\s*card\s*(fee|annual)|min(imum)?\s*bal|processing\s*fee|cheque\s*book|chq\s*book|penal|commission|annual\s*fee|amc)\b|(?<!re)charges?\b|charge$|chg\b/i, { kind: 'exp', name: 'Bank charges' }, 'h_chg']
   ];
 
   /* ---------- suggest what each line is ----------
      ctx: { lines, parties: [names], bills: [{ id, no, date, party, side: 'recv'|'pay', left }] (open bills of NSBooks.bills),
-            rules: [{ pat, kind: 'party'|'head', name, dir: 'cr'|'dr', n }], done: { key: 1 } (bsk of records already in the books),
+            rules: [{ pat, kind: 'party'|'head'|'cash', name, dir: 'cr'|'dr', n }], done: { key: 1 } (bsk of records already in the books),
             book: [NSBank bookLines] for "already in the books", days (default 5) }
      returns one entry per line: { i, key, status: 'done' | 'inbooks' | 'new', kind: '' | 'in' | 'out' | 'exp' | 'oinc' | 'contra',
-       name, billId, from (contra), why (key of the reason), conf: 'rule' | 'name' | 'bill' | 'hint' | '' } */
+       name, billId, from (contra), why (key of the reason), conf: 'rule' | 'name' | 'bill' | 'hint' | 'guess' | '', payee, batch }
+     'guess' = the payee's name as printed, not a saved party yet: shown for the user to confirm, never ticked by itself.
+     Speed: the books are looked up by amount (one pass), parties by their letters, so 2,000 lines take a few milliseconds. */
   function suggest(ctx) {
-    var L = ctx.lines, keys = lineKeys(L), tol = ctx.days == null ? 5 : ctx.days, rules = ctx.rules || [], used = {};
+    var L = ctx.lines, keys = ctx.keys || lineKeys(L), tol = ctx.days == null ? 5 : ctx.days, rules = ctx.rules || [], used = {};
     /* lines already in the books through a saved record of the same amount and direction (and not through this import) */
-    var bookUsed = {};
+    var bookUsed = {}, byAmt = {};
+    (ctx.book || []).forEach(function (b) {
+      if (b.d && b.d.bsk) return;
+      if (b.inn) (byAmt['cr' + Math.round(b.inn * 100)] = byAmt['cr' + Math.round(b.inn * 100)] || []).push(b);
+      if (b.out) (byAmt['dr' + Math.round(b.out * 100)] = byAmt['dr' + Math.round(b.out * 100)] || []).push(b);
+    });
     function inBooks(l) {
-      var amt = l.cr || l.dr, hit = null;
-      (ctx.book || []).forEach(function (b) {
-        if (hit || bookUsed[b.id] || (b.d && b.d.bsk)) return;
-        var v = l.cr ? b.inn : b.out; if (Math.abs(v - amt) > 0.005) return;
-        var g = Math.abs(days(b.date, l.date)); if (g > tol) return;
-        hit = b;
-      });
-      if (hit) bookUsed[hit.id] = 1;
-      return hit;
+      var list = byAmt[(l.cr ? 'cr' : 'dr') + Math.round((l.cr || l.dr) * 100)]; if (!list) return null;
+      for (var j = 0; j < list.length; j++) { var b = list[j]; if (bookUsed[b.id]) continue; if (Math.abs(days(b.date, l.date)) <= tol) { bookUsed[b.id] = 1; return b; } }
+      return null;
     }
-    var parts = (ctx.parties || []).map(function (n) { return { n: n, t: words(String(n).replace(/\([^)]*\)/g, ' ')).slice(0, 3) }; })   /* (sample), (Delhi) and other bracketed tags are not part of the name in a narration */.filter(function (p) { return p.t.length; });
+    var PI = ctx.pindex || partyIndex(ctx.parties);
+    /* open bills by side and amount */
+    var billAmt = {};
+    (ctx.bills || []).forEach(function (b) { var k = b.side + Math.round(b.left * 100); (billAmt[k] = billAmt[k] || []).push(b); });
     return L.map(function (l, i) {
       var e = { i: i, key: keys[i], status: 'new', kind: '', name: '', billId: '', why: '', conf: '' }, dir = l.cr ? 'cr' : 'dr', amt = l.cr || l.dr;
       if (ctx.done && ctx.done[keys[i]]) { e.status = 'done'; return e; }
-      var tk = tokens(l.desc + ' ' + l.ref);
-      /* 1. a rule the user taught */
+      var text = l.desc + ' ' + l.ref, py = l._py || (l._py = payee(l.desc)), ptk = py.name ? tokens(py.name) : [];
+      e.payee = py.name; e.batch = batchOf(l.desc);
+      /* 1. a rule the user taught (this statement's own choices first: ctx.rules carries them at the end) */
       var best = null;
-      rules.forEach(function (r) { if (r.dir !== dir || !hasAll(tk, r.pat)) return; var sc = r.pat.split(' ').length * 100 + (r.n || 1); if (!best || sc > best.sc) best = { r: r, sc: sc }; });
+      rules.forEach(function (r, ri) { if (r.dir !== dir || !ruleHit(r, py, ptk)) return; var sc = (/^p:/.test(r.pat) ? 1000 : r.pat.split(' ').length * 100) + (r.n || 1) + ri / 1e4; if (!best || sc > best.sc) best = { r: r, sc: sc }; });
+      if (!best && e.batch) rules.forEach(function (r) { if (r.batch === e.batch && r.dir === dir && (!best || (r.n || 1) > best.sc)) best = { r: r, sc: r.n || 1 }; });
       if (best) {
         e.conf = 'rule'; e.why = 'w_rule'; e.name = best.r.name;
         e.kind = best.r.kind === 'head' ? (dir === 'cr' ? 'oinc' : 'exp') : dir === 'cr' ? 'in' : 'out';
         if (best.r.kind === 'cash') { e.kind = 'contra'; e.from = best.r.name; e.name = ''; }
-      } else {
-        /* 2. a party's name in the narration (one party only) */
-        var found = parts.filter(function (p) { return p.t.every(function (w) { return tk.indexOf(w) >= 0; }) && p.t.join('').length >= 5; });
-        if (found.length > 1) { var mx = Math.max.apply(null, found.map(function (p) { return p.t.length; })); found = found.filter(function (p) { return p.t.length === mx; }); }
-        if (found.length === 1) { e.conf = 'name'; e.why = 'w_name'; e.name = found[0].n; e.kind = dir === 'cr' ? 'in' : 'out'; }
       }
-      /* 3. an open bill of exactly this amount (customer for money in, supplier for money out) */
-      if (e.kind === 'in' || e.kind === 'out') {
-        var side = e.kind === 'in' ? 'recv' : 'pay', ex = (ctx.bills || []).filter(function (b) { return b.side === side && key(b.party) === key(e.name) && Math.abs(b.left - amt) < 0.005 && !used[b.id]; });
-        if (ex.length) { ex.sort(function (a, b) { return a.date.localeCompare(b.date); }); e.billId = ex[0].id; used[ex[0].id] = 1; e.why = e.conf === 'rule' ? 'w_rulebill' : 'w_namebill'; }
-      } else if (!e.kind) {
-        var side2 = dir === 'cr' ? 'recv' : 'pay', ex2 = (ctx.bills || []).filter(function (b) { return b.side === side2 && Math.abs(b.left - amt) < 0.005 && !used[b.id]; });
-        if (ex2.length === 1) { var b0 = ex2[0]; e.kind = dir === 'cr' ? 'in' : 'out'; e.name = b0.party; e.billId = b0.id; used[b0.id] = 1; e.conf = 'bill'; e.why = 'w_bill'; }
-      }
-      /* 4. plain-words hints */
+      /* 2. plain-words hints: charges, interest, cash */
       if (!e.kind) {
         for (var h = 0; h < HINT.length; h++) {
-          if (HINT[h][0] !== dir || !HINT[h][1].test(l.desc + ' ' + l.ref)) continue;
+          if (HINT[h][0] !== dir || !HINT[h][1].test(text)) continue;
           var o = HINT[h][2]; e.kind = o.kind; e.name = o.name || ''; if (o.from) e.from = o.from; e.conf = 'hint'; e.why = HINT[h][3]; break;
         }
       }
-      /* already in the books (only when nothing says it is new): a saved record of the same amount and direction within a few days */
-      if (e.kind !== 'contra' || true) { var bk = inBooks(l); if (bk) { e.status = 'inbooks'; e.bookId = bk.id; } }
+      /* 3. the payee is a saved party */
+      if (!e.kind && PI.size) {
+        var f = PI.find(py.core, String(l.desc).toLowerCase().replace(/[^a-z]/g, ''));
+        if (f) { e.conf = 'name'; e.why = 'w_name'; e.name = f.p.n; e.kind = dir === 'cr' ? 'in' : 'out'; }
+      }
+      /* 4. salary or wages paid to a person who is not a party */
+      if (!e.kind && dir === 'dr' && /^(salary|salaries|wages?)$/.test(py.purpose)) { e.kind = 'exp'; e.name = 'Salary and wages'; e.conf = 'hint'; e.why = 'h_salary'; }
+      /* 5. an open bill of exactly this amount (customer for money in, supplier for money out) */
+      if (e.kind === 'in' || e.kind === 'out') {
+        var ex = (billAmt[(e.kind === 'in' ? 'recv' : 'pay') + Math.round(amt * 100)] || []).filter(function (b) { return key(b.party) === key(e.name) && !used[b.id]; });
+        if (ex.length) { ex.sort(function (a, b) { return a.date.localeCompare(b.date); }); e.billId = ex[0].id; used[ex[0].id] = 1; e.why = e.conf === 'rule' ? 'w_rulebill' : 'w_namebill'; }
+      } else if (!e.kind) {
+        var ex2 = (billAmt[(dir === 'cr' ? 'recv' : 'pay') + Math.round(amt * 100)] || []).filter(function (b) { return !used[b.id]; });
+        if (ex2.length === 1) { var b0 = ex2[0]; e.kind = dir === 'cr' ? 'in' : 'out'; e.name = b0.party; e.billId = b0.id; used[b0.id] = 1; e.conf = 'bill'; e.why = 'w_bill'; }
+      }
+      /* 6. a name is printed but no party has it: offered as a new party, for the user to confirm */
+      if (!e.kind && py.name && py.core.length >= 4) { e.kind = dir === 'cr' ? 'in' : 'out'; e.name = py.name; e.conf = 'guess'; e.why = 'w_guess'; }
+      /* already in the books: a saved record of the same amount and direction within a few days */
+      var bk = inBooks(l); if (bk) { e.status = 'inbooks'; e.bookId = bk.id; }
       return e;
     });
   }
 
-  /* ---------- rules taught by the lines the user posted ----------
-     entries: [{ line, kind, name, from }] as posted; returns the rules list with the new ones added or counted */
+  /* ---------- rules taught by the lines the user posted (or chose on screen: the same statement's other lines follow at once) ----------
+     entries: [{ line, kind, name, from }]; returns the rules list with the new ones added or counted.
+     A rule is kept under the payee's letters ('p:gargtrading'); a line with no payee name keeps the old word pattern;
+     a line of a bulk transfer file also teaches its batch (r.batch) so the other lines of that file follow. */
   function learn(rules, entries) {
     var out = (rules || []).map(function (r) { return Object.assign({}, r); });
     entries.forEach(function (e) {
       if (!e.line) return;
-      var dir = e.line.cr ? 'cr' : 'dr', pat = pattern(e.line.desc);
-      if (!pat) return;
+      var dir = e.line.cr ? 'cr' : 'dr', py = payee(e.line.desc), pat = py.core.length >= 3 ? 'p:' + py.core : pattern(e.line.desc), bt = batchOf(e.line.desc);
       var kind = e.kind === 'in' || e.kind === 'out' ? 'party' : e.kind === 'exp' || e.kind === 'oinc' ? 'head' : e.kind === 'contra' ? 'cash' : '';
       if (!kind) return;
       var name = kind === 'cash' ? e.from : e.name; if (!name) return;
+      if (bt && kind === 'head') {
+        var hb = out.filter(function (r) { return r.batch === bt && r.dir === dir; })[0];
+        if (hb) { hb.name = name; hb.kind = kind; hb.n = (hb.n || 1) + 1; } else out.push({ pat: 'b:' + bt, batch: bt, kind: kind, name: name, dir: dir, n: 1 });
+      }
+      if (!pat) return;
       var hit = out.filter(function (r) { return r.pat === pat && r.dir === dir; })[0];
       if (hit) { if (hit.name === name && hit.kind === kind) hit.n = (hit.n || 1) + 1; else { hit.name = name; hit.kind = kind; hit.n = 1; } }
       else out.push({ pat: pat, kind: kind, name: name, dir: dir, n: 1 });
     });
-    return out.slice(-500);
+    return out.slice(-800);
   }
 
   /* ---------- the records ----------
@@ -174,6 +301,6 @@
   /* the bsk keys of the records already in the books (a record can carry one key) */
   function doneKeys(docs) { var o = {}; (docs || []).forEach(function (d) { if (d && d.bsk) o[d.bsk] = 1; }); return o; }
 
-  var API = { key: key, words: words, tokens: tokens, pattern: pattern, lineKeys: lineKeys, suggest: suggest, learn: learn, records: records, problem: problem, doneKeys: doneKeys, modeOf: modeOf };
+  var API = { key: key, words: words, tokens: tokens, pattern: pattern, payee: payee, core: core, partyIndex: partyIndex, batchOf: batchOf, lineKeys: lineKeys, suggest: suggest, learn: learn, records: records, problem: problem, doneKeys: doneKeys, modeOf: modeOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = API; else G.NSBI = API;
 })(this);
