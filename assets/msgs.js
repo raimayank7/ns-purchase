@@ -411,6 +411,12 @@
       });
     }
   }
+  /* its link in the App's menu (Utilities), like bankimp.js: the side menu only lists screens that have one (help-update, 27 Nov 2026) */
+  (function () {
+    function link() { var nav = $('.hub-nav'), app = $('#app'); if (!nav || !app || app.getAttribute('data-secs') || $('[data-sec="msg"]', nav)) return;
+      nav.appendChild(NS.el('a', { href: '#msg', 'data-sec': 'msg' }, '<span>' + esc(A.T('msg')) + '</span>')); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', link); else link();
+  })();
   A.addSection('msg', html, function (pane) {
     var fx = $('#ms-xl', pane); if (fx) fx.addEventListener('change', function () {
       var f = fx.files[0]; fx.value = ''; if (!f) return;
