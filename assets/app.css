@@ -33,7 +33,7 @@
 .my-list .row{display:flex;gap:6px;flex-wrap:wrap}
 .my-list .empty{color:var(--soft)}
 .pill{display:inline-block;font-size:.75rem;font-weight:700;padding:1px 8px;border-radius:999px;background:var(--surface2);color:var(--soft)}
-.pill.ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.pill.ok{background:color-mix(in srgb,var(--ok) 12%,transparent);color:color-mix(in srgb,var(--ok) 72%,var(--ink))}
 .mono{font-family:var(--mono)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin:12px 0}
 .set fieldset{border:1px solid var(--line)}
@@ -461,7 +461,7 @@ html.vch-on .vch-print .stsheet{position:static;width:auto;max-width:720px;margi
 }
 
 /* quick entry (app.js QE) */
-.qe-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}.qe-tabs kbd{font-size:.72em;opacity:.7;margin-left:4px}
+.qe-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}.qe-tabs kbd{font-size:.72em;margin-left:4px;color:inherit;background:transparent;border-color:currentColor}
 .qe-keys{font-size:.85rem;margin:0 0 10px}#app-form.qe-on{width:min(980px,96vw)}
 @media (max-width:620px){.qe-tabs kbd,.qe-keys{display:none}}
 
