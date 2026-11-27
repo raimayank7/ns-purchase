@@ -171,6 +171,8 @@
        name, billId, from (contra), why (key of the reason), conf: 'rule' | 'name' | 'bill' | 'hint' | 'guess' | '', payee, batch }
      'guess' = the payee's name as printed, not a saved party yet: shown for the user to confirm, never ticked by itself.
      Speed: the books are looked up by amount (one pass), parties by their letters, so 2,000 lines take a few milliseconds. */
+  /* a keyword is compared by its letters and digits only (spaces, dots and case ignored), so 'Garg Trading' finds 'GARG-TRADING/CO' */
+  function kwNorm(x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
   function suggest(ctx) {
     var L = ctx.lines, keys = ctx.keys || lineKeys(L), tol = ctx.days == null ? 5 : ctx.days, rules = ctx.rules || [], used = {};
     /* lines already in the books through a saved record of the same amount and direction (and not through this import) */
@@ -189,34 +191,62 @@
     /* open bills by side and amount */
     var billAmt = {};
     (ctx.bills || []).forEach(function (b) { var k = b.side + Math.round(b.left * 100); (billAmt[k] = billAmt[k] || []).push(b); });
+    /* rules by direction and first letter of the payee (every payee rule needs the same first letter); rules by words are tried on every line.
+       2,000 lines x 800 rules was 1.6 million tests; now a few hundred. */
+    /* ledger keywords the user set (ctx.kw = [{ n: normalised word, L: ledger }], longest first) */
+    var KW = (ctx.kw || []).slice().sort(function (a, b) { return b.n.length - a.n.length; });
+    var RB = {}, RW = [];
+    rules.forEach(function (r, ri) { var m = /^p:(.)/.exec(r.pat); if (m) { var bk = r.dir + m[1]; (RB[bk] = RB[bk] || []).push([r, ri]); } else RW.push([r, ri]); });
+    /* ctx.only: work out these lines again and keep the others as they were (ctx.prev); used after a choice teaches the lines of the same payee */
+    var only = null;
+    if (ctx.only && ctx.prev) {
+      only = {}; ctx.only.forEach(function (j) { only[j] = 1; });
+      ctx.prev.forEach(function (p, j) { if (!only[j] && p && p.billId) used[p.billId] = 1; });
+    }
     return L.map(function (l, i) {
+      if (only && !only[i]) return ctx.prev[i];
       var e = { i: i, key: keys[i], status: 'new', kind: '', name: '', billId: '', why: '', conf: '' }, dir = l.cr ? 'cr' : 'dr', amt = l.cr || l.dr;
       if (ctx.done && ctx.done[keys[i]]) { e.status = 'done'; return e; }
       var text = l.desc + ' ' + l.ref, py = l._py || (l._py = payee(l.desc)), ptk = py.name ? tokens(py.name) : [];
       e.payee = py.name; e.batch = batchOf(l.desc);
+      /* 0. a keyword of a ledger is in the narration: the longest keyword wins (like Tally's Suggested Keyword) */
+      if (KW.length) {
+        var flat = kwNorm(l.desc + ' ' + l.ref);
+        for (var kk = 0; kk < KW.length; kk++) {
+          if (flat.indexOf(KW[kk].n) < 0 || !allowed(KW[kk].L, dir)) continue;
+          var fk = fromLedger(KW[kk].L, dir); e.kind = fk.kind; e.name = fk.name || ''; if (fk.from) e.from = fk.from; if (fk.to) e.to = fk.to; if (fk.led) e.led = fk.led; e.conf = 'keyword'; e.why = 'w_kw'; break;
+        }
+      }
       /* 1. a rule the user taught (this statement's own choices first: ctx.rules carries them at the end) */
-      var best = null;
-      rules.forEach(function (r, ri) { if (r.dir !== dir || !ruleHit(r, py, ptk)) return; var sc = (/^p:/.test(r.pat) ? 1000 : r.pat.split(' ').length * 100) + (r.n || 1) + ri / 1e4; if (!best || sc > best.sc) best = { r: r, sc: sc }; });
-      if (!best && e.batch) rules.forEach(function (r) { if (r.batch === e.batch && r.dir === dir && (!best || (r.n || 1) > best.sc)) best = { r: r, sc: r.n || 1 }; });
-      if (best) {
+      var best = null, cand = (py.core ? RB[dir + py.core[0]] || [] : []).concat(RW);
+      cand.forEach(function (x) { var r = x[0], ri = x[1]; if (r.dir !== dir || !ruleHit(r, py, ptk)) return; var sc = (/^p:/.test(r.pat) ? 1000 : r.pat.split(' ').length * 100) + (r.n || 1) + ri / 1e4; if (!best || sc > best.sc) best = { r: r, sc: sc }; });
+      if (!best && !e.kind && e.batch) rules.forEach(function (r) { if (r.batch === e.batch && r.dir === dir && (!best || (r.n || 1) > best.sc)) best = { r: r, sc: r.n || 1 }; });
+      if (best && !e.kind) {
         e.conf = 'rule'; e.why = 'w_rule'; e.name = best.r.name;
         e.kind = best.r.kind === 'head' ? (dir === 'cr' ? 'oinc' : 'exp') : dir === 'cr' ? 'in' : 'out';
         if (best.r.kind === 'cash') { e.kind = 'contra'; e.from = best.r.name; e.name = ''; }
+        if (best.r.kind === 'led' && best.r.led) { e.kind = 'jv'; e.led = best.r.led; }   /* any other ledger (loan, capital, asset...): a journal */
+        if (best.r.kind === 'xfer' && best.r.led) { e.kind = 'contra'; e.from = best.r.led.from; e.to = best.r.led.to; }   /* a transfer to or from another bank account */
       }
       /* 2. plain-words hints: charges, interest, cash */
       if (!e.kind) {
         for (var h = 0; h < HINT.length; h++) {
           if (HINT[h][0] !== dir || !HINT[h][1].test(text)) continue;
-          var o = HINT[h][2]; e.kind = o.kind; e.name = o.name || ''; if (o.from) e.from = o.from; e.conf = 'hint'; e.why = HINT[h][3]; break;
+          var o = HINT[h][2];
+          if (ctx.ledset && o.name && !ctx.ledset[(o.kind === 'oinc' ? 'inc' : 'exp') + '|' + key(o.name)]) continue;   /* the head is not one of the ledgers: no suggestion */
+          e.kind = o.kind; e.name = o.name || ''; if (o.from) e.from = o.from; e.conf = 'hint'; e.why = HINT[h][3]; break;
         }
       }
       /* 3. the payee is a saved party */
       if (!e.kind && PI.size) {
         var f = PI.find(py.core, String(l.desc).toLowerCase().replace(/[^a-z]/g, ''));
-        if (f) { e.conf = 'name'; e.why = 'w_name'; e.name = f.p.n; e.kind = dir === 'cr' ? 'in' : 'out'; }
+        if (f && ctx.ledOf) {   /* the payee is the name of a ledger (party, head or other account): the ledger decides the entry */
+          var LG = ctx.ledOf(f.p.n, dir);
+          if (LG) { var fl = fromLedger(LG, dir); e.conf = 'name'; e.why = 'w_name'; e.kind = fl.kind; e.name = fl.name || ''; if (fl.from) e.from = fl.from; if (fl.to) e.to = fl.to; if (fl.led) e.led = fl.led; }
+        } else if (f) { e.conf = 'name'; e.why = 'w_name'; e.name = f.p.n; e.kind = dir === 'cr' ? 'in' : 'out'; }
       }
       /* 4. salary or wages paid to a person who is not a party */
-      if (!e.kind && dir === 'dr' && /^(salary|salaries|wages?)$/.test(py.purpose)) { e.kind = 'exp'; e.name = 'Salary and wages'; e.conf = 'hint'; e.why = 'h_salary'; }
+      if (!e.kind && dir === 'dr' && /^(salary|salaries|wages?)$/.test(py.purpose) && (!ctx.ledset || ctx.ledset['exp|salary and wages'])) { e.kind = 'exp'; e.name = 'Salary and wages'; e.conf = 'hint'; e.why = 'h_salary'; }
       /* 5. an open bill of exactly this amount (customer for money in, supplier for money out) */
       if (e.kind === 'in' || e.kind === 'out') {
         var ex = (billAmt[(e.kind === 'in' ? 'recv' : 'pay') + Math.round(amt * 100)] || []).filter(function (b) { return key(b.party) === key(e.name) && !used[b.id]; });
@@ -226,9 +256,9 @@
         if (ex2.length === 1) { var b0 = ex2[0]; e.kind = dir === 'cr' ? 'in' : 'out'; e.name = b0.party; e.billId = b0.id; used[b0.id] = 1; e.conf = 'bill'; e.why = 'w_bill'; }
       }
       /* 6. a name is printed but no party has it: offered as a new party, for the user to confirm */
-      if (!e.kind && py.name && py.core.length >= 4) { e.kind = dir === 'cr' ? 'in' : 'out'; e.name = py.name; e.conf = 'guess'; e.why = 'w_guess'; }
+      if (!e.kind && !ctx.ledOf && py.name && py.core.length >= 4) { e.kind = dir === 'cr' ? 'in' : 'out'; e.name = py.name; e.conf = 'guess'; e.why = 'w_guess'; }
       /* already in the books: a saved record of the same amount and direction within a few days */
-      var bk = inBooks(l); if (bk) { e.status = 'inbooks'; e.bookId = bk.id; }
+      var bk = only ? null : inBooks(l); if (bk) { e.status = 'inbooks'; e.bookId = bk.id; }
       return e;
     });
   }
@@ -242,17 +272,19 @@
     entries.forEach(function (e) {
       if (!e.line) return;
       var dir = e.line.cr ? 'cr' : 'dr', py = payee(e.line.desc), pat = py.core.length >= 3 ? 'p:' + py.core : pattern(e.line.desc), bt = batchOf(e.line.desc);
-      var kind = e.kind === 'in' || e.kind === 'out' ? 'party' : e.kind === 'exp' || e.kind === 'oinc' ? 'head' : e.kind === 'contra' ? 'cash' : '';
+      var xf = e.kind === 'contra' && (e.to && e.to !== 'cash' && e.to !== 'bank' || e.from && e.from !== 'cash' && e.from !== 'bank');
+      var kind = e.kind === 'in' || e.kind === 'out' ? 'party' : e.kind === 'exp' || e.kind === 'oinc' ? 'head' : e.kind === 'contra' ? (xf ? 'xfer' : 'cash') : e.kind === 'jv' ? 'led' : '';
       if (!kind) return;
-      var name = kind === 'cash' ? e.from : e.name; if (!name) return;
+      var name = kind === 'cash' ? e.from : kind === 'xfer' ? (e.name || e.from + '>' + e.to) : e.name; if (!name) return;
+      var led = kind === 'led' ? e.led : kind === 'xfer' ? { from: e.from, to: e.to } : null; if ((kind === 'led' || kind === 'xfer') && !led) return;
       if (bt && kind === 'head') {
         var hb = out.filter(function (r) { return r.batch === bt && r.dir === dir; })[0];
         if (hb) { hb.name = name; hb.kind = kind; hb.n = (hb.n || 1) + 1; } else out.push({ pat: 'b:' + bt, batch: bt, kind: kind, name: name, dir: dir, n: 1 });
       }
       if (!pat) return;
       var hit = out.filter(function (r) { return r.pat === pat && r.dir === dir; })[0];
-      if (hit) { if (hit.name === name && hit.kind === kind) hit.n = (hit.n || 1) + 1; else { hit.name = name; hit.kind = kind; hit.n = 1; } }
-      else out.push({ pat: pat, kind: kind, name: name, dir: dir, n: 1 });
+      if (hit) { if (hit.name === name && hit.kind === kind) hit.n = (hit.n || 1) + 1; else { hit.name = name; hit.kind = kind; hit.n = 1; } if (led) hit.led = led; else delete hit.led; }
+      else { var nr = { pat: pat, kind: kind, name: name, dir: dir, n: 1 }; if (led) nr.led = led; out.push(nr); }
     });
     return out.slice(-800);
   }
@@ -282,25 +314,65 @@
       return Object.assign({ type: 'oinc', no: o.no('oinc', 'OI', l.date), head: e.name, amount: amt, tds: '', mode: mode, payer: e.payer || '', ref: ref, notes: note, total: amt, narr: [e.name, note].filter(Boolean).join(' · ') }, base);
     }
     if (e.kind === 'contra') {
+      if (e.to && e.to !== 'cash' && e.to !== 'bank' || e.from && e.from !== 'cash' && e.from !== 'bank') {   /* between two bank accounts of the business: this statement's bank is 'bank' on its side */
+        return Object.assign({ type: 'contra', no: '', from: e.from || 'bank', to: e.to || 'bank', amount: amt, ref: ref, notes: note }, base);
+      }
       var from = e.from === 'bank' ? 'bank' : 'cash';
       return Object.assign({ type: 'contra', no: '', from: from, to: from === 'cash' ? 'bank' : 'cash', amount: amt, ref: ref, notes: note }, base);
+    }
+    if (e.kind === 'susp') {   /* no ledger yet: a journal against the Suspense A/c, with the line's own words kept so it can be given a ledger later */
+      var sb = /^bank:/.test(o.bacct || '') ? o.bacct : 'bank';
+      return Object.assign({ type: 'jv', no: o.no('jv', 'JV', l.date), narr: note, susp: 1, sdesc: l.desc || '', sref: l.ref || '',
+        lines: l.dr ? [{ t: SUSP.t, nm: SUSP.nm, a: SUSP.a, dr: amt, cr: 0 }, { t: 'bank', nm: '', a: sb, dr: 0, cr: amt }] : [{ t: 'bank', nm: '', a: sb, dr: amt, cr: 0 }, { t: SUSP.t, nm: SUSP.nm, a: SUSP.a, dr: 0, cr: amt }], total: amt }, base);
+    }
+    if (e.kind === 'jv' && e.led) {   /* a ledger with no money screen of its own (loan, capital, drawings, asset...): a journal against the bank */
+      var bk = /^bank:/.test(o.bacct || '') ? o.bacct : 'bank', ln = { t: e.led.t, nm: e.led.nm || '', a: e.led.a, dr: l.dr ? amt : 0, cr: l.cr ? amt : 0 }, bl = { t: 'bank', nm: '', a: bk, dr: l.cr ? amt : 0, cr: l.dr ? amt : 0 };
+      return Object.assign({ type: 'jv', no: o.no('jv', 'JV', l.date), narr: [e.name, note].filter(Boolean).join(' \u00b7 '), lines: l.dr ? [ln, bl] : [bl, ln], total: amt }, base);
     }
     return null;
   }
   /* what is still missing before an entry can be posted (key of a screen text) or '' */
   function problem(e, l) {
     if (!e.kind) return 'p_kind';
+    if (e.kind === 'susp') return '';
     if ((e.kind === 'in' || e.kind === 'out' || e.kind === 'exp' || e.kind === 'oinc') && !String(e.name || '').trim()) return e.kind === 'exp' || e.kind === 'oinc' ? 'p_head' : 'p_party';
     if (e.kind === 'in' && !l.cr) return 'p_dir_in';
     if (e.kind === 'out' && !l.dr) return 'p_dir_out';
     if (e.kind === 'exp' && !l.dr) return 'p_dir_out';
     if (e.kind === 'oinc' && !l.cr) return 'p_dir_in';
     if (e.kind === 'contra' && !(e.from === 'bank' ? l.dr : l.cr)) return 'p_dir_contra';
+    if (e.kind === 'jv' && !(e.led && e.led.a)) return 'p_kind';
     return '';
+  }
+  /* ---------- one ledger picker (26 Nov 2026): the ledger the user picks decides what the line is ----------
+     L = { k: 'party' | 'exp' | 'inc' | 'cash' | 'bank' | 'other', name, bk (a bank account key), t, nm, a (account key of an 'other' ledger) }; dir 'cr' = money in, 'dr' = money out.
+     Returns the fields of the entry: { kind, name, from, to, led }. A supplier or customer with money out is a payment, with money in a receipt;
+     an expense head is an expense, an income head other income; cash is cash deposited or withdrawn; another bank account is a transfer;
+     any other ledger (loan, capital, drawings, asset...) is a journal against this bank. */
+  var SUSP = { a: 'ocl:suspense a/c', t: 'ocl', nm: 'Suspense A/c' };   /* like Tally's reserved group Suspense A/c: lines with no ledger yet wait here */
+  function fromLedger(L, dir) {
+    if (!L) return { kind: '' };
+    if (L.a === SUSP.a) return { kind: 'susp', name: SUSP.nm, from: undefined, to: undefined, led: undefined };
+    if (L.k === 'party') return { kind: dir === 'cr' ? 'in' : 'out', name: L.name, from: undefined, to: undefined, led: undefined };
+    if (L.k === 'exp') return { kind: 'exp', name: L.name, from: undefined, to: undefined, led: undefined };
+    if (L.k === 'inc') return { kind: 'oinc', name: L.name, from: undefined, to: undefined, led: undefined };
+    if (L.k === 'cash') return { kind: 'contra', from: dir === 'cr' ? 'cash' : 'bank', to: undefined, name: '', led: undefined };
+    if (L.k === 'bank') return { kind: 'contra', from: dir === 'cr' ? L.bk : 'bank', to: dir === 'cr' ? 'bank' : L.bk, name: L.name, led: undefined };
+    return { kind: 'jv', name: L.name, led: { a: L.a, t: L.t, nm: L.nm || '' }, from: undefined, to: undefined };
+  }
+  /* is a ledger of this kind offered for this direction? (an expense head only for money out, an income head only for money in) */
+  function allowed(L, dir) { return !(L.k === 'exp' && dir === 'cr') && !(L.k === 'inc' && dir === 'dr'); }
+  /* the ledger a suggested entry stands for, to show in the picker: { name, tag } */
+  function ledgerOf(e) {
+    if (!e || !e.kind) return null;
+    if (e.kind === 'contra') { var other = e.to && e.to !== 'bank' && e.to !== 'cash' ? e.to : e.from && e.from !== 'bank' && e.from !== 'cash' ? e.from : ''; return other ? { name: e.name || '', tag: 'bank', bk: other } : { name: '', tag: 'cash' }; }
+    if (e.kind === 'susp') return null;
+    if (e.kind === 'jv') return { name: e.name || (e.led && e.led.nm) || '', tag: 'other' };
+    return { name: e.name || '', tag: e.kind === 'exp' ? 'exp' : e.kind === 'oinc' ? 'inc' : 'party' };
   }
   /* the bsk keys of the records already in the books (a record can carry one key) */
   function doneKeys(docs) { var o = {}; (docs || []).forEach(function (d) { if (d && d.bsk) o[d.bsk] = 1; }); return o; }
 
-  var API = { key: key, words: words, tokens: tokens, pattern: pattern, payee: payee, core: core, partyIndex: partyIndex, batchOf: batchOf, lineKeys: lineKeys, suggest: suggest, learn: learn, records: records, problem: problem, doneKeys: doneKeys, modeOf: modeOf };
+  var API = { key: key, words: words, tokens: tokens, pattern: pattern, payee: payee, core: core, partyIndex: partyIndex, batchOf: batchOf, lineKeys: lineKeys, suggest: suggest, learn: learn, records: records, problem: problem, doneKeys: doneKeys, kwNorm: kwNorm, fromLedger: fromLedger, allowed: allowed, ledgerOf: ledgerOf, SUSP: SUSP, modeOf: modeOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = API; else G.NSBI = API;
 })(this);

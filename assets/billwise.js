@@ -245,11 +245,11 @@
   });
 
   /* ---------- section int: interest on late payment (A-14, R-13 d) ---------- */
-  var iSide = 'recv', iAsOn = '', iShown = false;
+  var iSide = 'recv', iAsOn = '', iShown = false, iAll = false, I_CAP = 25;   /* Speed (27 Nov 2026): the screen draws the first 25 parties; the printed sheet, PDF and Excel take every one */
   function setFor(p) { var I = (p && p.int) || {}, def = cfg().intRate; return { rate: I.rate !== '' && I.rate != null ? num(I.rate) : def === '' || def == null ? 18 : num(def), grace: num(I.grace), from: I.from || 'due', cdays: p ? num(p.cdays) : 0, side: iSide }; }
   function intData() {
     var asOn = iAsOn || NS.today(), parties = {};
-    B.bills(A.mine().filter(function (d) { return !d.date || d.date <= asOn; }), A.bizName()).every.forEach(function (b) { if (b.side === iSide) parties[key(b.party)] = b.party; });
+    B.bills(B.upto(A.mine(), asOn), A.bizName()).every.forEach(function (b) { if (b.side === iSide) parties[key(b.party)] = b.party; });
     var out = [];
     Object.keys(parties).sort().forEach(function (k) {
       var p = partyRec(parties[k]), st = setFor(p); if (!(st.rate > 0)) return;
@@ -267,13 +267,13 @@
         '<label>' + esc(t('ason')) + ' <input type="date" data-intas value="' + X.asOn + '"></label></div>' +
       (iSide === 'pay' ? '<p class="note">' + esc(t('int_msme')) + ' <a class="link" href="#msme">' + esc(t('int_msmego')) + '</a></p>' : '') +   /* MSMED Act s.16 interest (3 x bank rate, monthly rests) is worked out on the MSME payables screen (msmecore.js) */
       '<p class="big">' + esc(t('int_tot', { a: money(X.total) })) + '</p>' +
-      (X.list.length ? X.list.map(function (P) {
+      (X.list.length ? (iAll ? X.list : X.list.slice(0, I_CAP)).map(function (P) {
         return '<div class="card bw-int"><div class="pane-hd"><h3><a class="link" href="#st/' + encodeURIComponent(P.k) + '">' + esc(P.name) + '</a> <small class="soft">' + esc(t('int_set', { r: P.set.rate, g: P.set.grace, f: t(P.set.from === 'date' ? 'ps_fromdate' : 'ps_fromdue') })) + '</small></h3><div class="quick">' +
           '<b>' + money(P.total) + '</b>' + (iSide === 'recv' ? '<button type="button" class="btn sm" data-intdn="' + esc(P.k) + '">' + esc(t('mk_dn')) + '</button>' : '') + '<button type="button" class="btn sm" data-intjv="' + esc(P.k) + '">' + esc(t('mk_jv')) + '</button><button type="button" class="btn sm" data-bwps="' + esc(P.name) + '">' + esc(t('ps_btn')) + '</button></div></div>' +
           '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + esc(t('c_bill')) + '</th><th>' + esc(A.T('date')) + '</th><th>' + esc(t('c_from')) + '</th><th class="n">' + esc(t('c_amt')) + '</th><th class="n">' + esc(t('c_unpaid')) + '</th><th class="n">' + esc(t('c_days')) + '</th><th class="n">' + esc(t('c_int')) + '</th></tr></thead><tbody>' +
           P.bills.map(function (b) { return '<tr><td>' + esc(vname(b)) + '</td><td>' + ld(b.date) + '</td><td>' + ld(b.start) + '</td><td class="n">' + money(b.total, false) + '</td><td class="n">' + money(b.left, false) + '</td><td class="n">' + b.days + '</td><td class="n">' + money(b.interest, false) + '</td></tr>'; }).join('') +
           '</tbody></table></div></div>';
-      }).join('') : '<p class="soft">' + esc(t('int_none')) + '</p>') +
+      }).join('') + (!iAll && X.list.length > I_CAP ? '<p class="soft noprint">Showing the first ' + I_CAP + ' of ' + X.list.length + ' parties. <button type="button" class="btn sm" data-intall>Show all ' + X.list.length + '</button> Print, PDF and Excel always include every party.</p>' : '') : '<p class="soft">' + esc(t('int_none')) + '</p>') +
       (iShown ? '<div class="tbl-wrap"><div class="lg-print">' + intSheet(X) + '</div></div>' : '');
   }, function (pane) {
     var pp = $('[data-intprint]', pane); if (pp) pp.addEventListener('click', function () { if (iShown) { window.print(); return; } iShown = true; A.show(); setTimeout(function () { window.print(); }, 350); });
@@ -281,8 +281,9 @@
       function go() { var n = $('[data-pane] .lg-print > .stsheet') || $('.lg-print > .stsheet'); if (!n) return; var c = n.cloneNode(true); c.classList.add('lg-paper'); NS.sharePdf([c], 'interest-' + iSide + '-' + (iAsOn || NS.today()), 'a4', t('int_t'), ''); }
       if (iShown) go(); else { iShown = true; A.show(); setTimeout(go, 400); }
     });
-    $$('[data-intside]', pane).forEach(function (b) { b.addEventListener('click', function () { iSide = b.getAttribute('data-intside'); A.show(); }); });
-    var as = $('[data-intas]', pane); if (as) as.addEventListener('change', function () { iAsOn = as.value; A.show(); });
+    $$('[data-intside]', pane).forEach(function (b) { b.addEventListener('click', function () { iSide = b.getAttribute('data-intside'); iAll = false; A.show(); }); });
+    var ia = $('[data-intall]', pane); if (ia) ia.addEventListener('click', function () { iAll = true; A.show(); });
+    var as = $('[data-intas]', pane); if (as) as.addEventListener('change', function () { iAsOn = as.value; iAll = false; A.show(); });
     function party(k) { return intData().list.filter(function (x) { return x.k === k; })[0]; }
     $$('[data-intjv]', pane).forEach(function (b) { b.addEventListener('click', function () { var P = party(b.getAttribute('data-intjv')); if (P) makeJv(P); }); });
     $$('[data-intdn]', pane).forEach(function (b) { b.addEventListener('click', function () { var P = party(b.getAttribute('data-intdn')); if (P) makeDn(P); }); });

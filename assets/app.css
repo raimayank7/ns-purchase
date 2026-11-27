@@ -484,6 +484,13 @@ html.vch-on .vch-print .stsheet{position:static;width:auto;max-width:720px;margi
 /* bank statement import: the "What is it" column keeps room for its choice and name (it was squeezed when the side menu opened) */
 .bi-t th:last-child,.bi-t td:last-child{min-width:240px;width:26%}.bi-t td:last-child select,.bi-t td:last-child input{width:100%;box-sizing:border-box}
 @media (max-width:860px){.bi-t th:last-child,.bi-t td:last-child{min-width:190px}}
+.quick:has(#bi-file){flex-wrap:wrap}.bi-body .tbl-wrap{overflow-x:auto;max-width:100%}
+.bi-led{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.bi-ledin{flex:1 1 150px;min-width:130px}.bi-tag{font-size:.78em;color:var(--soft,#64748b);white-space:nowrap;border:1px solid var(--line,#d6dde6);border-radius:999px;padding:1px 8px}
+.bi-lnk{background:none;border:0;color:var(--link,#0e746a);text-decoration:underline;cursor:pointer;padding:2px 0;font:inherit;font-size:.82em}.bi-do .bi-lnk{display:inline-block}
+.bi-pop{position:fixed;z-index:9999;max-height:290px;overflow:auto;background:var(--surface-solid,var(--surface,#fff));color:inherit;border:1px solid var(--line,#c5ced9);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.28);padding:4px;font-size:.92em}
+.bi-pop[hidden]{display:none}.bi-opt{display:flex;justify-content:space-between;gap:14px;align-items:baseline;padding:7px 10px;border-radius:7px;cursor:pointer}.bi-opt small{color:var(--soft,#64748b);white-space:nowrap}.bi-opt.on,.bi-opt:hover{background:var(--hover,rgba(14,116,106,.16))}.bi-none{padding:9px 10px;color:var(--soft,#64748b)}
+.bi-susp{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.5)}.bi-kw{margin:12px 0}.bi-kwadd{position:static;border:0;padding:6px 0}.bi-kwlist{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:8px}.bi-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line,#d6dde6);border-radius:999px;padding:1px 4px 1px 10px;font-size:.88em}.bi-chipx{background:none;border:0;cursor:pointer;color:inherit;font-size:1.1em;line-height:1;padding:0 6px}
+.bi-sp{margin:12px 0}.bi-sphd{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.bi-spact{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-top:10px;position:sticky;bottom:0;z-index:5;padding:10px 0;background:var(--surface-solid,var(--surface,#fff));border-top:1px solid var(--line,#d6dde6)}.bi-spact input{min-width:220px}.bi-spt{width:100%}
 .bi-pager{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}.bi-why.bi-guess{color:var(--warn,#b45309)}.bi-desc{overflow-wrap:anywhere;max-width:420px}.tools-row input[type=search]{min-width:200px}.bi-colprev{max-height:220px;margin:6px 0 12px}.bi-colprev td{white-space:nowrap;font-size:.85em}
 
 /* the notification centre (home.js): the bell in the header and its list */
@@ -802,3 +809,40 @@ html:has(#app:not([data-secs])) .hd nav>a,html:has(#app:not([data-secs])) .hd na
 @media print{.msg-ask{display:none}}
 /* Bring data from other software (migrate.js) */
 .mg-sw{display:flex;flex-wrap:wrap;gap:8px 18px;margin:6px 0 14px}.mg-opt{display:flex;align-items:center;gap:6px;min-height:36px}.mg-yr{display:inline-flex;align-items:flex-start;gap:4px;margin-right:10px;max-width:100%}.mg-hist li{margin:6px 0}.mg-prog{width:180px}
+/* My data as a settings window: a tree on the left, the chosen section on the right (owner 26 Nov 2026) */
+html .hub.picked.tree{display:grid;grid-template-columns:228px minmax(0,1fr);gap:18px;align-items:start}
+.hub-tree{position:sticky;top:calc(var(--hd-h,60px) + 8px);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px;max-height:calc(100dvh - var(--hd-h,60px) - 70px);overflow:auto;scrollbar-width:thin;min-width:0}
+html.embed .hub-tree{top:8px}
+.ht-bar{display:none}
+.ht-i,.ht-gh{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;min-height:38px;padding:6px 10px;border:0;border-radius:9px;background:none;color:var(--ink);font:inherit;font-size:.9rem;text-align:start;text-decoration:none;cursor:pointer}
+.ht-gh{font-weight:700;margin-top:6px}.ht-gh>span{flex:1;min-width:0}.ht-gh .ht-ic:last-child{transition:transform .15s;opacity:.7}.ht-gh[aria-expanded=false] .ht-ic:last-child{transform:rotate(-90deg)}
+.ht-i:hover,.ht-gh:hover{background:var(--surface2)}
+.ht-ic{flex:none;opacity:.85}
+.ht-i>span{flex:1;min-width:0;overflow-wrap:anywhere}.ht-i .n{font-style:normal;font:600 .75rem var(--mono);opacity:.75;flex:none}
+.ht-l2{margin-inline-start:14px;width:calc(100% - 14px);position:relative;font-weight:500}
+.ht-i.on{background:var(--surface2);font-weight:700;box-shadow:inset 3px 0 0 var(--accent)}
+[dir=rtl] .ht-i.on{box-shadow:inset -3px 0 0 var(--accent)}
+.ht-i:focus-visible,.ht-gh:focus-visible,.ht-bar:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+@media (max-width:860px){
+  html .hub.picked.tree{grid-template-columns:minmax(0,1fr);gap:10px}
+  .hub-tree{position:sticky;top:var(--hd-h,56px);z-index:6;max-height:none;overflow:visible;padding:0;border-radius:12px}
+  html.embed .hub-tree{top:0}
+  .ht-bar{display:flex;align-items:center;gap:8px;width:100%;min-height:46px;padding:8px 12px;border:0;background:none;color:var(--ink);font:inherit;text-align:start;cursor:pointer}
+  .ht-bar .ht-barl{color:var(--soft);font-size:.8rem}.ht-bar b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hub-tree.open .ht-bar .ht-ic{transform:rotate(180deg)}
+  .ht-body{display:none;border-top:1px solid var(--line);padding:6px;max-height:min(70dvh,520px);overflow:auto}
+  .hub-tree.open .ht-body{display:block}
+}
+
+/* landing cards of My data: the Free tools card look (freetools.css), here for the standalone site too */
+.hub-main .fz-find{margin:10px 0 14px}.hub-main .fz-find input{width:100%;max-width:560px;min-height:42px}
+.hub-main .fz-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.hub-main .fz-gc{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;text-decoration:none;color:inherit;background:var(--card,var(--surface,transparent))}
+.hub-main .fz-gc:hover,.hub-main .fz-gc:focus-visible{border-color:var(--accent,#0E746A);box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.hub-main .fz-gi{grid-row:span 2;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;background:rgba(14,116,106,.12);background:color-mix(in srgb,var(--accent,#0E746A) 14%,transparent);color:var(--accent,#0E746A)}
+.hub-main .fz-gi svg{width:24px;height:24px}
+.hub-main .fz-gt b{display:block;font-size:1.02rem}.hub-main .fz-gt small{opacity:.7}.hub-main .fz-gd{grid-column:1/-1;font-size:.9rem;margin-top:4px}.hub-main .fz-gn{grid-column:1/-1;font-size:.8rem;opacity:.7}
+.hub-main .fz-tools{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:8px}
+.hub-main .fz-tc{display:block;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:inherit;background:var(--card,var(--surface,transparent))}.hub-main .fz-tc:hover,.hub-main .fz-tc:focus-visible{border-color:var(--accent,#0E746A)}.hub-main .fz-tc b{display:block;margin-bottom:3px}.hub-main .fz-tc span{font-size:.86rem;opacity:.8}
+.hub-main .fz-hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.hub-main .fz-hd h2{margin:0}
+html .hub.picked.tree.no-tree{grid-template-columns:minmax(0,1fr)}.hub.no-tree>.hub-tree{display:none}

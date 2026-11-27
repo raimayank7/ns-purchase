@@ -155,6 +155,7 @@
   SALES.jewel = 1; SALES.garment = 1;   /* group C trade tools: their bills are in the Sales list */
   var CONVERT = { quote: ['so', 'challan', 'invoice'], proforma: ['invoice'], so: ['challan', 'invoice'], challan: ['invoice'] };
   CONVERT.po = ['grn', 'pbill'];   /* ERP round 2 (orders.js): a purchase order becomes a receipt note or a purchase bill (open lines only) */
+  function envBtn(attr) { return window.NSEnvelope ? NSEnvelope.btn(attr, true) : ''; }
   var SECS = ['home', 'sales', 'buy', 'money', 'dues', 'parties', 'cash', 'st'];
   /* EXT: sections added by other files (NSApp.addSection); DOOR: the sections a door site shows (#app data-secs), first = start */
   var EXT = {}, DOOR = null, HOME = [];
@@ -190,25 +191,32 @@
      again. A report or period that starts before the open years reads every year (needYears). Carried records are only on
      screen: they have ids 'cy-…' and cyc:1, and the store refuses to save or delete them. */
   var CYV = 1, YEARS = { biz: '', fy: '', all: false }, wantAll = false;
-  function closedOf(raw, b, L) {
+  /* Speed (27 Nov 2026), like Tally and Evershine open one year at a time: a business with many documents (AUTO_N) does not read its older years at start. Every year before
+     last year is treated like a closed one for loading: its balances come in as opening records (the same carry-forward as Year end, kept in meta 'carry'), nothing is
+     locked, and a report that reaches back reads every year (needYears). localStorage ns-autocut = off turns it off. */
+  var AUTO_N = 15000;
+  function autoYears() { var t = NS.today(), y = +t.slice(0, 4) - (+t.slice(5, 7) < 4 ? 1 : 0) - 2, out = []; for (var i = y; i >= 2000; i--) out.push(i + '-' + String((i + 1) % 100).padStart(2, '0')); return out; }
+  function autoOn(n) { try { if (localStorage.getItem('ns-autocut') === 'off') return false; } catch (e) {} return n > AUTO_N; }
+  function closedOf(raw, b, L, auto) {
     if (!b || !b.id || !window.NSAcct) return [];
     var c = (NS.cfgFor ? NS.cfgFor(raw || {}, b, L) : raw || {}).closed || {}, out = [];
     NSAcct.closedKeys(b).forEach(function (k) { (c[k] || []).forEach(function (f) { if (out.indexOf(f) < 0) out.push(f); }); });
+    if (auto) autoYears().forEach(function (f) { if (out.indexOf(f) < 0) out.push(f); });
     return out;
   }
   function pickBiz(L, raw) { var want = NS.curBiz(); return L.filter(function (b) { return b.id === want; })[0] || L.filter(function (b) { return b.id === (raw || {}).defBiz; })[0] || L[0] || null; }
   var LAST = null;   /* the documents of the last read, with the data home's stamp and what was asked: a screen change with no save in between reads nothing again */
   function yearDocs(r, carry) {
-    var b0 = pickBiz(r[0] || [], r[4]), ask = JSON.stringify([b0 && b0.id || '', wantAll, wantAll ? [] : closedOf(r[4], b0, r[0] || []), carry[b0 && b0.id] ? carry[b0.id].sig : '']);
+    var b0 = pickBiz(r[0] || [], r[4]);
     var st = NSStore.docStat ? NSStore.docStat(true).catch(function () { return null; }) : Promise.resolve(null);
     return st.then(function (s) {
-      var stamp = s && s.stamp;
+      var stamp = s && s.stamp, auto = !!(s && autoOn(s.n)), ask = JSON.stringify([b0 && b0.id || '', wantAll, wantAll ? [] : closedOf(r[4], b0, r[0] || [], auto), carry[b0 && b0.id] ? carry[b0.id].sig : '']);
       if (stamp && LAST && LAST.stamp === stamp && LAST.ask === ask) { YEARS = LAST.years; return LAST.docs; }
-      return yearDocs0(r, carry).then(function (docs) { LAST = stamp ? { stamp: stamp, ask: ask, docs: docs, years: YEARS } : null; return docs; });
+      return yearDocs0(r, carry, auto).then(function (docs) { LAST = stamp ? { stamp: stamp, ask: ask, docs: docs, years: YEARS } : null; return docs; });
     });
   }
-  function yearDocs0(r, carry) {
-    var b = pickBiz(r[0] || [], r[4]), shut = wantAll ? [] : closedOf(r[4], b, r[0] || []);
+  function yearDocs0(r, carry, auto) {
+    var b = pickBiz(r[0] || [], r[4]), shut = wantAll ? [] : closedOf(r[4], b, r[0] || [], auto);
     if (!shut.length || !NSStore.docsFrom) { YEARS = { biz: b && b.id || '', fy: '', all: true }; return NSStore.list('doc'); }
     var q = {}; q[b.id] = shut;
     return NSStore.docsFrom(q).then(function (res) {
@@ -219,6 +227,7 @@
       var have = carry[b.id];
       if (have && have.sig === sig && Array.isArray(have.recs)) return res.docs.concat(have.recs);
       /* first start after closing a year (or a change in a closed year): every year is read once and the openings are kept */
+      if (NS.toast) NS.toast('Updating the opening balances from the earlier years. This takes a moment and only happens after a change in an earlier year.');
       return NSStore.list('doc').then(function (all) {
         apply([r[0], r[1], r[2], all, r[4], r[5], r[6], r[7]]);
         var seller = JSON.parse(JSON.stringify(b)); delete seller.id; delete seller.created; delete seller.updated;
@@ -388,6 +397,10 @@
       if (!BIZ) { pane.innerHTML = noBiz(); wireSample(pane); return; }
       /* a remembered party screen whose party was deleted (sample data removed): go to the dashboard */
       if (cur === 'st' && arg && !C.party.some(function (p) { return key(p.name) === arg; }) && !B.parties(mine(), bizName())[arg]) { location.replace('#home'); return; }
+      /* shared guard (owner 27 Nov 2026: speed): a screen wired again on this same panel never piles up the same listener (the Messages bug that ran a page at 100% CPU).
+         A listener added to the panel with the same type and the same code as one from the previous drawing replaces it. */
+      if (!pane.__dd) { pane.__dd = { seen: {}, prev: {} }; var ael = pane.addEventListener; pane.addEventListener = function (t, f, o) { var k = t + '|' + String(f), d = pane.__dd; if (typeof f === 'function' && d.prev[k]) { pane.removeEventListener(t, d.prev[k], o); delete d.prev[k]; } d.seen[k] = f; return ael.call(pane, t, f, o); }; }
+      pane.__dd.prev = pane.__dd.seen; pane.__dd.seen = {};
       pane.innerHTML = (NS.crumbs ? NS.crumbs(cur, arg) : '') + sampleNote() + bizBar() + (EXT[cur] ? EXT[cur].html(arg) : ({ home: homeHtml, sales: salesHtml, buy: buyHtml, money: moneyHtml, dues: duesHtml, parties: partiesHtml, cash: cashHtml })[cur]());
       wire(pane); wireSample(pane);
       if (EXT[cur] && EXT[cur].wire) EXT[cur].wire(pane, arg);
@@ -490,6 +503,7 @@
       var acts = [], ib = function (attr, ic, lbl, cls) { return '<button type="button" class="btn sm ib' + (cls ? ' ' + cls : '') + '" ' + attr + ' title="' + esc(lbl) + '" aria-label="' + esc(lbl) + '">' + NS.icSvg(ic) + '</button>'; };
       /* every entry opens to look at it (its lines, its accounting entry, the bill photo); the small buttons show only an icon, the name on hover */
       acts.push(ib('data-view="' + d.id + '"', 'eye', T('open')));
+      if (B.partyName(d) && window.NSEnvelope) acts.push(ib('data-env-doc="' + d.id + '"', 'mail', 'Print an envelope'));
       var xed = !appMade && XEDIT.test(ty) && (ty !== 'stk' || /^(move|make|jobout|jobin)$/.test(d.kind || ''));   /* stock counts and adjustments are changed on the stock site */
       if ((appMade && ty !== 'cashmemo') || xed) acts.push(ib('data-edit="' + d.id + '"', 'edit', T('edit')));
       /* a document made in a maker (invoice, quotation...) is changed there: the button says Edit; the App's own receipts keep Open (to print) */
@@ -634,7 +648,7 @@
         rows.map(function (r) {
           return '<tr><th scope="row">' + (side === 'recv' && r.phone ? '<input type="checkbox" class="fu-pick" data-fupick="' + esc(r.k) + '"' + (r.late ? ' data-late' : '') + ' aria-label="' + esc(T('fu_pick', { p: r.name })) + '"> ' : '') + '<a href="#st/' + encodeURIComponent(r.k) + '">' + esc(r.name) + '</a>' + (window.NSApp && NSApp.routeTag ? NSApp.routeTag(r.k) : '') + (side === 'recv' ? fuLine(r.k) : '') + (r.over ? '<br><span class="b1-warn">' + esc(NS.t('b1.overlim', { v: money(r.lim) })) + '</span>' : '') + '</th>' + r.a.map(function (v, i) { return '<td class="n' + (v ? '' : ' nil') + '" data-l="' + rng(esc(T('a' + i))) + '">' + (v ? money(v, false) : '—') + '</td>'; }).join('') +
             '<td class="n" data-l="' + esc(T('totaldue')) + '"><b>' + money(r.tot, false) + '</b></td><td class="n' + (r.late ? ' b1-warn' : ' nil') + '" data-l="' + esc(NS.t('b1.late')) + '">' + (r.late ? money(r.late, false) : '—') + '</td><td class="acts">' + (side === 'recv' ? '<button type="button" class="btn sm wa" data-wa="' + esc(r.k) + '">' + esc(T('remind')) + '</button>' : '') +
-            '<button type="button" class="btn sm" data-form="' + (side === 'recv' ? 'min' : 'mout') + '" data-party="' + esc(r.name) + '">' + esc(T('recpay')) + '</button></td></tr>'; }).join('') +
+            '<button type="button" class="btn sm" data-form="' + (side === 'recv' ? 'min' : 'mout') + '" data-party="' + esc(r.name) + '">' + esc(T('recpay')) + '</button> ' + envBtn('data-env-name="' + esc(r.name) + '"') + '</td></tr>'; }).join('') +
         '</tbody></table></div>' : '<p class="soft">' + esc(T('nodues')) + '</p>') +
       '<p class="soft">' + esc(NS.t('b1.ageh')) + '</p>' +
       (advs.length ? '<div class="card"><h3>' + esc(T('advance')) + '</h3><p class="soft">' + esc(T('advh')) + '</p><ul class="rows">' + advs.map(function (k) {
@@ -656,7 +670,7 @@
       (list.length ? '<ul class="rows">' + list.map(function (p) {
         var g = gmap[gidOf(p.key, P)];
         return '<li><a href="#st/' + encodeURIComponent(p.key) + '"><b>' + esc(p.name) + '</b><span class="soft">' + (g ? esc(gname(g)) + ' · ' : '') + esc(NS.t(p.bal > 0.004 ? 'ux.p.recv' : p.bal < -0.004 ? 'ux.p.pay' : 'ux.p.nil')) + '</span></a>' +
-          '<b class="amt' + (p.bal < 0 ? ' neg' : '') + '">' + money(Math.abs(p.bal)) + (p.bal > 0.004 ? ' ' + T('dr') : p.bal < -0.004 ? ' ' + T('cr') : '') + '</b></li>'; }).join('') + '</ul>' : '<p class="soft">' + esc(T('none')) + '</p>');
+          '<b class="amt' + (p.bal < 0 ? ' neg' : '') + '">' + money(Math.abs(p.bal)) + (p.bal > 0.004 ? ' ' + T('dr') : p.bal < -0.004 ? ' ' + T('cr') : '') + '</b>' + envBtn('data-env-name="' + esc(p.name) + '"') + '</li>'; }).join('') + '</ul>' : '<p class="soft">' + esc(T('none')) + '</p>');
   }
 
   /* ---------- party groups (meta 'groups', made in My data; the party ledger and group reports live in ledger.js) ---------- */
@@ -879,6 +893,7 @@
     if (d.photo) h += '<h3>' + esc(T('photo')) + '</h3><img class="vw-photo" src="' + esc(d.photo) + '" alt="' + esc(T('photo')) + '">';
     if (d.cancelled) h = '<p class="cx-line" role="note">CANCELLED' + (d.cancelled.why ? ': ' + esc(d.cancelled.why) : '') + '</p>' + h;   /* A-3 */
     var acts = '';
+    if (B.partyName(d) && window.NSEnvelope) acts += '<button type="button" class="btn" data-env-doc="' + d.id + '" data-close-box>Envelope</button>';
     if ((appMade && ty !== 'cashmemo') || xed) acts += '<button type="button" class="btn primary" data-edit="' + d.id + '" data-close-box>' + esc(T('edit')) + '</button>';
     if (NS.cxBtn && d.no && (d.cancelled || B.role(d))) acts += NS.cxBtn(d, 'btn').replace('<button ', '<button data-close-box ');
     if (url && !appMade) acts += '<a class="btn primary" href="' + url + '" data-close-box>' + esc(T('edit')) + '</a>';
@@ -1143,7 +1158,7 @@
     if (F.lines && /f-(nogst|round|state)/.test(id)) drawSum();
     /* the first two digits of a GSTIN are the supplier's state code */
     if (id === 'f-gstin') { var st = e.target.value.trim().slice(0, 2); if (/^\d\d$/.test(st) && NS.stateName(st)) { $('#f-state', form).value = st; drawSum(); } }
-    if (id === 'f-party' && F.lines) { var pm = C.party.filter(function (p) { return key(p.name) === key(e.target.value); })[0]; if (pm) { $('#f-gstin', form).value = pm.gstin || ''; if (pm.state) $('#f-state', form).value = pm.state; drawSum(); } }
+    if (id === 'f-party' && F.lines) { var pm = C.party.filter(function (p) { return key(p.name) === key(e.target.value); })[0]; if (pm) { $('#f-gstin', form).value = pm.gstin || ''; if (pm.state) $('#f-state', form).value = pm.state; partyTerms(pm); drawSum(); } }
     if ((F.kind === 'min' || F.kind === 'mout') && (id === 'f-tdsx' || id === 'f-tds' || id === 'f-amt')) tdsPair(id);
     if ((F.kind === 'min' || F.kind === 'mout') && (id === 'f-party' || id === 'f-amt' || id === 'f-tds' || id === 'f-tdsx' || id === 'f-disc')) drawAlloc();
     if (e.target.hasAttribute && e.target.hasAttribute('data-al')) advLeft();
@@ -1192,6 +1207,19 @@
     list.push(r);
   });
   var LFROM = new WeakMap();
+  /* what a party saved in My data / Masters brings to a bill (owner 26 Nov 2026): its usual discount for every line without one, the default ship-to place and the transporter
+     (only into boxes still empty); the item's own "rates include GST" and usual discount come in fillItem */
+  function partyTerms(pm) {
+    var set = function (id, v) { var e = $('#' + id, form); if (e && v != null && String(v) !== '' && !String(e.value || '').trim()) { e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); } };
+    F.partyDisc = num(pm.disc) > 0 ? num(pm.disc) : 0;
+    if (F.partyDisc && F.lines) { F.lines.forEach(function (L, i) { if (!num(L.disc) && String(L.desc || '').trim()) { L.disc = String(F.partyDisc); var row = $$('[data-row]', form)[i], di = row && $('[data-lk=disc]', row); if (di) di.value = L.disc; } }); }
+    if ($('#f-dptname', form) && pm.tname) set('f-dptname', pm.tname);
+    var sh = pm.ship; if (sh && sh.addr && $('#f-shaddr', form) && !String($('#f-shaddr', form).value || '').trim()) {
+      set('f-shname', sh.name || pm.name); set('f-shaddr', sh.addr); set('f-shcity', sh.city); set('f-shpin', sh.pin); set('f-shgstin', sh.gstin);
+      if (sh.state && $('#f-shstate', form)) $('#f-shstate', form).value = sh.state;
+      var on = $('#f-shipon', form); if (on && !on.checked) { on.checked = true; on.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+  }
   function fillItem(i) {
     var m = C.item.filter(function (x) { return key(x.desc) === key(F.lines[i].desc); })[0];
     var sp = window.NSReuse && $('#f-party', form) ? NSReuse.partyRate(C.party.filter(function (p) { return key(p.name) === key($('#f-party', form).value); })[0], F.lines[i].desc) : null;   /* this supplier's own price list (My data) */
@@ -1200,6 +1228,11 @@
     var L = F.lines[i], sr = F.kind === 'sale' || F.vd && !F.vd.buy ? m.rate || m.prate : m.prate || m.rate, fresh = !!m.desc && LFROM.get(L) !== key(m.desc); if (fresh) LFROM.set(L, key(m.desc));
     if (fresh || !L.hsn) L.hsn = m.hsn || ''; if ((fresh || !num(L.rate)) && (sp != null || sr)) L.rate = sp != null ? sp : sr; if (window.NSGst && m.desc && NSGst.hist(m).length) NSGst.fillLine(L, m, $('#f-date', form) ? $('#f-date', form).value : NS.today(), !(F.kind === 'sale' || F.vd && !F.vd.buy)); else if (m.gst !== '' && m.gst != null) L.gst = m.gst; if (m.unit && (fresh || !L.unit)) L.unit = m.unit;   /* r1-gst S-1, S-5: rate on the voucher date, taxability, purchase credit */
     var row = $$('[data-row]', form)[i]; if (row) { if ($('[data-lk=unit]', row)) $('[data-lk=unit]', row).value = L.unit || ''; $('[data-lk=hsn]', row).value = L.hsn; $('[data-lk=rate]', row).value = L.rate; $('[data-lk=gst]', row).value = L.gst; }
+    if (fresh && m.desc) {   /* the item's rates include GST: the line takes the rate before tax (not a party's own price); the party's discount, else the item's usual one */
+      if (m.incl && sp == null && num(L.gst) > 0 && num(L.rate) > 0) L.rate = String(r2(num(L.rate) * 100 / (100 + num(L.gst))));
+      if (!num(L.disc)) { var dd = (F.partyDisc || 0) > 0 ? F.partyDisc : num(m.disc) > 0 ? num(m.disc) : 0; if (dd) L.disc = String(dd); }
+      if (row) { if ($('[data-lk=rate]', row)) $('[data-lk=rate]', row).value = L.rate; if ($('[data-lk=disc]', row)) $('[data-lk=disc]', row).value = L.disc || ''; }
+    }
     if (row && m.track && !$('[data-lk=batch],[data-lk=serial]', row)) { drawLines(); var di = $$('[data-lk=desc]', form)[i]; if (di) { di.focus(); di.setSelectionRange(di.value.length, di.value.length); } }   /* batch / serial item (more.js) */
   }
   function unitRate(i, was) {   /* F5-10 */
@@ -1324,10 +1357,12 @@
     if (Object.keys(dp).some(function (k) { return dp[k]; })) { d.disp = dp; d.tr = { veh: dp.veh, tname: dp.tname, lr: dp.lr }; }
     return d;
   }
+  /* the design / paper chosen for this kind of document (Print designs, Masters > Voucher types) */
+  function vtd(ty, kind, f) { try { var c = NS.vtCfg(NS.cfgFor(CFG, BIZ), ty, kind || '') || {}; return c[f] || ''; } catch (e) { return ''; } }
   function saleFromForm() {
     var b = billFromForm(), inv = CFG.invoice || {}, ship = /^(comp|unreg)$/.test(BIZ.reg || '') || !String(BIZ.gstin || '').trim() || b.noGst;
     var d = { type: 'invoice', app: 1, kind: ship ? 'supply' : 'tax', no: b.no, deliv: '', orig: { no: '', date: '' }, reason: 'ret', tr: { veh: '', tname: '', lr: '' },
-      paper: inv.paper || 'a4', design: inv.design || 'classic', copies: 1, date: b.date, due: b.due || '', pos: '', rc: false, recv: '', ref: '',
+      paper: vtd('invoice', '', 'paper') || inv.paper || 'a4', design: vtd('invoice', '', 'design') || inv.design || 'classic', copies: 1, date: b.date, due: b.due || '', pos: '', rc: false, recv: '', ref: '',
       seller: sellerCopy(), buyer: { name: b.buyer.name, addr: '', city: '', pin: '', state: b.buyer.state, gstin: b.buyer.gstin, phone: '' }, ship: null, einv: null, irn: null,
       items: b.items.map(function (it) { return Object.assign({}, it, { disc: it.disc || '' }); }), round: b.round, comp: true, notes: inv.notes || '', terms: inv.terms || '',
       status: 'unpaid', copyLabel: 'orig', valid: '', charges: chgOut(), tcs: { on: false, rate: '', base: 'total', sec: '' }, rec: null };
@@ -1433,13 +1468,13 @@
         var b = C.doc.filter(function (x) { return x.id === i.getAttribute('data-al'); })[0]; return { id: i.getAttribute('data-al'), no: b ? b.no || '' : '', amt: r2(Math.min(num(i.value), num(i.getAttribute('data-max')))) }; });
       var date = $('#f-date', form).value, nos = alloc.map(function (a) { return a.no; }).filter(Boolean).join(', ');
       if (out) {
-        d = Object.assign(rec || { type: 'voucher', no: nextNo('voucher', 'PV', date), paper: 'a4', design: 'classic', copies: 1, copyLabel: 'orig', tdsSec: '', rcm: false, rcmRate: '18', prep: '', appr: '', status: '' }, {
+        d = Object.assign(rec || { type: 'voucher', no: nextNo('voucher', 'PV', date), paper: 'a4', design: vtd('voucher', '', 'design') || 'classic', copies: 1, copyLabel: 'orig', tdsSec: '', rcm: false, rcmRate: '18', prep: '', appr: '', status: '' }, {
           app: 1, forBill: true, date: date, seller: Object.assign(rec ? rec.seller : {}, sellerCopy()), mode: $('#f-mode', form).value, ref: $('#f-ref', form).value.trim(), tdsRate: $('#f-tds', form).value.trim(), disc: r2(num($('#f-disc', form).value)), alloc: alloc,
           lines: [{ desc: $('#f-note', form).value.trim() || (nos ? 'Payment against bill ' + nos : 'Payment on account'), head: 'Supplier payment', amt: amt }] });
         d.buyer = Object.assign(rec ? rec.buyer : { addr: '', phone: '', gstin: '', pan: '' }, { name: party });
       } else {
         var unpaidLeft = r2(amt + num($('#f-tds', form).value) + num($('#f-disc', form).value) - alloc.reduce(function (a, x) { return a + x.amt; }, 0));
-        d = Object.assign(rec || { type: 'receipt', no: nextNo('receipt', 'RCT', date), paper: 'a4', design: 'classic', copies: 1, copyLabel: '', gstAdv: false, rate: '18', pos: '', sac: '', rv: '', rvDate: '', refDate: '', bank: '', balance: '', status: '' }, {
+        d = Object.assign(rec || { type: 'receipt', no: nextNo('receipt', 'RCT', date), paper: 'a4', design: vtd('receipt', '', 'design') || 'classic', copies: 1, copyLabel: '', gstAdv: false, rate: '18', pos: '', sac: '', rv: '', rvDate: '', refDate: '', bank: '', balance: '', status: '' }, {
           app: 1, kind: alloc.length ? 'pay' : 'adv', date: date, seller: Object.assign(rec ? rec.seller : {}, sellerCopy()), amount: amt, tds: $('#f-tds', form).value.trim(), disc: r2(num($('#f-disc', form).value)), mode: $('#f-mode', form).value,
           ref: $('#f-ref', form).value.trim(), against: nos, purpose: $('#f-note', form).value.trim() || (unpaidLeft > 0.004 && alloc.length ? 'Part advance' : ''), alloc: alloc });
         d.buyer = Object.assign(rec ? rec.buyer : { addr: '', phone: '', gstin: '', pan: '' }, { name: party });
@@ -1469,7 +1504,7 @@
       return Promise.all(jobs).then(function () { return NSStore.put('doc', d); }).then(function (saved) {
         if (mode === 'credit' || k !== 'pbill') return saved;
         /* paid at once: a payment entry linked to this bill */
-        var v = { type: 'voucher', app: 1, forBill: true, no: nextNo('voucher', 'PV', saved.date), date: saved.date, paper: 'a4', design: 'classic', copies: 1, copyLabel: 'orig', tdsSec: '', tdsRate: '', rcm: false, rcmRate: '18', prep: '', appr: '', status: '',
+        var v = { type: 'voucher', app: 1, forBill: true, no: nextNo('voucher', 'PV', saved.date), date: saved.date, paper: 'a4', design: vtd('voucher', '', 'design') || 'classic', copies: 1, copyLabel: 'orig', tdsSec: '', tdsRate: '', rcm: false, rcmRate: '18', prep: '', appr: '', status: '',
           seller: sellerCopy(), buyer: { name: party, addr: '', phone: '', gstin: saved.buyer.gstin, pan: '' }, mode: mode, ref: '', alloc: [{ id: saved.id, no: saved.no, amt: r2(saved.total - B.tdsBk(saved)) }],
           lines: [{ desc: 'Payment against bill ' + saved.no, head: 'Supplier payment', amt: r2(saved.total - B.tdsBk(saved)) }] };   /* TDS cut on the bill is not paid to the supplier (S-20) */
         v.total = r2(saved.total - B.tdsBk(saved)); setBacct(v, bankVal(form, 'f-bank'));
@@ -1504,7 +1539,7 @@
         F.savedNo = saved.no; F.savedRec = saved; if (saved.fromId && window.NSVDocs) NSVDocs.markFrom(saved);
         if (smode === 'credit') return saved;
         /* paid at once: a receipt linked to this bill, and the bill is marked paid (as Money received does) */
-        var rv = { type: 'receipt', app: 1, kind: 'pay', no: nextNo('receipt', 'RCT', saved.date), date: saved.date, paper: 'a4', design: 'classic', copies: 1, copyLabel: '', gstAdv: false, rate: '18', pos: '', sac: '', rv: '', rvDate: '', refDate: '', bank: '', balance: '', status: '',
+        var rv = { type: 'receipt', app: 1, kind: 'pay', no: nextNo('receipt', 'RCT', saved.date), date: saved.date, paper: 'a4', design: vtd('receipt', '', 'design') || 'classic', copies: 1, copyLabel: '', gstAdv: false, rate: '18', pos: '', sac: '', rv: '', rvDate: '', refDate: '', bank: '', balance: '', status: '',
           seller: sellerCopy(), buyer: { name: party, addr: '', phone: '', gstin: saved.buyer.gstin, pan: '' }, amount: saved.total, tds: '', disc: 0, mode: smode, ref: '', against: saved.no, purpose: '', alloc: [{ id: saved.id, no: saved.no, amt: saved.total }] };
         rv.total = saved.total; setBacct(rv, bankVal(form, 'f-bank'));
         return NSStore.put('doc', rv).then(markPaid);
@@ -1715,7 +1750,7 @@
     window.addEventListener('beforeprint', function () {
       if (!de.classList.contains('has-hub')) return;
       st = st || document.head.appendChild(Object.assign(document.createElement('style'), { id: 'ap-page' }));
-      st.textContent = '@page{size:A4;margin:0}';
+      st.textContent = de.classList.contains('vch-on') ? '' : '@page{size:A4;margin:0}';   /* a voucher sets the page size of the paper chosen in its Print box (vtools.js) */
       if (de.classList.contains('dk-print') || de.classList.contains('vch-on')) return;
       var pane = $('[data-pane]'); if (!pane || $('#app-printarea')) return;
       var src = $$('.lg-print .stsheet', pane); if (!src.length) src = $$('.stsheet', pane).filter(function (n) { return !n.closest('dialog'); });

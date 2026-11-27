@@ -117,7 +117,7 @@
         (p.bal > 0.004 && shareUrl(k) ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(shareUrl(k)) + '">' + esc(NS.t('sh.app.link')) + '</a>' : '') +
         '<button type="button" class="btn" data-form="' + (p.bal < 0 ? 'mout' : 'min') + '" data-party="' + esc(p.name) + '">' + esc(T('recpay')) + '</button>' + (A.bwBtns ? A.bwBtns(k, p) : '') + (view === 'items' ? '<button type="button" class="btn" data-lgixl>' + esc(T('lg_xl')) + '</button>' :
         '<button type="button" class="btn' + (shown ? '' : ' primary') + '" data-lgprev aria-pressed="' + shown + '">' + esc(T(shown ? 'lg_hideprev' : 'lg_prev_btn')) + '</button>' +
-        '<button type="button" class="btn" data-lgprint>' + esc(T('print')) + '</button>' +
+        '<button type="button" class="btn" data-lgprint>' + esc(T('print')) + '</button>' + (window.NSEnvelope ? NSEnvelope.btn('data-env-name="' + esc(p.name) + '"') : '') +
         '<details class="wa-menu ex-menu"><summary class="btn" data-ic="save">Export ▾</summary><div class="wa-pop" role="menu">' +
           '<button type="button" class="btn" role="menuitem" data-noic data-lgpdf><b>PDF</b><small>The ledger page, to save or share</small></button>' +
           (view !== 'letter' ? '<button type="button" class="btn" role="menuitem" data-noic data-lgxl><b>Excel</b><small>Ledger and bill-wise sheets (.xlsx)</small></button>' +
@@ -370,7 +370,7 @@
      Print, PDF, Excel. Printed column names stay in English like every printed report. ---------- */
   var dcAs = '', dcMin = '', dcSort = 'bal';
   function dcRows(side) {
-    var as = dcAs || A.range()[1], D = A.mine().filter(function (d) { return (d.date || '') <= as; }), biz = A.bizName(), P = B.parties(D, biz);
+    var as = dcAs || A.range()[1], D = B.upto(A.mine(), as), biz = A.bizName(), P = B.parties(D, biz);
     var byP = {};
     dueBills(D, biz).forEach(function (b) { if (b.left > 0.004 && b.side === side) (byP[key(b.party)] = byP[key(b.party)] || []).push(b); });
     var rows = Object.keys(P).map(function (k) { return P[k]; }).filter(function (p) { return (side === 'recv' ? p.bal > 0.004 : p.bal < -0.004) && A.grpKeep(p.key, P, side === 'recv' ? 'debtors' : 'creditors'); }).map(function (p) {
@@ -661,10 +661,11 @@
   });
   /* open bills with the party's credit days applied (as on the Dues screen), so ageing counts from the due date */
   function dueBills(D, biz) {
-    var C = A.data();
+    var C = A.data(), cd = {};   /* Speed (27 Nov 2026): the credit days of each party looked up once, not by walking every party for every bill */
+    C.party.forEach(function (p) { var k = key(p.name); if (!(k in cd)) cd[k] = num(p.cdays); });
     return B.bills(D, biz).bills.map(function (b) {
-      var pm = C.party.filter(function (p) { return key(p.name) === key(b.party); })[0] || {};
-      return b.due || !num(pm.cdays) ? b : Object.assign({}, b, { due: B.addDays(b.date, num(pm.cdays)) });
+      var days = cd[key(b.party)] || 0;
+      return b.due || !days ? b : Object.assign({}, b, { due: B.addDays(b.date, days) });
     });
   }
   /* every group report in one Excel file, English headers */
