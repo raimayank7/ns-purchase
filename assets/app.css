@@ -846,3 +846,7 @@ html.embed .hub-tree{top:8px}
 .hub-main .fz-tc{display:block;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:inherit;background:var(--card,var(--surface,transparent))}.hub-main .fz-tc:hover,.hub-main .fz-tc:focus-visible{border-color:var(--accent,#0E746A)}.hub-main .fz-tc b{display:block;margin-bottom:3px}.hub-main .fz-tc span{font-size:.86rem;opacity:.8}
 .hub-main .fz-hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.hub-main .fz-hd h2{margin:0}
 html .hub.picked.tree.no-tree{grid-template-columns:minmax(0,1fr)}.hub.no-tree>.hub-tree{display:none}
+/* import screen: database box, table list, problems, column screen (migrate.js) */
+.mg-dbf{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px 14px;margin:8px 0}.mg-dbf label{display:flex;flex-direction:column;gap:4px;font-size:.92rem}.mg-dbf input,.mg-dbf select{width:100%;min-width:0}
+.mg-dbt{max-height:260px;overflow:auto;columns:2 220px;border:1px solid var(--line,#ddd);border-radius:8px;padding:6px 10px;margin:6px 0}.mg-dbt label{display:block;break-inside:avoid;padding:2px 0;overflow-wrap:anywhere}
+.mg-probs{max-height:240px;overflow:auto;font-size:.92rem}.mg-cols select{max-width:100%}
